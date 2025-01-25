@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "utils.h": "c",
+        "stdlib.h": "c",
+        "stdio.h": "c",
+        "pn_eom_hamiltonians.h": "c",
+        "queue": "c",
+        "stack": "c",
+        "random": "c"
+    }
+}
