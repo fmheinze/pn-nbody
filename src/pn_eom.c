@@ -331,136 +331,124 @@ params      contains the number of dimensions, the number of bodies, the bodies 
             as well the PN terms that should be included in the computation of the accelerations of the bodies
 dwdt        pointer to the array of values that will be updated with the right-hand side of the ODE*/
 {
-    double *p1, *p2, *p3, *x12, *x13, *x23, *n12, *n13, *n23;
-    double p1_norm2, p2_norm2, p3_norm2, r12_inv, r13_inv, r23_inv, m1, m2, m3;
-    double p1_p2, p1_p3, p2_p3, p1_n12, p1_n13, p1_n23, p2_n12, p2_n13, p2_n23, p3_n12, p3_n13, p3_n23;
-    double r12_inv2, r13_inv2, r23_inv2, m12, m22, m32;
-    int array_half; 
-    array_half = 3 * params->dim;
+    int array_half = 3 * params->dim;; 
 
-    allocate_vector(&p1, params->dim);
-    allocate_vector(&p2, params->dim);
-    allocate_vector(&p3, params->dim);
-    allocate_vector(&x12, params->dim);
-    allocate_vector(&x13, params->dim);
-    allocate_vector(&x23, params->dim);
-    allocate_vector(&n12, params->dim);
-    allocate_vector(&n13, params->dim);
-    allocate_vector(&n23, params->dim);
-
-    // Compute momenta
-    for (int i = 0; i < params->dim; i++){
-        p1[i] = params->masses[0] * w[array_half + i];
-        p2[i] = params->masses[1] * w[array_half + params->dim + i];
-        p3[i] = params->masses[2] * w[array_half + 2 * params->dim + i];
+    // Masses
+    double* m;
+    allocate_vector(&m, params->num_bodies);
+    for (int a = 0; a < params->num_bodies; a++)
+        m[a] = params->masses[a];
+    
+    // Momenta
+    double** p;
+    allocate_array(&p, params->num_bodies, params->dim);
+    for (int a = 0; a < params->num_bodies; a++)
+        for (int i = 0; i < params->dim; i++)
+            p[a][i] = m[a] * w[array_half + a * params->dim + i];
+    
+    // Relative positions and distances
+    double*** x_rel, **r, ***n;
+    allocate_3d_array(&x_rel, params->num_bodies, params->num_bodies, params->dim);
+    allocate_array(&r, params->num_bodies, params->num_bodies);
+    allocate_3d_array(&n, params->num_bodies, params->num_bodies, params->dim);
+    for (int a = 0; a < params->num_bodies; a++) {
+        for (int b = a; b < params->num_bodies; b++) {
+            for (int i = 0; i < params->dim; i++){
+                x_rel[a][b][i] = w[a * params->dim + i] - w[b * params->dim + i];
+                x_rel[b][a][i] = -x_rel[a][b][i];
+            } 
+            r[a][b] = norm(x_rel[a][b], params->dim);
+            r[b][a] = r[a][b];
+            for (int i = 0; i < params->dim; i++){
+                if (a == b){
+                    n[a][b][i] = 0.0;
+                    n[b][a][i] = 0.0;
+                } else {
+                    n[a][b][i] = x_rel[a][b][i] / r[a][b];
+                    n[b][a][i] = -n[a][b][i];
+                }
+            }
+        }
     }
 
-    // Compute other frequently used quantities
-    m1 = params->masses[0];
-    m2 = params->masses[1];
-    m3 = params->masses[2];
-    for (int i = 0; i < params->dim; i++){
-        x12[i] = w[i] - w[params->dim + i];
-        x13[i] = w[i] - w[2 * params->dim + i];
-        x23[i] = w[params->dim + i] - w[2 * params->dim + i];
+    // Time derivatives
+    double**p_dot, **x_dot;
+    allocate_array(&p_dot, params->num_bodies, params->dim);
+    allocate_array(&x_dot, params->num_bodies, params->dim);
+    for (int a = 0; a < params->num_bodies; a++) {
+        for (int i = 0; i < params->dim; i++) {
+            p_dot[a][i] = 0.0;
+            x_dot[a][i] = 0.0;
+        }
     }
-    p1_norm2 = dot_product(p1, p1, params->dim);
-    p2_norm2 = dot_product(p2, p2, params->dim);
-    p3_norm2 = dot_product(p3, p3, params->dim);
-    r12_inv2 = 1/dot_product(x12, x12, params->dim);
-    r13_inv2 = 1/dot_product(x13, x13, params->dim);
-    r23_inv2 = 1/dot_product(x23, x23, params->dim);
-    r12_inv = sqrt(r12_inv2);
-    r13_inv = sqrt(r13_inv2);
-    r23_inv = sqrt(r23_inv2);
-    m12 = pow(m1, 2);
-    m22 = pow(m2, 2);
-    m32 = pow(m3, 2);
-    p1_p2 = dot_product(p1, p2, params->dim);
-    p1_p3 = dot_product(p1, p3, params->dim);
-    p2_p3 = dot_product(p2, p3, params->dim);
-    for (int i = 0; i < params->dim; i++){
-        n12[i] = x12[i] * r12_inv;
-        n13[i] = x13[i] * r13_inv;
-        n23[i] = x23[i] * r23_inv;
-    }
-    p1_n12 = dot_product(p1, n12, params->dim);
-    p1_n13 = dot_product(p1, n13, params->dim);
-    p1_n23 = dot_product(p1, n23, params->dim);
-    p2_n12 = dot_product(p2, n12, params->dim);
-    p2_n13 = dot_product(p2, n13, params->dim);
-    p2_n23 = dot_product(p2, n23, params->dim);
-    p3_n12 = dot_product(p3, n12, params->dim);
-    p3_n13 = dot_product(p3, n13, params->dim);
-    p3_n23 = dot_product(p3, n23, params->dim);
-
+            
     // Initialize all velocities and accelerations to zero
     for (int i = 0; i < 6 * params->dim; i++)   
         dwdt[i] = 0.0;
 
     // Add 0PN (Newtonian) terms
-    if(params->pn_terms[0]){
-        for (int i = 0; i < params->dim; i++){
-            // Body 1
-            dwdt[i] += w[array_half + i];
-            dwdt[array_half + i] += - m2 * r12_inv2 * n12[i] - m3 * r13_inv2 * n13[i];
-            // Body 2
-            dwdt[params->dim + i] += w[array_half + params->dim + i];
-            dwdt[array_half + params->dim + i] += m1 * r12_inv2 * n12[i] - m3 * r23_inv2 * n23[i];
-            // Body 3
-            dwdt[2 * params->dim + i] += w[array_half + 2 * params->dim + i];
-            dwdt[array_half + 2 * params->dim + i] += m1 * r13_inv2 * n13[i] + m2 * r23_inv2 * n23[i];
+    if (params->pn_terms[0]) {
+        // Velocities
+        for (int a = 0; a < params->num_bodies; a++)
+            for (int i = 0; i < params->dim; i++)
+                dwdt[a * params->dim + i] += w[array_half + a * params->dim + i];
+    
+        //Accelerations
+        for (int a = 0; a < params->num_bodies; a++) {
+            for (int b = a+1; b < params->num_bodies; b++) {
+                for (int i = 0; i < params->dim; i++) {
+                    dwdt[array_half + a * params->dim + i] += -m[b] * 1/pow(r[a][b], 2) * n[a][b][i];
+                    dwdt[array_half + b * params->dim + i] += -m[a] * 1/pow(r[a][b], 2) * n[b][a][i];
+                }
+            }
         }
     }
 
     // Add 1PN terms
-    if(params->pn_terms[1]){
-        for (int i = 0; i < params->dim; i++){
-            // Body 1
-            dwdt[i] += - 0.5 * p1_norm2/pow(m1, 3) * p1[i] 
-                       - 0.5 * r12_inv * (6 * m2/m1 * p1[i] - 7 * p2[i] - p2_n12 * n12[i])
-                       - 0.5 * r13_inv * (6 * m3/m1 * p1[i] - 7 * p3[i] - p3_n13 * n13[i]);
-            dwdt[array_half + i] += - n12[i] * m1*m2*r12_inv2 * (- m3*(r23_inv+r13_inv) - (m1+m2)*r12_inv 
-                                             + 0.5*(3*p1_norm2/m12 + 3*p2_norm2/m22 - 7*p1_p2/(m1*m2) - 3*p1_n12*p2_n12/(m1*m2)))
-                                    - n13[i] * m1*m3*r13_inv2 * (- m2*(r23_inv+r12_inv) - (m1+m3)*r13_inv 
-                                             + 0.5*(3*p1_norm2/m12 + 3*p3_norm2/m32 - 7*p1_p3/(m1*m3) - 3*p1_n13*p3_n13/(m1*m3)))
-                                    - 0.5*r12_inv2 * (p2_n12*p1[i] + p1_n12*p2[i]) - 0.5*r13_inv2 * (p1_n13*p3[i] + p3_n13*p1[i]);
-            dwdt[array_half + i] /= m1;
-            // Body 2
-            dwdt[params->dim + i] += - 0.5 * p2_norm2/pow(m2, 3) * p2[i] 
-                                     - 0.5 * r23_inv * (6 * m3/m2 * p2[i] - 7 * p3[i] - p3_n23 * n23[i])
-                                     - 0.5 * r12_inv * (6 * m1/m2 * p2[i] - 7 * p1[i] - p1_n12 * n12[i]);
-            dwdt[array_half + params->dim + i] += - n23[i] * m2*m3*r23_inv2 * (- m1*(r13_inv+r12_inv) - (m2+m3)*r23_inv 
-                                                           + 0.5*(3*p2_norm2/m22 + 3*p3_norm2/m32 - 7*p2_p3/(m2*m3) - 3*p2_n23*p3_n23/(m2*m3)))
-                                                  + n12[i] * m1*m2*r12_inv2 * (- m3*(r13_inv+r23_inv) - (m1+m2)*r12_inv 
-                                                           + 0.5*(3*p2_norm2/m22 + 3*p1_norm2/m12 - 7*p1_p2/(m1*m2) - 3*p2_n12*p1_n12/(m1*m2)))
-                                                  - 0.5*r23_inv2 * (p3_n23*p2[i] + p2_n23*p3[i]) + 0.5*r12_inv2 * (p2_n12*p1[i] + p1_n12*p2[i]);
-            dwdt[array_half + params->dim + i] /= m2;                                   
-            // Body 3
-            dwdt[2 * params->dim + i] += - 0.5 * p3_norm2/pow(m3, 3) * p3[i] 
-                                         - 0.5 * r13_inv * (6 * m1/m3 * p3[i] - 7 * p1[i] - p1_n13 * n13[i])
-                                         - 0.5 * r23_inv * (6 * m2/m3 * p3[i] - 7 * p2[i] - p2_n23 * n23[i]);
-            dwdt[array_half + 2 * params->dim + i] += n13[i] * m1*m3*r13_inv2 * (- m2*(r12_inv+r23_inv) - (m1+m3)*r13_inv 
-                                                               + 0.5*(3*p3_norm2/m32 + 3*p1_norm2/m12 - 7*p1_p3/(m1*m3) - 3*p3_n13*p1_n13/(m1*m3)))
-                                                    + n23[i] * m2*m3*r23_inv2 * (- m1*(r12_inv+r13_inv) - (m2+m3)*r23_inv 
-                                                               + 0.5*(3*p3_norm2/m32 + 3*p2_norm2/m22 - 7*p2_p3/(m2*m3) - 3*p3_n23*p2_n23/(m2*m3)))
-                                                    + 0.5*r13_inv2 * (p1_n13*p3[i] + p3_n13*p1[i]) + 0.5*r23_inv2 * (p3_n23*p2[i] + p2_n23*p3[i]);
-            dwdt[array_half + 2 * params->dim + i] /= m3;
+    if (params->pn_terms[1]) {
+        // Velocities
+        for (int a = 0; a < params->num_bodies; a++) {
+            for (int i = 0; i < params->dim; i++) {
+                x_dot[a][i] += -0.5 * dot_product(p[a], p[a], params->dim) / pow(m[a], 3) * p[a][i];
+                for (int b = 0; b < params->num_bodies; b++) {
+                    if (b != a)
+                        x_dot[a][i] += -0.5 * 1/r[a][b] * (6 * m[b]/m[a] * p[a][i] - 7 * p[b][i] - dot_product(n[a][b], p[b], params->dim) * n[a][b][i]);
+                }
+                dwdt[a * params->dim + i] += x_dot[a][i];
+            }
+        }
+
+        // Accelerations
+        for (int a = 0; a < params->num_bodies; a++) {
+            for (int i = 0; i < params->dim; i++) {
+                for (int b = 0; b < params->num_bodies; b++) {
+                    if (b != a) {
+                        p_dot[a][i] += -0.5 / pow(r[a][b], 2) * (3 * m[b]/m[a] * dot_product(p[a], p[a], params->dim) + 3 * m[a]/m[b] * dot_product(p[b], p[b], params->dim) 
+                                               - 7 * dot_product(p[a], p[b], params->dim) - 3 * dot_product(n[a][b], p[a], params->dim) * dot_product(n[a][b], p[b], params->dim)) * n[a][b][i];
+                        p_dot[a][i] += -0.5 / pow(r[a][b], 2) * (dot_product(n[a][b], p[b], params->dim) * p[a][i] + dot_product(n[a][b], p[a], params->dim) * p[b][i]);
+                    }
+                    for (int c = 0; c < params->num_bodies; c++) {
+                        if (b != a && c != a)
+                            p_dot[a][i] += m[a] * m[b] * m[c] / (pow(r[a][b], 2) * r[a][c]) * n[a][b][i];
+                        if (b != a && c != b)
+                            p_dot[a][i] += m[a] * m[b] * m[c] / (pow(r[a][b], 2) * r[b][c]) * n[a][b][i];
+                    }
+                }
+                dwdt[array_half + a * params->dim + i] += p_dot[a][i];
+            }
         }
     }
 
-    //Add 2PN terms
+    // Add 2PN terms (using finite differencing on the hamiltonian)
     if(params->pn_terms[2]){
         update_eom_hamiltonian(w, dwdt, H2PN_threebody, 1e-5, params);
     }
 
-    free_vector(p1);
-    free_vector(p2);
-    free_vector(p3);
-    free_vector(x12);
-    free_vector(x13);
-    free_vector(x23);
-    free_vector(n12);
-    free_vector(n13);
-    free_vector(n23);
+    free_vector(m);
+    free_array(p, params->num_bodies);
+    free_array(r, params->num_bodies);
+    free_array(p_dot, params->num_bodies);
+    free_array(x_dot, params->num_bodies);
+    free_3d_array(x_rel, params->num_bodies, params->num_bodies);
+    free_3d_array(n, params->num_bodies, params->num_bodies);
 }

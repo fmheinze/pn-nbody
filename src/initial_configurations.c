@@ -258,19 +258,22 @@ w0              pointer to the array in which the initial positions and velociti
 
 
 void figure_eight_orbit(double width, struct ode_params* params, double* w0){
-    double px, py, lambda;
+    double pos_x, pos_y, px, py, lambda;
 
     lambda = width/108.1;
     if (width > 10000 || width < 100)
         printf("Warning: width = %lf, figure eight orbit only accurate for 100 < width < 100000!\n", width);
+    
+    pos_x = 97.0 * lambda;
+    pos_y = -24.31 * lambda;
 
     if(params->pn_terms[0] == 1 & params->pn_terms[1] == 0 & params->pn_terms[2] == 0 & params->pn_terms[3] == 0){
-        px = -0.09324;
-        py = -0.08647;
+        px = -0.09324/sqrt(lambda);
+        py = -0.08647/sqrt(lambda);
     }
     else if(params->pn_terms[0] == 1 & params->pn_terms[1] == 1 & params->pn_terms[2] == 0 & params->pn_terms[3] == 0){
-        px = -sqrt(0.008693198284902323/lambda + 0.0007967218808497421/pow(lambda, 2) + 0.00013920898849859853/pow(lambda, 3) - 3.426433477622561e-06/pow(lambda, 4));
-        py = -sqrt(0.007477506932144364/lambda + 0.0012750411566393282/pow(lambda, 2) + 0.00020194589670320117/pow(lambda, 3) - 5.316870339927638e-05/pow(lambda, 4));
+        px = -sqrt(0.008693032833827606/lambda + 0.000798860400642637/pow(lambda, 2) + 0.00013381114672890315/pow(lambda, 3));
+        py = -sqrt(0.007480061222224325/lambda + 0.001241927410006741/pow(lambda, 2) + 0.00028564641727617235/pow(lambda, 3));
     }
     else if(params->pn_terms[0] == 1 & params->pn_terms[1] == 1 & params->pn_terms[2] == 1 & params->pn_terms[3] == 0){
         px = -sqrt(0.008692910686038705/lambda + 0.0007977722653187864/pow(lambda, 2) + 6.351332174711012e-05/pow(lambda, 3) - 3.0103527312470005e-05/pow(lambda, 4));
@@ -278,37 +281,29 @@ void figure_eight_orbit(double width, struct ode_params* params, double* w0){
     }
 
     if (params->dim == 2){
-        w0[0] = 97.0;
-        w0[1] = -24.31;
-        w0[2] = -97.0;
-        w0[3] = 24.31;
+        w0[0] = pos_x;
+        w0[1] = pos_y;
+        w0[2] = -pos_x;
+        w0[3] = -pos_y;
         w0[4] = 0.0;
         w0[5] = 0.0;
-        for (int i = 0; i < 6; i++)
-            w0[i] *= lambda;
         w0[6] = -0.5*px;
         w0[7] = -0.5*py;
         w0[8] = -0.5*px;
         w0[9] = -0.5*py;
         w0[10] = px;
         w0[11] = py;
-        if(params->pn_terms[0] == 1 & params->pn_terms[1] == 0 & params->pn_terms[2] == 0 & params->pn_terms[3] == 0){
-            for (int i = 6; i < 12; i++)
-                w0[i] *= 1/sqrt(lambda);
-        }
     }
     else if (params->dim == 3){
-        w0[0] = 97.0;
-        w0[1] = -24.31;
+        w0[0] = pos_x;
+        w0[1] = pos_y;
         w0[2] = 0.0;
-        w0[3] = -97.0;
-        w0[4] = 24.31;
+        w0[3] = -pos_x;
+        w0[4] = -pos_y;
         w0[5] = 0.0;
         w0[6] = 0.0;
         w0[7] = 0.0;
         w0[8] = 0.0;
-        for (int i = 0; i < 9; i++)
-            w0[i] *= lambda;
         w0[9] = -0.5*px;
         w0[10] = -0.5*py;
         w0[11] = 0.0;
@@ -318,9 +313,5 @@ void figure_eight_orbit(double width, struct ode_params* params, double* w0){
         w0[15] = px;
         w0[16] = py;
         w0[17] = 0.0;
-        if(params->pn_terms[0] == 1 & params->pn_terms[1] == 0 & params->pn_terms[2] == 0 & params->pn_terms[3] == 0){
-            for (int i = 9; i < 18; i++)
-                w0[i] *= 1/sqrt(lambda);
-        }
     }
 }
