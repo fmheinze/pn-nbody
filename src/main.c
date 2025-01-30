@@ -45,8 +45,8 @@ int main(){
     //double orientation[3] = {0, 0, 1};
 
     // Compute initial positions and velocities
-    // binary_single_scattering_symmetric(params.masses[0], params.masses[1], params.masses[2], 
-    //                                   a1, e1, phi01, d0, v_rel, b, NULL, w0);
+    //binary_single_scattering_symmetric(params.masses[0], params.masses[1], a1, e1, phi01, d0, v_rel, b, NULL, w0);
+    //newtonian_binary(params.masses[0], params.masses[1], a1, e1, phi01, params.dim, w0);
 
     figure_eight_orbit(108.1, &params, w0);
 
