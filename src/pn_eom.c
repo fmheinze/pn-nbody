@@ -283,6 +283,9 @@ dwdt        pointer to the array of values that will be updated with the right-h
             // Add 2.5PN terms
             if(params->pn_terms[3]){
                 for (int coord = 0; coord < params->dim; coord++){
+                    vi_coord_index = array_half + params->dim * i + coord;
+                    vj_coord_index = array_half + params->dim * j + coord;
+
                     a_temp = 208.0/15.0 * mimj * pos_dot_v_rel * pos_dist5[coord];
                     dwdt[vi_coord_index] += params->masses[j] * a_temp;
                     dwdt[vj_coord_index] -= params->masses[i] * a_temp;
