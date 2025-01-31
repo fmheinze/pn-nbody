@@ -85,7 +85,7 @@ k1          pointer to the value or the array of values of k1 = ode_rhs(x, y, k1
 }
 
 
-void ode_step(double* y, int y_size, double* x, double *dx, double rel_error, 
+void ode_step(double* y, int y_size, double* x, double *dx, double dx_max, double rel_error, 
               void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params)
 /* Updates the value or the array of values y by one adaptive step using the Cash-Karp update method,
 ensuring a specified error threshold per step. The next x-value and the stepsize also get updated.
@@ -98,7 +98,7 @@ rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes x, y and outputs y'(x) (in the last argument) 
 params      additional parameters for ode_rhs that modify the dynamics of the system (can be set to NULL) */
 {
-    double max_rel_error;
+    double max_rel_error, dx_new;
     double *k1, *y_err, *y_new;
 
     allocate_vector(&k1, y_size);
@@ -109,24 +109,33 @@ params      additional parameters for ode_rhs that modify the dynamics of the sy
     ode_rhs(*x, y, params, k1);
 
     // Compute steps as long as the maximum relative error is larger than the specified relative error threshold
-    while (1){
+    while (1) {
         // Perform a step with the Cash-Karp method and get the updated values y and the error estimates y_err
         cash_karp_update(y, y_new, y_err, y_size, *x, *dx, ode_rhs, params, k1);
 
-        max_rel_error = 0.0;
-        for (int i = 0; i < y_size; i++)
-            if(fabs(y[i]) + *dx * fabs(k1[i]) != 0)
-                max_rel_error = fmax(max_rel_error, fabs(y_err[i]) / (fabs(y[i]) + *dx * fabs(k1[i])));
-        
-        // Check whether actual relative error is above or below the specified threshold 
-        if(max_rel_error >= rel_error)
-            *dx *= pow(max_rel_error/rel_error, -0.2);
-        else{
-            *x += *dx;
-            *dx *= pow(max_rel_error/rel_error, -0.2);
+        // Compute max relative error
+        double max_rel_error = 0.0;
+        for (int i = 0; i < y_size; i++) {
+            double denom = fabs(y[i]) + *dx * fabs(k1[i]);
+            if (denom != 0)
+                max_rel_error = fmax(max_rel_error, fabs(y_err[i]) / denom);
+        }
+
+        // Compute new step size
+        double dx_new = *dx * pow(max_rel_error / rel_error, -0.2);
+        dx_new = fmin(dx_new, dx_max);  // Ensure step size does not exceed max limit
+
+        if (max_rel_error < rel_error) {
+            *x += *dx;  // Accept step
+            *dx = dx_new;
             break;
         }
+
+        // Otherwise, reject step and retry with smaller step size
+        *dx = dx_new;
+        if (*dx == dx_max) break;
     }
+
     // Update final new y values 
     for(int i = 0; i < y_size; i++)
         y[i] = y_new[i];
@@ -185,7 +194,8 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
 
     // Carry out integration steps until x_end is reached and write values into new line
     while (t_current < t_end){
-        ode_step(w, w_size, &t_current, &dt_current, rel_error, ode_rhs, params);
+        printf("%lf\n", dt_current);
+        ode_step(w, w_size, &t_current, &dt_current, dt_save, rel_error, ode_rhs, params);
         if(t_current >= t_save + dt_save){
             fprintf(file, "\n%.20e\t", t_current);
             for(int i = 0; i < w_size; i++)
