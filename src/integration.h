@@ -7,7 +7,7 @@ void cash_karp_update(double* y, double* y_new, double* y_err, int y_size, doubl
                       void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params, double* k1);
 void ode_step(double* y, int y_size, double* x, double *dx, double rel_error, 
               void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params);
-void ode_integrator(double* w, int w_size, double t_start, double t_end, double dt0, double dt_save, double rel_error,
+void ode_integrator(double* w, double t_end, double dt0, double dt_save, double rel_error,
                     void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params);
 
 #endif
