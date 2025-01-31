@@ -42,6 +42,21 @@ void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_
     }
 }
 
+// Allocates memory for a 4D array
+void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors, int num_elements) {
+    // Allocate memory for the array of 2D arrays
+    *ptr = (double ****)malloc(num_3d_arrays * sizeof(double ***));
+    if (*ptr == NULL) {
+        fprintf(stderr, "Memory allocation failed for 4D array\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Allocate memory for each 3D array
+    for (int i = 0; i < num_3d_arrays; i++) {
+        allocate_3d_array(&((*ptr)[i]), num_arrays, num_vectors, num_elements);
+    }
+}
+
 // Frees memory for a single vector
 void free_vector(double* ptr) {
     if (ptr != NULL) {
@@ -67,6 +82,14 @@ void free_3d_array(double*** ptr, int num_arrays, int num_vectors) {
         }
         free(ptr);
     }
+}
+
+// Frees memory for a 4D array
+void free_4d_array(double**** ptr, int num_3d_arrays, int num_arrays, int num_vectors) {
+    for (int i = 0; i < num_3d_arrays; i++) {
+        free_3d_array(ptr[i], num_arrays, num_vectors);
+    }
+    free(ptr);
 }
 
 
@@ -128,4 +151,9 @@ void rotate_vector(double v[3], double R[3][3], double result[3]) {
     result[0] = R[0][0] * v[0] + R[0][1] * v[1] + R[0][2] * v[2];
     result[1] = R[1][0] * v[0] + R[1][1] * v[1] + R[1][2] * v[2];
     result[2] = R[2][0] * v[0] + R[2][1] * v[1] + R[2][2] * v[2];
+}
+
+
+int kronecker_delta(int i, int j) {
+    return (i == j) ? 1 : 0;
 }
