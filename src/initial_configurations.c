@@ -6,42 +6,47 @@
 #include "pn_eom.h"
 
 
-void newtonian_binary(double m1, double m2, double a, double e, double phi0, int dim, double* w0)
-/*Returns the initial positions and the initial velocities (as w0 = [pos1, pos2, v1, v2]) of the two bodies with 
+void newtonian_binary(struct ode_params* params, double* w0, double a, double e, double phi0)
+/*Returns the initial positions and the initial momenta (as w0 = [pos1, pos2, p1, p2]) of the two bodies with 
 masses m1 and m2 in a binary system with relative semi-major axis a, eccentricity e and initial phase phi0
 in the center of mass system and in the xy-plane. dim sets the number of dimensions (2 or 3).*/
 {
     // Basic binary parameters
+    double m1 = params->masses[0];
+    double m2 = params->masses[1];
     double M = m1 + m2;                                             // Total mass
-    double L = m1 * m2 * sqrt(2 * a / M * (1 - pow(e, 2)));         // Angular momentum
-    double p = pow(L, 2) / (pow(m1 * m2, 2) / M);                   // Semi-latus rectum
+    double L = m1 * m2 * sqrt(2 * a / M * (1 - e * e));             // Angular momentum
+    double p = L * L / ((m1 * m2) * (m1 * m2) / M);                 // Semi-latus rectum
 
     // Relative distance and its derivative at phi0
-    double r0 = p / (1 + e * cos(phi0));
-    double dr_dphi0 = e * p * sin(phi0) / pow(1 + e * cos(phi0), 2);
+    double cosphi0 = cos(phi0);
+    double sinphi0 = sin(phi0);
+    double denom_inv = 1 / (1 + e * cosphi0);
+    double r0 = p * denom_inv;
+    double dr_dphi0 = e * p * sinphi0 * denom_inv * denom_inv;
 
     // Positions and velocities of the individual masses in the center of mass frame
-    double r0cosphi0 = r0 * cos(phi0);
-    double r0sinphi0 = r0 * sin(phi0);
-    double v_factor1 = dr_dphi0 * cos(phi0) - r0sinphi0;
-    double v_factor2 = dr_dphi0 * sin(phi0) + r0cosphi0;
-    double v1_factor = L / (m1 * pow(r0, 2));
-    double v2_factor = -L / (m2 * pow(r0, 2));
+    double r0cosphi0 = r0 * cosphi0;
+    double r0sinphi0 = r0 * sinphi0;
+    double p_factor1 = dr_dphi0 * cosphi0 - r0sinphi0;
+    double p_factor2 = dr_dphi0 * sinphi0 + r0cosphi0;
+    double p1_factor = L / (r0 * r0);
+    double p2_factor = -L / (r0 * r0);
 
-    if(dim == 2){
+    if(params->dim == 2){
         w0[0] = m2 / M * r0cosphi0;
         w0[1] = m2 / M * r0sinphi0;
 
         w0[2] = -m1 / M * r0cosphi0;
         w0[3] = -m1 / M * r0sinphi0;
 
-        w0[4] = v1_factor * v_factor1;
-        w0[5] = v1_factor * v_factor2;
+        w0[4] = p1_factor * p_factor1;
+        w0[5] = p1_factor * p_factor2;
 
-        w0[6] = v2_factor * v_factor1;
-        w0[7] = v2_factor * v_factor2;
+        w0[6] = p2_factor * p_factor1;
+        w0[7] = p2_factor * p_factor2;
     }
-    else if(dim == 3){
+    else if(params->dim == 3){
         w0[0] = m2 / M * r0cosphi0;
         w0[1] = m2 / M * r0sinphi0;
         w0[2] = 0.0;
@@ -50,12 +55,12 @@ in the center of mass system and in the xy-plane. dim sets the number of dimensi
         w0[4] = -m1 / M * r0sinphi0;
         w0[5] = 0.0;
 
-        w0[6] = v1_factor * v_factor1;
-        w0[7] = v1_factor * v_factor2;
+        w0[6] = p1_factor * p_factor1;
+        w0[7] = p1_factor * p_factor2;
         w0[8] = 0.0;
 
-        w0[9] = v2_factor * v_factor1;
-        w0[10] = v2_factor * v_factor2;
+        w0[9] = p2_factor * p_factor1;
+        w0[10] = p2_factor * p_factor2;
         w0[11] = 0.0;
     }
     else{
@@ -71,9 +76,9 @@ void position_binary(double com_pos[3], double orientation[3], double w0[12])
     double initial_orientation[3] = {0, 0, 1};
     double pos1[3] = {w0[0], w0[1], w0[2]};
     double pos2[3] = {w0[3], w0[4], w0[5]};
-    double v1[3] = {w0[6], w0[7], w0[8]};
-    double v2[3] = {w0[9], w0[10], w0[11]};
-    double pos1_new[3], pos2_new[3], v1_new[3], v2_new[3];
+    double p1[3] = {w0[6], w0[7], w0[8]};
+    double p2[3] = {w0[9], w0[10], w0[11]};
+    double pos1_new[3], pos2_new[3], p1_new[3], p2_new[3];
     double axis[3];
     double angle;
     double rotation_matrix[3][3];
@@ -90,8 +95,8 @@ void position_binary(double com_pos[3], double orientation[3], double w0[12])
     // Rotate positions and velocities of both masses
     rotate_vector(pos1, rotation_matrix, pos1_new);
     rotate_vector(pos2, rotation_matrix, pos2_new);
-    rotate_vector(v1, rotation_matrix, v1_new);
-    rotate_vector(v2, rotation_matrix, v2_new);
+    rotate_vector(p1, rotation_matrix, p1_new);
+    rotate_vector(p2, rotation_matrix, p2_new);
 
     // Update w0 with rotated positions and velocities
     w0[0] = pos1_new[0] + com_pos[0];
@@ -100,20 +105,20 @@ void position_binary(double com_pos[3], double orientation[3], double w0[12])
     w0[3] = pos2_new[0] + com_pos[0];
     w0[4] = pos2_new[1] + com_pos[1];
     w0[5] = pos2_new[2] + com_pos[2];
-    w0[6] = v1_new[0];
-    w0[7] = v1_new[1];
-    w0[8] = v1_new[2];
-    w0[9] = v2_new[0];
-    w0[10] = v2_new[1];
-    w0[11] = v2_new[2];
+    w0[6] = p1_new[0];
+    w0[7] = p1_new[1];
+    w0[8] = p1_new[2];
+    w0[9] = p2_new[0];
+    w0[10] = p2_new[1];
+    w0[11] = p2_new[2];
 }
 
 
-void binary_single_scattering_symmetric(double m_a, double m_b, double a, double e, double phi0,
-                                        double d0, double v_rel, double b, double* orientation, double* w0)
-/*Computes the inital values for a symmetric binary-single scattering setup. The arguments are:
+void binary_single_scattering_symmetric(struct ode_params* params, double* w0, double a, double e, double phi0,
+                                        double d0, double v_rel, double b, double* orientation)
+/*Computes the inital values for a symmetric Newtonian binary-single scattering setup. The arguments are:
 
-m_a, m_b        masses of the binary members
+params          contains masses = [m_b1, m_b2, m_s]
 a               semi-major axis of the binary
 e               eccentricity of the binary
 phi0            initial phase of the binary
@@ -122,7 +127,7 @@ v_rel           initial relative approach velocity
 b               scattering impact parameter           
 orientation     binary orientation vector (if NULL the binary is oriented in its direction of motion)
 w0              pointer to the array in which the initial positions and velocities of the bodies will be stored
-                w0 = [pos_a, pos_b, pos_s, v_a, v_b, v_s]*/
+                w0 = [pos_b1, pos_b2, pos_s, p_b1, p_b2, p_s]*/
 {
     double v_x, v_y;
     double w0_binary[12];
@@ -130,7 +135,7 @@ w0              pointer to the array in which the initial positions and velociti
     double binary_pos[3] = {0.0, 0.0, 0.0};
 
     // Create the binary initial values
-    newtonian_binary(m_a, m_b, a, e, phi0, 3, w0_binary);
+    newtonian_binary(params, w0_binary, a, e, phi0);
 
     // Compute the absolute values of v_x and v_y
     v_x = v_rel/2 * sqrt(1 - pow(b/d0, 2));
@@ -150,11 +155,11 @@ w0              pointer to the array in which the initial positions and velociti
     }
     position_binary(binary_pos, binary_orientation, w0_binary);
 
-    // Add v_x and v_y velocity to the binary
-    w0_binary[6] += v_x;
-    w0_binary[7] -= v_y;
-    w0_binary[9] += v_x;
-    w0_binary[10] -= v_y;
+    // Add p_x and p_y momentum to the binary
+    w0_binary[6] += params->masses[0] * v_x;
+    w0_binary[7] -= params->masses[0] * v_y;
+    w0_binary[9] += params->masses[1] * v_x;
+    w0_binary[10] -= params->masses[1] * v_y;
 
     // Setting up the binary
     for(int i = 0; i < 6; i++)
@@ -166,30 +171,29 @@ w0              pointer to the array in which the initial positions and velociti
     w0[6] = d0/2;
     w0[7] = 0.0;
     w0[8] = 0.0;
-    w0[15] = -v_x;
-    w0[16] = v_y;
+    w0[15] = -params->masses[2] * v_x;
+    w0[16] = params->masses[2] * v_y;
     w0[17] = 0.0;
 
     return;
 }
 
 
-void binary_binary_scattering_symmetric(double m_a1, double m_b1, double m_a2, double m_b2, 
+void binary_binary_scattering_symmetric(struct ode_params* params, double* w0,
                                         double a1, double a2, double e1, double e2, double phi01, double phi02,
-                                        double d0, double v_rel, double b, double* orientation1, double* orientation2, 
-                                        double* w0)
+                                        double d0, double v_rel, double b, double* orientation1, double* orientation2)
 /*Computes the inital values for a symmetric binary-binary scattering setup. The arguments are:
 
-m_aX, m_bX      masses of the binary members and the scattering single body 
-aX              semi-major axis of the binary
-eX              eccentricity of the binary
-phi0X           initial phase of the binary
-d0              initial separation
-v_rel           initial relative approach velocity   
+params          contains masses = [m_a1, m_a2, m_b1, m_b2]
+aX              semi-major axis of the binary X
+eX              eccentricity of the binary X
+phi0X           initial phase of the binary X
+d0              initial separation of the centers of masses of the binaries
+v_rel           initial relative approach velocity
 b               scattering impact parameter           
-orientationX    binary orientation vectors (if NULL the binary is oriented in its direction of motion)
+orientationX    binary X orientation vectors (if NULL the binary is oriented in its direction of motion)
 w0              pointer to the array in which the initial positions and velocities of the bodies will be stored
-                w0 = [pos_a1, pos_b1, pos_a2, pos_b2, v_a1, v_b1, v_a2, v_b2]*/
+                w0 = [pos_a1, pos_a2, pos_b1, pos_b2, p_a1, p_a2, p_b1, p_b2]*/
 {
     double v_x, v_y;
     double w0_binary1[12];
@@ -200,10 +204,10 @@ w0              pointer to the array in which the initial positions and velociti
     double binary2_pos[3] = {0.0, 0.0, 0.0};
 
     // Create the binary initial values
-    newtonian_binary(m_a1, m_b1, a1, e1, phi01, 3, w0_binary1);
-    newtonian_binary(m_a2, m_b2, a2, e2, phi02, 3, w0_binary2);
+    newtonian_binary(params, w0_binary1, a1, e1, phi01);
+    newtonian_binary(params, w0_binary2, a2, e2, phi02);
 
-    // Compute the absolute values of v_x and v_y as well as the angle of the v-vector to the x-axis
+    // Compute the absolute values of v_x and v_y
     v_x = v_rel/2 * sqrt(1 - pow(b/d0, 2));
     v_y = v_rel/2 * b/d0;
 
@@ -233,15 +237,15 @@ w0              pointer to the array in which the initial positions and velociti
     position_binary(binary1_pos, binary1_orientation, w0_binary1);
     position_binary(binary2_pos, binary2_orientation, w0_binary2);
 
-    // Add v_x and v_y velocity to the binaries
-    w0_binary1[6] += v_x;
-    w0_binary1[7] -= v_y;
-    w0_binary1[9] += v_x;
-    w0_binary1[10] -= v_y;
-    w0_binary2[6] -= v_x;
-    w0_binary2[7] += v_y;
-    w0_binary2[9] -= v_x;
-    w0_binary2[10] += v_y;
+    // Add p_x and p_y momentum to the binaries
+    w0_binary1[6] += params->masses[0] * v_x;
+    w0_binary1[7] -= params->masses[0] * v_y;
+    w0_binary1[9] += params->masses[1] * v_x;
+    w0_binary1[10] -= params->masses[1] * v_y;
+    w0_binary2[6] -= params->masses[2] * v_x;
+    w0_binary2[7] += params->masses[2] * v_y;
+    w0_binary2[9] -= params->masses[3] * v_x;
+    w0_binary2[10] += params->masses[3] * v_y;
 
     // Setting up the binaries
     for(int i = 0; i < 6; i++)
@@ -257,7 +261,7 @@ w0              pointer to the array in which the initial positions and velociti
 }
 
 
-void figure_eight_orbit(double width, struct ode_params* params, double* w0){
+void figure_eight_orbit(struct ode_params* params, double* w0, double width){
     double pos_x, pos_y, px, py, lambda;
 
     lambda = width/108.1;

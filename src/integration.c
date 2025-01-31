@@ -85,7 +85,7 @@ k1          pointer to the value or the array of values of k1 = ode_rhs(x, y, k1
 }
 
 
-void ode_step(double* y, int y_size, double* x, double *dx, double rel_error, 
+void ode_step(double* y, int y_size, double* x, double *dx, double dx_max, double rel_error, 
               void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params)
 /* Updates the value or the array of values y by one adaptive step using the Cash-Karp update method,
 ensuring a specified error threshold per step. The next x-value and the stepsize also get updated.
@@ -94,11 +94,12 @@ y           pointer to the value or array of values y that is going to be update
 y_size      number of values in the array y
 x           value of the independent variable of the function y(x)
 dx          stepsize (might be modified and updated by the adaptive stepsize procedure to ensure specified accuracy)
+dx_max      maximum step size
 rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes x, y and outputs y'(x) (in the last argument) 
 params      additional parameters for ode_rhs that modify the dynamics of the system (can be set to NULL) */
 {
-    double max_rel_error;
+    double max_rel_error, dx_new;
     double *k1, *y_err, *y_new;
 
     allocate_vector(&k1, y_size);
@@ -109,24 +110,33 @@ params      additional parameters for ode_rhs that modify the dynamics of the sy
     ode_rhs(*x, y, params, k1);
 
     // Compute steps as long as the maximum relative error is larger than the specified relative error threshold
-    while (1){
+    while (1) {
         // Perform a step with the Cash-Karp method and get the updated values y and the error estimates y_err
         cash_karp_update(y, y_new, y_err, y_size, *x, *dx, ode_rhs, params, k1);
 
-        max_rel_error = 0.0;
-        for (int i = 0; i < y_size; i++)
-            if(fabs(y[i]) + *dx * fabs(k1[i]) != 0)
-                max_rel_error = fmax(max_rel_error, fabs(y_err[i]) / (fabs(y[i]) + *dx * fabs(k1[i])));
-        
-        // Check whether actual relative error is above or below the specified threshold 
-        if(max_rel_error >= rel_error)
-            *dx *= pow(max_rel_error/rel_error, -0.2);
-        else{
-            *x += *dx;
-            *dx *= pow(max_rel_error/rel_error, -0.2);
+        // Compute max relative error
+        double max_rel_error = 0.0;
+        for (int i = 0; i < y_size; i++) {
+            double denom = fabs(y[i]) + *dx * fabs(k1[i]);
+            if (denom != 0)
+                max_rel_error = fmax(max_rel_error, fabs(y_err[i]) / denom);
+        }
+
+        // Compute new step size
+        double dx_new = *dx * pow(max_rel_error / rel_error, -0.2);
+        dx_new = fmin(dx_new, dx_max);  // Ensure step size does not exceed max limit
+
+        if (max_rel_error < rel_error) {
+            *x += *dx;  // Accept step
+            *dx = dx_new;
             break;
         }
+
+        // Otherwise, reject step and retry with smaller step size
+        *dx = dx_new;
+        if (*dx == dx_max) break;
     }
+
     // Update final new y values 
     for(int i = 0; i < y_size; i++)
         y[i] = y_new[i];
@@ -138,23 +148,23 @@ params      additional parameters for ode_rhs that modify the dynamics of the sy
 }
 
 
-void ode_integrator(double* w, int w_size, double t_start, double t_end, double dt0, double dt_save, double rel_error,
+void ode_integrator(double* w, double t_end, double dt0, double dt_save, double rel_error,
                     void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params)
 /* Integrates the ODE system w'(t) = ode_rhs(t, w) from t_start to t_end, using the ode_step function which employs
 an adaptive stepsize control ensuring a specified maximum error per step. The result of each step is written to a file.
 
 w           pointer to the value or array of values w that is going to be updated (updated values overwrite old ones)
-w_size      number of values in the array y
-t_start     initial time value
 t_end       time at which the integration process terminates and the simulation stops
 dt0         initial time step (might be modified and updated by the adaptive stepsize procedure)
+dt_save     time intervals that are saved to a file, acts as maximum step size
 rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes t, w and outputs w'(x) (in the last argument)
 ode_params  additional parameters for ode_rhs that modify the dynamics of the system */
 {
     FILE *file;
-    double t_current = t_start;
-    double t_save = t_start;
+    double w_size = 2 * params->dim * params->num_bodies;
+    double t_current = 0.0;
+    double t_save = 0.0;
     double dt_current = dt0;
 
     file = fopen("output.dat", "w");
@@ -174,18 +184,18 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
         if (params->dim == 3) fprintf(file, "z%d\t", i);
     }
     for (int i = 0; i < params->num_bodies; i++){
-        fprintf(file, "vx%d\tvy%d\t", i, i);
-        if (params->dim == 3) fprintf(file, "vz%d\t", i);
+        fprintf(file, "px%d\tpy%d\t", i, i);
+        if (params->dim == 3) fprintf(file, "pz%d\t", i);
     }
     
     // Write initial values into the third line
-    fprintf(file, "\n%.20e\t", t_start);
+    fprintf(file, "\n%.20e\t", 0.0);
     for (int i = 0; i < w_size; i++)
         fprintf(file, "%.20e\t", w[i]);
 
     // Carry out integration steps until x_end is reached and write values into new line
     while (t_current < t_end){
-        ode_step(w, w_size, &t_current, &dt_current, rel_error, ode_rhs, params);
+        ode_step(w, w_size, &t_current, &dt_current, dt_save, rel_error, ode_rhs, params);
         if(t_current >= t_save + dt_save){
             fprintf(file, "\n%.20e\t", t_current);
             for(int i = 0; i < w_size; i++)
