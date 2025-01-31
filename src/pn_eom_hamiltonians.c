@@ -1,6 +1,111 @@
 #include <math.h>
 #include "pn_eom.h"
 #include "pn_eom_hamiltonians.h"
+#include "utils.h"
+
+
+double H0PN(double* w, struct ode_params* params) {
+     int array_half = params->dim * params->num_bodies;
+     double rel_dist2, v2;
+     double H = 0;
+
+     for (int a = 0; a < params->num_bodies; a++) {
+          // Kinetic energy
+          v2 = 0.0;
+          for (int i = 0; i < params->dim; i++)
+               v2 += pow(w[array_half + params->dim * a + i], 2);
+          H += 0.5 * params->masses[a] * v2;
+
+          // Potential energy
+          for (int b = a+1; b < params->num_bodies; b++) {
+               rel_dist2 = 0.0;
+               for (int i = 0; i < params->dim; i++)
+                    rel_dist2 += pow(w[params->dim * a + i] - w[params->dim * b + i], 2);
+               H -= params->masses[a] * params->masses[b] / sqrt(rel_dist2);
+          }
+     }
+     return H;
+}
+
+
+double H1PN(double* w, struct ode_params* params) {
+    int a, b, c, i;
+    double m_a, m_b, m_c;
+    double pa_dot_pa, pb_dot_pb, pa_dot_pb;
+    double dx, r_ab, r_ac, ni, na_dot_pa, na_dot_pb;
+    double p_ai, p_bi, dx_ac;
+    int array_half = params->dim * params->num_bodies;
+    double H = 0.0;
+
+    // Compute kinetic energy and potential energy
+    for (a = 0; a < params->num_bodies; a++) {
+        m_a = params->masses[a];
+        pa_dot_pa = 0.0;
+
+        for (i = 0; i < params->dim; i++) {
+            p_ai = m_a * w[array_half + a * params->dim + i];
+            pa_dot_pa += p_ai * p_ai;
+        }
+
+        H += -0.125 * m_a * pow(pa_dot_pa / (m_a * m_a), 2);
+
+        for (b = 0; b < params->num_bodies; b++) {
+            if (b == a) continue;
+
+            m_b = params->masses[b];
+            r_ab = 0.0;
+            pb_dot_pb = 0.0;
+            pa_dot_pb = 0.0;
+            na_dot_pa = 0.0;
+            na_dot_pb = 0.0;
+
+            for (i = 0; i < params->dim; i++) {
+                dx = w[a * params->dim + i] - w[b * params->dim + i];
+                r_ab += dx * dx;
+            }
+
+            r_ab = sqrt(r_ab);
+
+            for (i = 0; i < params->dim; i++) {
+                p_ai = m_a * w[array_half + a * params->dim + i];
+                p_bi = m_b * w[array_half + b * params->dim + i];
+
+                dx = w[a * params->dim + i] - w[b * params->dim + i];
+                ni = dx / r_ab;
+
+                pb_dot_pb += p_bi * p_bi;
+                pa_dot_pb += p_ai * p_bi;
+                na_dot_pa += ni * p_ai;
+                na_dot_pb += ni * p_bi;
+            }
+
+            H += -0.25 * m_a * m_b / r_ab * (6 * pa_dot_pa / (m_a * m_a) - 7 * pa_dot_pb / (m_a * m_b) - 
+                  (na_dot_pa * na_dot_pb) / (m_a * m_b));
+
+            if (params->num_bodies > 2) {
+                for (c = 0; c < params->num_bodies; c++) {
+                    if (c == a) continue;
+
+                    m_c = params->masses[c];
+
+                    r_ac = 0.0;
+
+                    for (i = 0; i < params->dim; i++) {
+                        dx_ac = w[a * params->dim + i] - w[c * params->dim + i];
+                        r_ac += dx_ac * dx_ac;
+                    }
+                    r_ac = sqrt(r_ac);
+
+                    H += 0.5 * m_a * m_b * m_c / (r_ab * r_ac);
+                }
+            }
+        }
+    }
+    return H;
+}
+
+
+
 
 double H2PN_threebody(double* w, struct ode_params* params) {
      double m1 = params->masses[0];
@@ -305,16 +410,17 @@ double H2PN_threebody(double* w, struct ode_params* params) {
 
 
 void update_eom_hamiltonian(double *w, double *dwdt, double (*hamiltonian)(double*, struct ode_params*), double h, struct ode_params* params) {
+     int array_half = params->dim * params->num_bodies;
      double w_copy[18];
      double dHdw[18];
      double forward_value, backward_value;
 
      // Copy original array to w_copy
-     for (int i = 0; i < 18; i++) {
+     for (int i = 0; i < 2 * array_half; i++) {
           w_copy[i] = w[i];
      }
 
-     for (int i = 0; i < 18; i++) {
+     for (int i = 0; i < 2 * array_half; i++) {
           // Perturb the i-th variable forward
           w_copy[i] = w[i] + h;
           forward_value = hamiltonian(w_copy, params);
@@ -331,12 +437,10 @@ void update_eom_hamiltonian(double *w, double *dwdt, double (*hamiltonian)(doubl
      }
 
      // Compute dwdt
-     for (int i = 0; i < 18; i++) {
-          if (i < 9)
-          dwdt[i] += dHdw[i+9];
+     for (int i = 0; i < 2 * array_half; i++) {
+          if (i < array_half)
+               dwdt[i] += dHdw[i + array_half];
           else
-          dwdt[i] += -dHdw[i-9];
+               dwdt[i] += -dHdw[i - array_half];
      }
-
 }
-
