@@ -138,23 +138,23 @@ params      additional parameters for ode_rhs that modify the dynamics of the sy
 }
 
 
-void ode_integrator(double* w, int w_size, double t_start, double t_end, double dt0, double dt_save, double rel_error,
+void ode_integrator(double* w, double t_end, double dt0, double dt_save, double rel_error,
                     void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params)
 /* Integrates the ODE system w'(t) = ode_rhs(t, w) from t_start to t_end, using the ode_step function which employs
 an adaptive stepsize control ensuring a specified maximum error per step. The result of each step is written to a file.
 
 w           pointer to the value or array of values w that is going to be updated (updated values overwrite old ones)
-w_size      number of values in the array y
-t_start     initial time value
 t_end       time at which the integration process terminates and the simulation stops
 dt0         initial time step (might be modified and updated by the adaptive stepsize procedure)
+dt_save     time intervals that are saved to a file
 rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes t, w and outputs w'(x) (in the last argument)
 ode_params  additional parameters for ode_rhs that modify the dynamics of the system */
 {
     FILE *file;
-    double t_current = t_start;
-    double t_save = t_start;
+    double w_size = 2 * params->dim * params->num_bodies;
+    double t_current = 0.0;
+    double t_save = 0.0;
     double dt_current = dt0;
 
     file = fopen("output.dat", "w");
@@ -174,12 +174,12 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
         if (params->dim == 3) fprintf(file, "z%d\t", i);
     }
     for (int i = 0; i < params->num_bodies; i++){
-        fprintf(file, "vx%d\tvy%d\t", i, i);
-        if (params->dim == 3) fprintf(file, "vz%d\t", i);
+        fprintf(file, "px%d\tpy%d\t", i, i);
+        if (params->dim == 3) fprintf(file, "pz%d\t", i);
     }
     
     // Write initial values into the third line
-    fprintf(file, "\n%.20e\t", t_start);
+    fprintf(file, "\n%.20e\t", 0.0);
     for (int i = 0; i < w_size; i++)
         fprintf(file, "%.20e\t", w[i]);
 
