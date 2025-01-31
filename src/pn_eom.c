@@ -395,7 +395,7 @@ dwdt        pointer to the array of values that will be updated with the right-h
         for (int a = 0; a < params->num_bodies; a++)
             for (int i = 0; i < params->dim; i++) {
                 dwdt[a * params->dim + i] += w[array_half + a * params->dim + i];
-                //x_dot[a][i] += w[array_half + a * params->dim + i];
+                x_dot[a][i] += w[array_half + a * params->dim + i];
             }
     
         //Accelerations
@@ -404,8 +404,8 @@ dwdt        pointer to the array of values that will be updated with the right-h
                 for (int i = 0; i < params->dim; i++) {
                     dwdt[array_half + a * params->dim + i] += -m[b] * 1/pow(r[a][b], 2) * n[a][b][i];
                     dwdt[array_half + b * params->dim + i] += -m[a] * 1/pow(r[a][b], 2) * n[b][a][i];
-                    //p_dot[a][i] += -m[b] * 1/pow(r[a][b], 2) * n[a][b][i];
-                    //p_dot[b][i] += -m[a] * 1/pow(r[a][b], 2) * n[b][a][i];
+                    p_dot[a][i] += -m[b] * 1/pow(r[a][b], 2) * n[a][b][i];
+                    p_dot[b][i] += -m[a] * 1/pow(r[a][b], 2) * n[b][a][i];
                 }
             }
         }
@@ -497,7 +497,7 @@ dwdt        pointer to the array of values that will be updated with the right-h
         for (int i = 0; i < params->dim; i++) {
             for (int j = 0; j < params->dim; j++) {
                 for (int a = 0; a < params->num_bodies; a++) {
-                    chi_dot[i][j] += 2 / m[a] * (2 * dot_product(p_dot[a], p[a], params->dim) * kronecker_delta(i, j) - 3 * (p_dot[a][i] * p[a][j] + p[a][i] * p_dot[a][j]));
+                    chi_dot[i][j] += 2.0 / m[a] * (2 * dot_product(p_dot[a], p[a], params->dim) * kronecker_delta(i, j) - 3 * (p_dot[a][i] * p[a][j] + p[a][i] * p_dot[a][j]));
                 }
                 for (int a = 0; a < params->num_bodies; a++) {
                     for (int b = 0; b < params->num_bodies; b++) {
@@ -514,7 +514,7 @@ dwdt        pointer to the array of values that will be updated with the right-h
             for (int i = 0; i < params->dim; i++) {
                 for (int j = 0; j < params->dim; j++) {
                     for (int k = 0; k < params->dim; k++) {
-                        dp_chi[c][i][j][k] += 2 / m[c] * (2 * p[c][k] * kronecker_delta(i, j) - 3 * (p[c][j] * kronecker_delta(i, k) + p[c][i] * kronecker_delta(j, k)));
+                        dp_chi[c][i][j][k] += 2.0 / m[c] * (2 * p[c][k] * kronecker_delta(i, j) - 3 * (p[c][j] * kronecker_delta(i, k) + p[c][i] * kronecker_delta(j, k)));
                     }
                 }
             }
@@ -536,29 +536,21 @@ dwdt        pointer to the array of values that will be updated with the right-h
             }
         }
 
-        double norm1 = norm(dwdt, params->dim);
-        double temp;
-
         for (int a = 0; a < params->num_bodies; a++) {
             for (int k = 0; k < params->dim; k++) {
                 for (int i = 0; i < params->dim; i++) {
                     for (int j = 0; j < params->dim; j++) {
-                        temp += -1/45 * chi_dot[i][j] * dx_chi[a][i][j][k];
-                        dwdt[a * params->dim + k] += 1/45 * chi_dot[i][j] * dp_chi[a][i][j][k];
-                        dwdt[array_half + a * params->dim + k] += -1/45 * chi_dot[i][j] * dx_chi[a][i][j][k];
+                        dwdt[a * params->dim + k] += 1/45.0 * chi_dot[i][j] * dp_chi[a][i][j][k];
+                        dwdt[array_half + a * params->dim + k] += -1/45.0 * chi_dot[i][j] * dx_chi[a][i][j][k];
                     }
                 }
             }
         }
-        printf("%lf\n", temp);
-        double norm2 = norm(dwdt, params->dim);
-        //printf("diff = %lf\n", norm2-norm1);
 
         free_array(chi_dot, params->dim);
         free_3d_array(x_rel_dot, params->num_bodies, params->num_bodies);
         free_4d_array(dp_chi, params->num_bodies, params->dim, params->dim);
         free_4d_array(dx_chi, params->num_bodies, params->dim, params->dim);
-
     }
 
     free_vector(m);

@@ -9,7 +9,6 @@
 
 int main(){
     double* w0;
-    size_t w_size;
     double t_end, dt0, dt_save, rel_error;
     struct ode_params params;
     params.pn_terms = calloc(6, sizeof(int));
@@ -27,14 +26,14 @@ int main(){
     dt_save = 100;
     rel_error = 1e-10;
     params.pn_terms[0] = 1;
-    params.pn_terms[1] = 0;
-    params.pn_terms[2] = 0;
+    params.pn_terms[1] = 1;
+    params.pn_terms[2] = 1;
     params.pn_terms[3] = 0;
 
     // Body masses and initial positions/velocities
     params.masses[0] = 1.0;
     params.masses[1] = 1.0;
-    params.masses[2] = 0.001;
+    params.masses[2] = 1.0;
     
     double a1 = 100.0;
     double e1 = 0.85;
@@ -45,10 +44,10 @@ int main(){
     double orientation[3] = {0, 0, 1};
 
     // Compute initial positions and velocities
-    binary_single_scattering_symmetric(&params, w0, a1, e1, phi01, d0, v_rel, b, orientation);
+    //binary_single_scattering_symmetric(&params, w0, a1, e1, phi01, d0, v_rel, b, orientation);
     //newtonian_binary(params.masses[0], params.masses[1], a1, e1, phi01, params.dim, w0);
 
-    //figure_eight_orbit(108.1, &params, w0);
+    figure_eight_orbit(&params, w0, 108.3);
 
     printf("Starting simulation...\n"); 
 
