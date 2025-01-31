@@ -94,6 +94,7 @@ y           pointer to the value or array of values y that is going to be update
 y_size      number of values in the array y
 x           value of the independent variable of the function y(x)
 dx          stepsize (might be modified and updated by the adaptive stepsize procedure to ensure specified accuracy)
+dx_max      maximum step size
 rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes x, y and outputs y'(x) (in the last argument) 
 params      additional parameters for ode_rhs that modify the dynamics of the system (can be set to NULL) */
@@ -155,7 +156,7 @@ an adaptive stepsize control ensuring a specified maximum error per step. The re
 w           pointer to the value or array of values w that is going to be updated (updated values overwrite old ones)
 t_end       time at which the integration process terminates and the simulation stops
 dt0         initial time step (might be modified and updated by the adaptive stepsize procedure)
-dt_save     time intervals that are saved to a file
+dt_save     time intervals that are saved to a file, acts as maximum step size
 rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes t, w and outputs w'(x) (in the last argument)
 ode_params  additional parameters for ode_rhs that modify the dynamics of the system */
