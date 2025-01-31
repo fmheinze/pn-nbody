@@ -195,7 +195,6 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
 
     // Carry out integration steps until x_end is reached and write values into new line
     while (t_current < t_end){
-        printf("%lf\n", dt_current);
         ode_step(w, w_size, &t_current, &dt_current, dt_save, rel_error, ode_rhs, params);
         if(t_current >= t_save + dt_save){
             fprintf(file, "\n%.20e\t", t_current);
