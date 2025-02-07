@@ -149,7 +149,7 @@ def plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_
     ax.set_xlim([-lim, lim])
     ax.set_ylim([-lim, lim])
     if dim == 3:
-        ax.set_zlim([-0.4, 0.4])
+        ax.set_zlim([-1.0, 0.5])
     
     ax.set_xlabel('x')
     ax.set_ylabel('y')
@@ -180,14 +180,16 @@ def plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_
             else:
                 if dim == 2:
                     ax.plot(coms[:, i, 0], coms[:, i, 1], lw=2)
+                    pass
                 else:
                     ax.plot(coms[:, i, 0], coms[:, i, 1], coms[:, i, 2], lw=2)
+                    pass
     plt.show()
 
 
 times, masses, pos, vel = read_data("output.dat")
 
-animate_trajectories(times, masses, pos, vel, com_frame=False, com_frame_bodies=[0, 1], skip_factor=1, lim=150)
+animate_trajectories(times, masses, pos, vel, com_frame=True, com_frame_bodies=[0, 1], skip_factor=5, lim=200)
 
-plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_trajectories=np.array([[0, 1]]), 
-                  plot_only_coms=True, lim=1500)
+plot_trajectories(masses, pos, com_frame=True, com_frame_bodies=[0, 1], com_trajectories=np.array([[0, 1]]),
+                  plot_only_coms=True, lim=200)
