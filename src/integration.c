@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "integration.h"
 #include "pn_eom.h"
+#include "output.h"
 
 
 void cash_karp_update(double* y, double* y_new, double* y_err, int y_size, double x, double dx, 
@@ -161,48 +162,30 @@ rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes t, w and outputs w'(x) (in the last argument)
 ode_params  additional parameters for ode_rhs that modify the dynamics of the system */
 {
-    FILE *file;
+    FILE *file_general, *file_ecc, *file_a;
     double w_size = 2 * params->dim * params->num_bodies;
     double t_current = 0.0;
     double t_save = 0.0;
     double dt_current = dt0;
 
-    file = fopen("output.dat", "w");
-    if (file == NULL) {
-        perror("Failed to open file");
-        exit(EXIT_FAILURE);
-    }
-    // Write masses into the first line of the file
-    fprintf(file, "Masses:\t"); 
-    for (int i = 0; i < params->num_bodies; i++)
-        fprintf(file, "m%d = %lf\t", i, params->masses[i]);
-
-    // Write column names into the second line
-    fprintf(file, "\nt\t");
-    for (int i = 0; i < params->num_bodies; i++){
-        fprintf(file, "x%d\ty%d\t", i, i);
-        if (params->dim == 3) fprintf(file, "z%d\t", i);
-    }
-    for (int i = 0; i < params->num_bodies; i++){
-        fprintf(file, "px%d\tpy%d\t", i, i);
-        if (params->dim == 3) fprintf(file, "pz%d\t", i);
-    }
-    
-    // Write initial values into the third line
-    fprintf(file, "\n%.20e\t", 0.0);
-    for (int i = 0; i < w_size; i++)
-        fprintf(file, "%.20e\t", w[i]);
+    general_output_init(&file_general, params);
+    general_output_write(file_general, params, w, t_current);
+    eccentricity_output_init(&file_ecc, params);
+    eccentricity_output_write(file_ecc, params, w, t_current);
+    semi_major_axes_output_init(&file_a, params);
+    semi_major_axes_output_write(file_a, params, w, t_current);
 
     // Carry out integration steps until x_end is reached and write values into new line
     while (t_current < t_end){
         ode_step(w, w_size, &t_current, &dt_current, dt_save, rel_error, ode_rhs, params);
         if(t_current >= t_save + dt_save){
-            fprintf(file, "\n%.20e\t", t_current);
-            for(int i = 0; i < w_size; i++)
-                fprintf(file, "%.20e\t", w[i]);
+            general_output_write(file_general, params, w, t_current);
+            eccentricity_output_write(file_ecc, params, w, t_current);
+            semi_major_axes_output_write(file_a, params, w, t_current);
             t_save += dt_save;
         }
     }
-    fclose(file);
+    fclose(file_general);
+    fclose(file_ecc);
     return;
 }
