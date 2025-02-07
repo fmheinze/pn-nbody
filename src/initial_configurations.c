@@ -14,9 +14,10 @@ in the center of mass system and in the xy-plane. dim sets the number of dimensi
     // Basic binary parameters
     double m1 = params->masses[0];
     double m2 = params->masses[1];
-    double M = m1 + m2;                                             // Total mass
-    double L = m1 * m2 * sqrt(2 * a / M * (1 - e * e));             // Angular momentum
-    double p = L * L / ((m1 * m2) * (m1 * m2) / M);                 // Semi-latus rectum
+    double M = m1 + m2; 
+    double mu = m1 * m2 / M;                                    // Reduced mass
+    double L = mu * sqrt(a * M * (1 - e * e));                  // Angular momentum
+    double p = L * L / (mu * mu * M);                           // Semi-latus rectum
 
     // Relative distance and its derivative at phi0
     double cosphi0 = cos(phi0);
