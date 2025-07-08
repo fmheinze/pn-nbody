@@ -1,6 +1,11 @@
 {
     "files.associations": {
         "complex": "c",
-        "cmath": "c"
+        "cmath": "c",
+        "pn_eom_hamiltonians.h": "c",
+        "pn_eom.h": "c",
+        "stdio.h": "c",
+        "transformations.h": "c",
+        "random": "c"
     }
 }
