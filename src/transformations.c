@@ -26,7 +26,7 @@ void transform_to_com(int* bodies, int num_bodies, struct ode_params* params, do
     for (int a = 0; a < num_bodies; a++) {
         for (int i = 0; i < params->dim; i++) {
             R_COM[i] += params->masses[bodies[a]] * w[params->dim * bodies[a] + i];
-            V_COM[i] += params->masses[bodies[a]] * w[array_half + params->dim * bodies[a] + i];
+            V_COM[i] += w[array_half + params->dim * bodies[a] + i];
         }
     }
 

@@ -84,11 +84,18 @@ void position_binary(double com_pos[3], double orientation[3], double w0[12])
     double angle;
     double rotation_matrix[3][3];
 
-    normalize(orientation);
+    normalize(orientation, orientation);
 
-    // Compute axis of rotation (cross product of initial and target orientation)
-    cross_product(initial_orientation, orientation, axis);
-
+    if(orientation[0] == 0 && orientation[1] == 0 && orientation[2] == 1) {
+        axis[0] = 0;
+        axis[1] = 0;
+        axis[2] = 1;
+    }
+    else {
+        // Compute axis of rotation (cross product of initial and target orientation)
+        cross_product(initial_orientation, orientation, axis);
+    }
+    
     // Compute angle of rotation (dot product) and create the rotation matrix
     angle = acos(dot_product(initial_orientation, orientation, 3));
     create_rotation_matrix(axis, angle, rotation_matrix);
@@ -180,6 +187,209 @@ w0              pointer to the array in which the initial positions and velociti
 }
 
 
+void binary_single_scattering(struct ode_params* params, double* w0, double d0, double scatter_p0, double b, double phi0, 
+                              double binary_r0, double binary_pt0, double binary_pr0, double* orientation, int invert_rotation)
+{
+    double scatter_px0, scatter_py0;
+    double binary_orientation[3];
+
+    // Compute the x- and y- components of the momentum vector of the two systems
+    scatter_px0 = scatter_p0 * sqrt(1 - pow(b/d0, 2));
+    scatter_py0 = -scatter_p0 * b/d0;
+
+    if(orientation == NULL){
+        binary_orientation[0] = scatter_px0;
+        binary_orientation[1] = scatter_py0;
+        binary_orientation[2] = 0.0;
+    }
+    else{
+        binary_orientation[0] = orientation[0];
+        binary_orientation[1] = orientation[1];
+        binary_orientation[2] = orientation[2];
+    }
+
+    // As a starting point set up the binary in the xy-plane at the origin
+    double p1[3] = {binary_r0, 0.0, 0.0};
+    double p2[3] = {-binary_r0, 0.0, 0.0};
+    double m1[3] = {binary_pr0, -binary_pt0, 0.0};
+    double m2[3] = {-binary_pr0, binary_pt0, 0.0};
+    if (invert_rotation) {
+        m1[0] *= -1;
+        m1[1] *= -1;
+        m2[0] *= -1;
+        m2[1] *= -1;
+    }
+    
+    // Perform a rotation to account for the specified phase shift
+    double R[3][3];
+    double axis[3] = {0.0, 0.0, 1.0};
+    create_rotation_matrix(axis, phi0, R);
+    rotate_vector(p1, R, p1);
+    rotate_vector(p2, R, p2);
+    rotate_vector(m1, R, m1);
+    rotate_vector(m2, R, m2);
+
+    // Perform a rotation to align the normal vector of the orbital plane with the orientation vector
+    align_vectors_rotation_matrix(axis, binary_orientation, R);
+    rotate_vector(p1, R, p1);
+    rotate_vector(p2, R, p2);
+    rotate_vector(m1, R, m1);
+    rotate_vector(m2, R, m2);
+
+    // Put the binary at the specified position and add the momentum vector for the scattering
+    p1[0] -= d0/2;
+    p2[0] -= d0/2;
+    m1[0] += scatter_px0;
+    m1[1] += scatter_py0;
+    m2[0] += scatter_px0;
+    m2[1] += scatter_py0;
+
+    // Fill the state vector
+    w0[0] = p1[0];
+    w0[1] = p1[1];
+    w0[2] = p1[2];
+    w0[3] = p2[0];
+    w0[4] = p2[1];
+    w0[5] = p2[2];
+    w0[6] = d0/2;
+    w0[7] = 0.0;
+    w0[8] = 0.0;
+    w0[9] = m1[0];
+    w0[10] = m1[1];
+    w0[11] = m1[2];
+    w0[12] = m2[0];
+    w0[13] = m2[1];
+    w0[14] = m2[2];
+    w0[15] = -scatter_px0;
+    w0[16] = -scatter_py0;
+    w0[17] = 0.0;
+}
+
+
+void binary_binary_scattering(struct ode_params* params, double* w0, double d0, double scatter_p0, double b, 
+                              double phi0_1, double phi0_2, double binary_r0_1, double binary_pt0_1, double binary_pr0_1,
+                              double binary_r0_2, double binary_pt0_2, double binary_pr0_2, 
+                              double* orientation_1, double* orientation_2, int invert_rotation_1, int invert_rotation_2)
+{
+    double scatter_px0, scatter_py0;
+    double binary_orientation_1[3];
+    double binary_orientation_2[3];
+
+    // Compute the x- and y- components of the momentum vector of the two systems
+    scatter_px0 = scatter_p0 * sqrt(1 - pow(b/d0, 2));
+    scatter_py0 = -scatter_p0 * b/d0;
+
+    if(orientation_1 == NULL){
+        binary_orientation_1[0] = scatter_px0;
+        binary_orientation_1[1] = scatter_py0;
+        binary_orientation_1[2] = 0.0;
+    }
+    else{
+        binary_orientation_1[0] = orientation_1[0];
+        binary_orientation_1[1] = orientation_1[1];
+        binary_orientation_1[2] = orientation_1[2];
+    }
+    if(orientation_2 == NULL){
+        binary_orientation_2[0] = -scatter_px0;
+        binary_orientation_2[1] = -scatter_py0;
+        binary_orientation_2[2] = 0.0;
+    }
+    else{
+        binary_orientation_2[0] = orientation_1[0];
+        binary_orientation_2[1] = orientation_1[1];
+        binary_orientation_2[2] = orientation_1[2];
+    }
+
+    // As a starting point set up the binaries in the xy-plane at the origin
+    double p1_1[3] = {binary_r0_1, 0.0, 0.0};
+    double p2_1[3] = {-binary_r0_1, 0.0, 0.0};
+    double m1_1[3] = {binary_pr0_1, -binary_pt0_1, 0.0};
+    double m2_1[3] = {-binary_pr0_1, binary_pt0_1, 0.0};
+    if (invert_rotation_1) {
+        m1_1[0] *= -1;
+        m1_1[1] *= -1;
+        m2_1[0] *= -1;
+        m2_1[1] *= -1;
+    }
+    double p1_2[3] = {binary_r0_2, 0.0, 0.0};
+    double p2_2[3] = {-binary_r0_2, 0.0, 0.0};
+    double m1_2[3] = {binary_pr0_2, -binary_pt0_2, 0.0};
+    double m2_2[3] = {-binary_pr0_2, binary_pt0_2, 0.0};
+    if (invert_rotation_1) {
+        m1_2[0] *= -1;
+        m1_2[1] *= -1;
+        m2_2[0] *= -1;
+        m2_2[1] *= -1;
+    }
+    
+    // Perform a rotation to account for the specified phase shift
+    double R[3][3];
+    double axis[3] = {0.0, 0.0, 1.0};
+    create_rotation_matrix(axis, phi0_1, R);
+    rotate_vector(p1_1, R, p1_1);
+    rotate_vector(p2_1, R, p2_1);
+    rotate_vector(m1_1, R, m1_1);
+    rotate_vector(m2_1, R, m2_1);
+    create_rotation_matrix(axis, phi0_2, R);
+    rotate_vector(p1_2, R, p1_2);
+    rotate_vector(p2_2, R, p2_2);
+    rotate_vector(m1_2, R, m1_2);
+    rotate_vector(m2_2, R, m2_2);
+
+    // Perform a rotation to align the normal vector of the orbital plane with the orientation vector
+    align_vectors_rotation_matrix(axis, binary_orientation_1, R);
+    rotate_vector(p1_1, R, p1_1);
+    rotate_vector(p2_1, R, p2_1);
+    rotate_vector(m1_1, R, m1_1);
+    rotate_vector(m2_1, R, m2_1);
+    align_vectors_rotation_matrix(axis, binary_orientation_2, R);
+    rotate_vector(p1_2, R, p1_2);
+    rotate_vector(p2_2, R, p2_2);
+    rotate_vector(m1_2, R, m1_2);
+    rotate_vector(m2_2, R, m2_2);
+
+    // Put the binaries at the specified position and add the momentum vector for the scattering
+    p1_1[0] -= d0/2;
+    p2_1[0] -= d0/2;
+    m1_1[0] += scatter_px0;
+    m1_1[1] += scatter_py0;
+    m2_1[0] += scatter_px0;
+    m2_1[1] += scatter_py0;
+    p1_2[0] += d0/2;
+    p2_2[0] += d0/2;
+    m1_2[0] -= scatter_px0;
+    m1_2[1] -= scatter_py0;
+    m2_2[0] -= scatter_px0;
+    m2_2[1] -= scatter_py0;
+
+    // Fill the state vector
+    w0[0] = p1_1[0];
+    w0[1] = p1_1[1];
+    w0[2] = p1_1[2];
+    w0[3] = p2_1[0];
+    w0[4] = p2_1[1];
+    w0[5] = p2_1[2];
+    w0[6] = p1_2[0];
+    w0[7] = p1_2[1];
+    w0[8] = p1_2[2];
+    w0[9] = p2_2[0];
+    w0[10] = p2_2[1];
+    w0[11] = p2_2[2];
+    w0[12] = m1_1[0];
+    w0[13] = m1_1[1];
+    w0[14] = m1_1[2];
+    w0[15] = m2_1[0];
+    w0[16] = m2_1[1];
+    w0[17] = m2_1[2];
+    w0[18] = m1_2[0];
+    w0[19] = m1_2[1];
+    w0[20] = m1_2[2];
+    w0[21] = m2_2[0];
+    w0[22] = m2_2[1];
+    w0[23] = m2_2[2];
+}
+
+
 void binary_binary_scattering_symmetric(struct ode_params* params, double* w0,
                                         double a1, double a2, double e1, double e2, double phi01, double phi02,
                                         double d0, double v_rel, double b, double* orientation1, double* orientation2)
@@ -267,7 +477,7 @@ void figure_eight_orbit(struct ode_params* params, double* w0, double width){
 
     lambda = width/108.1;
     if (width > 10000 || width < 100)
-        printf("Warning: width = %lf, figure eight orbit only accurate for 100 < width < 100000!\n", width);
+        printf("Warning: width = %lf, figure-eight orbit only accurate for 100 < width < 100000!\n", width);
     
     pos_x = 97.0 * lambda;
     pos_y = -24.31 * lambda;
@@ -281,6 +491,10 @@ void figure_eight_orbit(struct ode_params* params, double* w0, double width){
         py = -sqrt(0.007480061222224325/lambda + 0.001241927410006741/pow(lambda, 2) + 0.00028564641727617235/pow(lambda, 3));
     }
     else if(params->pn_terms[0] == 1 & params->pn_terms[1] == 1 & params->pn_terms[2] == 1 & params->pn_terms[3] == 0){
+        px = -sqrt(0.008692910686038705/lambda + 0.0007977722653187864/pow(lambda, 2) + 6.351332174711012e-05/pow(lambda, 3) - 3.0103527312470005e-05/pow(lambda, 4));
+        py = -sqrt(0.007477759360235814/lambda + 0.0012723359375445093/pow(lambda, 2) + 6.583447113705563e-05/pow(lambda, 3) - 5.3457362474338285e-06/pow(lambda, 4));
+    }
+    else if(params->pn_terms[0] == 1 & params->pn_terms[1] == 1 & params->pn_terms[2] == 1 & params->pn_terms[3] == 1){
         px = -sqrt(0.008692910686038705/lambda + 0.0007977722653187864/pow(lambda, 2) + 6.351332174711012e-05/pow(lambda, 3) - 3.0103527312470005e-05/pow(lambda, 4));
         py = -sqrt(0.007477759360235814/lambda + 0.0012723359375445093/pow(lambda, 2) + 6.583447113705563e-05/pow(lambda, 3) - 5.3457362474338285e-06/pow(lambda, 4));
     }

@@ -229,8 +229,8 @@ double H2PN(double* w, struct ode_params* params) {
 
 void update_eom_hamiltonian(double *w, double *dwdt, double (*hamiltonian)(double*, struct ode_params*), double h, struct ode_params* params) {
      int array_half = params->dim * params->num_bodies;
-     double w_copy[18];
-     double dHdw[18];
+     double w_copy[2*array_half];
+     double dHdw[2*array_half];
      double forward_value, backward_value;
 
      // Copy original array to w_copy

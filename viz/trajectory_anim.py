@@ -73,7 +73,7 @@ def animate_trajectories(times, masses, pos, vel, com_frame=False, com_frame_bod
         ax.set_zlabel('z')
 
     # Initializing the animated objects
-    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple', 
+    colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple',
               'tab:brown', 'tab:pink', 'tab:olive', 'tab:cyan']
     markersizes = [(2 * np.log(0.001 * (masses[i] + 0.5)) + 20) for i in range(num_bodies)]
     points = [plt.plot([], [], color=colors[i % len(colors)], ls='', marker='o', markersize=markersizes[i])[0] for i in range(num_bodies)]
@@ -149,7 +149,7 @@ def plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_
     ax.set_xlim([-lim, lim])
     ax.set_ylim([-lim, lim])
     if dim == 3:
-        ax.set_zlim([-1.0, 0.5])
+        ax.set_zlim([-1.0, 0.4])
     
     ax.set_xlabel('x')
     ax.set_ylabel('y')
@@ -167,7 +167,7 @@ def plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_
             if dim == 2:
                 ax.plot(pos[:, i, 0], pos[:, i, 1], lw=2)
             else:
-                ax.plot(pos[:, i, 0], pos[:, i, 1], pos[:, i, 2], lw=2, visible=(not(i in com_trajectories and plot_only_coms)))
+                ax.plot(pos[:, i, 0], pos[:, i, 1], pos[:, i, 2], lw=2, color='tab:orange', visible=(not(i in com_trajectories and plot_only_coms)))
 
     # Plotting the center of mass trajectories
     if com_trajectories is not None:
@@ -182,14 +182,14 @@ def plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_
                     ax.plot(coms[:, i, 0], coms[:, i, 1], lw=2)
                     pass
                 else:
-                    ax.plot(coms[:, i, 0], coms[:, i, 1], coms[:, i, 2], lw=2)
+                    ax.plot(coms[:, i, 0], coms[:, i, 1], coms[:, i, 2], lw=2, color='tab:purple')
                     pass
     plt.show()
 
 
-times, masses, pos, vel = read_data("output.dat")
+times, masses, pos, vel = read_data("/Users/fheinze/Desktop/pn-nbody/output.dat")
 
-animate_trajectories(times, masses, pos, vel, com_frame=True, com_frame_bodies=[0, 1], skip_factor=5, lim=200)
+animate_trajectories(times, masses, pos, vel, com_frame=False, com_frame_bodies=[0, 1], skip_factor=5, lim=100)
 
-plot_trajectories(masses, pos, com_frame=True, com_frame_bodies=[0, 1], com_trajectories=np.array([[0, 1]]),
-                  plot_only_coms=True, lim=200)
+plot_trajectories(masses, pos, com_frame=False, com_frame_bodies=[0, 1], com_trajectories=np.array([[0, 1]]),
+                  plot_only_coms=True, lim=60)

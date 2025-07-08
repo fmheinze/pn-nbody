@@ -170,18 +170,19 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
 
     general_output_init(&file_general, params);
     general_output_write(file_general, params, w, t_current);
-    eccentricity_output_init(&file_ecc, params);
-    eccentricity_output_write(file_ecc, params, w, t_current);
-    semi_major_axes_output_init(&file_a, params);
-    semi_major_axes_output_write(file_a, params, w, t_current);
+    //eccentricity_output_init(&file_ecc, params);
+    //eccentricity_output_write(file_ecc, params, w, t_current);
+    //semi_major_axes_output_init(&file_a, params);
+    //semi_major_axes_output_write(file_a, params, w, t_current);
 
     // Carry out integration steps until x_end is reached and write values into new line
     while (t_current < t_end){
         ode_step(w, w_size, &t_current, &dt_current, dt_save, rel_error, ode_rhs, params);
         if(t_current >= t_save + dt_save){
             general_output_write(file_general, params, w, t_current);
-            eccentricity_output_write(file_ecc, params, w, t_current);
-            semi_major_axes_output_write(file_a, params, w, t_current);
+            //eccentricity_output_write(file_ecc, params, w, t_current);
+            //semi_major_axes_output_write(file_a, params, w, t_current);
+            printf("%lf\n", t_current);
             t_save += dt_save;
         }
     }
