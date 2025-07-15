@@ -23,23 +23,23 @@ void general_output_init(FILE** file, struct ode_params* params) {
     fprintf(*file, "\nt\t");
     for (int i = 0; i < params->num_bodies; i++) {
         fprintf(*file, "x%d\ty%d\t", i, i);
-        if (params->dim == 3) fprintf(*file, "z%d\t", i);
+        if (params->num_dim == 3) fprintf(*file, "z%d\t", i);
     }
     for (int i = 0; i < params->num_bodies; i++) {
         fprintf(*file, "px%d\tpy%d\t", i, i);
-        if (params->dim == 3) fprintf(*file, "pz%d\t", i);
+        if (params->num_dim == 3) fprintf(*file, "pz%d\t", i);
     }
 }
 
 
 void general_output_write(FILE* file, struct ode_params* params, double* w, double t) {
     fprintf(file, "\n%.20e\t", t);
-    for(int i = 0; i < 2 * params->dim * params->num_bodies; i++)
+    for(int i = 0; i < 2 * params->num_dim * params->num_bodies; i++)
         fprintf(file, "%.20e\t", w[i]);
 }
 
 
-void eccentricity_output_init(FILE** file, struct ode_params* params) {
+void eccentricity_output_init(FILE** file) {
     *file = fopen("eccentricity.dat", "w");
     if (*file == NULL) {
         perror("Failed to open file");
@@ -57,7 +57,7 @@ void eccentricity_output_write(FILE* file, struct ode_params* params, double* w,
 }
 
 
-void semi_major_axes_output_init(FILE** file, struct ode_params* params) {
+void semi_major_axes_output_init(FILE** file) {
     *file = fopen("semi_major_axes.dat", "w");
     if (*file == NULL) {
         perror("Failed to open file");

@@ -40,9 +40,11 @@ def animate_trajectories(times, masses, pos, vel, com_frame=False, com_frame_bod
 
     # Compute center of mass
     if com_frame:
-        com = 0
+        total_mass = np.sum(masses[com_frame_bodies])
+        com = np.zeros_like(pos[:, 0, :])
         for i in com_frame_bodies:
-            com += masses[i] * pos[:, i, :] / np.sum(masses[com_frame_bodies])
+            com += masses[i] * pos[:, i, :]
+        com /= total_mass
 
     # Setting up the plot window
     fig = plt.figure(figsize=(6, 6), constrained_layout=True)
@@ -155,6 +157,8 @@ def plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_
     ax.set_ylabel('y')
     if dim == 3:
         ax.set_zlabel('z')
+
+    print(pos[:, 0, 0])
     
     # Plotting the trajectories
     for i in range(num_bodies):

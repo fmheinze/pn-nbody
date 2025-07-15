@@ -6,6 +6,20 @@
         "pn_eom.h": "c",
         "stdio.h": "c",
         "transformations.h": "c",
-        "random": "c"
+        "random": "c",
+        "parameters.h": "c",
+        "array": "c",
+        "memory": "c",
+        "istream": "c",
+        "locale": "c",
+        "variant": "c",
+        "tuple": "c",
+        "format": "c",
+        "functional": "c",
+        "utility": "c",
+        "init.h": "c",
+        "string.h": "c",
+        "utils.h": "c",
+        "initial_configurations.h": "c"
     }
 }

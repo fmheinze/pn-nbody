@@ -5,6 +5,7 @@
 #include "integration.h"
 #include "pn_eom.h"
 #include "output.h"
+#include "parameters.h"
 
 
 void cash_karp_update(double* y, double* y_new, double* y_err, int y_size, double x, double dx, 
@@ -100,9 +101,7 @@ rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes x, y and outputs y'(x) (in the last argument) 
 params      additional parameters for ode_rhs that modify the dynamics of the system (can be set to NULL) */
 {
-    double max_rel_error, dx_new;
     double *k1, *y_err, *y_new;
-
     allocate_vector(&k1, y_size);
     allocate_vector(&y_err, y_size);
     allocate_vector(&y_new, y_size);
@@ -148,22 +147,37 @@ params      additional parameters for ode_rhs that modify the dynamics of the sy
     return;
 }
 
+void print_progress_bar(int percent) {
+    const int bar_width = 50;
+    int filled = (percent * bar_width) / 100;
 
-void ode_integrator(double* w, double t_end, double dt0, double dt_save, double rel_error,
-                    void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params)
+    printf("\r[");
+    for (int i = 0; i < bar_width; i++) {
+        if (i < filled)
+            printf("=");
+        else
+            printf(" ");
+    }
+    printf("] %d%%", percent);
+    fflush(stdout);
+}
+
+
+void ode_integrator(double* w, void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params)
 /* Integrates the ODE system w'(t) = ode_rhs(t, w) from t_start to t_end, using the ode_step function which employs
 an adaptive stepsize control ensuring a specified maximum error per step. The result of each step is written to a file.
 
 w           pointer to the value or array of values w that is going to be updated (updated values overwrite old ones)
-t_end       time at which the integration process terminates and the simulation stops
-dt0         initial time step (might be modified and updated by the adaptive stepsize procedure)
-dt_save     time intervals that are saved to a file, acts as maximum step size
-rel_error   relative error threshold per step size
 ode_rhs     pointer to the function which takes t, w and outputs w'(x) (in the last argument)
 ode_params  additional parameters for ode_rhs that modify the dynamics of the system */
 {
-    FILE *file_general, *file_ecc, *file_a;
-    double w_size = 2 * params->dim * params->num_bodies;
+    double t_end = get_parameter_int("t_end");
+    double dt0 = get_parameter_int("dt");
+    double dt_save = get_parameter_int("dt_save");
+    double rel_error = get_parameter_int("rel_error");
+
+    FILE *file_general;
+    double w_size = 2 * params->num_dim * params->num_bodies;
     double t_current = 0.0;
     double t_save = 0.0;
     double dt_current = dt0;
@@ -182,11 +196,10 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
             general_output_write(file_general, params, w, t_current);
             //eccentricity_output_write(file_ecc, params, w, t_current);
             //semi_major_axes_output_write(file_a, params, w, t_current);
-            printf("%lf\n", t_current);
+            print_progress_bar(t_current/t_end*100);
             t_save += dt_save;
         }
     }
     fclose(file_general);
-    fclose(file_ecc);
     return;
 }
