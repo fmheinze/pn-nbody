@@ -1,22 +1,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "utils.h"
+#include "pn_eom.h"
 #include "math.h"
 
 
 // ------------------- Allocation/Free ------------------- //
 
-// Allocates memory for a single vector
 void allocate_vector(double** ptr, int num_elements) {
-    *ptr = malloc(num_elements * sizeof(double));
+    *ptr = (double *)malloc(num_elements * sizeof(double));
     if (*ptr == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
     }
 }
 
-// Allocates memory for an array of vectors (a 2D array)
-void allocate_array(double*** ptr, int num_vectors, int num_elements) {
+void allocate_2d_array(double*** ptr, int num_vectors, int num_elements) {
     *ptr = (double **)malloc(num_vectors * sizeof(double *));
     if (*ptr == NULL) {
         fprintf(stderr, "Memory allocation failed for 2D array\n");
@@ -27,7 +26,6 @@ void allocate_array(double*** ptr, int num_vectors, int num_elements) {
     }
 }
 
-// Allocates memory for a 3D array
 void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_elements) {
     // Allocate memory for the array of 2D arrays
     *ptr = (double ***)malloc(num_arrays * sizeof(double **));
@@ -38,11 +36,10 @@ void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_
 
     // Allocate memory for each 2D array
     for (int i = 0; i < num_arrays; i++) {
-        allocate_array(&((*ptr)[i]), num_vectors, num_elements);
+        allocate_2d_array(&((*ptr)[i]), num_vectors, num_elements);
     }
 }
 
-// Allocates memory for a 4D array
 void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors, int num_elements) {
     // Allocate memory for the array of 2D arrays
     *ptr = (double ****)malloc(num_3d_arrays * sizeof(double ***));
@@ -57,39 +54,43 @@ void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int n
     }
 }
 
-// Frees memory for a single vector
 void free_vector(double* ptr) {
-    if (ptr != NULL) {
+    if (ptr != NULL)
         free(ptr);
-    }
 }
 
-// Frees memory for an array of vectors (a 2D array)
-void free_array(double** ptr, int num_vectors) {
+
+void free_2d_array(double** ptr, int num_vectors) {
     if (ptr != NULL) {
-        for (int i = 0; i < num_vectors; i++) {
+        for (int i = 0; i < num_vectors; i++)
             free_vector(ptr[i]);
-        }
         free(ptr);
     }
 }
 
-// Frees memory for a 3D array
 void free_3d_array(double*** ptr, int num_arrays, int num_vectors) {
     if (ptr != NULL) {
-        for (int i = 0; i < num_arrays; i++) {
-            free_array(ptr[i], num_vectors);
-        }
+        for (int i = 0; i < num_arrays; i++)
+            free_2d_array(ptr[i], num_vectors);
         free(ptr);
     }
 }
 
-// Frees memory for a 4D array
 void free_4d_array(double**** ptr, int num_3d_arrays, int num_arrays, int num_vectors) {
-    for (int i = 0; i < num_3d_arrays; i++) {
+    for (int i = 0; i < num_3d_arrays; i++)
         free_3d_array(ptr[i], num_arrays, num_vectors);
-    }
     free(ptr);
+}
+
+void free_ode_params(struct ode_params* params) {
+    if (params->masses) {
+        free_vector(params->masses);
+        params->masses = NULL;
+    }
+    if (params->pn_terms) {
+        free(params->pn_terms);
+        params->pn_terms = NULL;
+    }
 }
 
 
@@ -200,3 +201,33 @@ void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3]) 
 int kronecker_delta(int i, int j) {
     return (i == j) ? 1 : 0;
 }
+
+
+// --------------------- Miscellaneous --------------------- //
+
+void print_divider() {
+    printf("----------------------------------------------------------------------\n");
+}
+
+
+/* Errorexit fuction*/
+/* Note that utils.h defines a macro so that the user does not have
+   to specify __FILE__ and __LINE__ for the location where the error occured */
+#undef errorexit
+
+// Switch between exit(1) (normal termination) and abort() (crash with core dump)
+#define ABORT 0
+#define EXIT 1
+#define THE_END if(EXIT) exit(1);  else abort();
+
+void errorexit(const char *file, const int line, const char *s)
+{
+    fprintf(stderr, "Error: %s  ", s);
+    fprintf(stderr, "(%s, line %d)\n", file, line);
+    fflush(stdout);
+    fflush(stderr);
+    THE_END
+}
+
+/* Do not write functions beyond this line because the undef/define 
+   method for the errorexit function means that it should go last! */

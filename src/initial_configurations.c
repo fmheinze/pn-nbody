@@ -34,7 +34,7 @@ in the center of mass system and in the xy-plane. dim sets the number of dimensi
     double p1_factor = L / (r0 * r0);
     double p2_factor = -L / (r0 * r0);
 
-    if(params->dim == 2){
+    if(params->num_dim == 2){
         w0[0] = m2 / M * r0cosphi0;
         w0[1] = m2 / M * r0sinphi0;
 
@@ -47,7 +47,7 @@ in the center of mass system and in the xy-plane. dim sets the number of dimensi
         w0[6] = p2_factor * p_factor1;
         w0[7] = p2_factor * p_factor2;
     }
-    else if(params->dim == 3){
+    else if(params->num_dim == 3){
         w0[0] = m2 / M * r0cosphi0;
         w0[1] = m2 / M * r0sinphi0;
         w0[2] = 0.0;
@@ -499,7 +499,7 @@ void figure_eight_orbit(struct ode_params* params, double* w0, double width){
         py = -sqrt(0.007477759360235814/lambda + 0.0012723359375445093/pow(lambda, 2) + 6.583447113705563e-05/pow(lambda, 3) - 5.3457362474338285e-06/pow(lambda, 4));
     }
 
-    if (params->dim == 2){
+    if (params->num_dim == 2){
         w0[0] = pos_x;
         w0[1] = pos_y;
         w0[2] = -pos_x;
@@ -513,7 +513,7 @@ void figure_eight_orbit(struct ode_params* params, double* w0, double width){
         w0[10] = px;
         w0[11] = py;
     }
-    else if (params->dim == 3){
+    else if (params->num_dim == 3){
         w0[0] = pos_x;
         w0[1] = pos_y;
         w0[2] = 0.0;
