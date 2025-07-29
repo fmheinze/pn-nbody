@@ -4,6 +4,7 @@
 #include "initial_configurations.h"
 #include "utils.h"
 #include "pn_eom.h"
+#include "parameters.h"
 
 
 void newtonian_binary(struct ode_params* params, double* w0, double a, double e, double phi0)
@@ -37,32 +38,40 @@ in the center of mass system and in the xy-plane. dim sets the number of dimensi
     if(params->num_dim == 2){
         w0[0] = m2 / M * r0cosphi0;
         w0[1] = m2 / M * r0sinphi0;
+        set_double_array("pos1", 2, w0);
 
         w0[2] = -m1 / M * r0cosphi0;
         w0[3] = -m1 / M * r0sinphi0;
+        set_double_array("pos2", 2, &w0[2]);
 
         w0[4] = p1_factor * p_factor1;
         w0[5] = p1_factor * p_factor2;
+        set_double_array("p1", 2, &w0[4]);
 
         w0[6] = p2_factor * p_factor1;
         w0[7] = p2_factor * p_factor2;
+        set_double_array("p2", 2, &w0[6]);
     }
     else if(params->num_dim == 3){
         w0[0] = m2 / M * r0cosphi0;
         w0[1] = m2 / M * r0sinphi0;
         w0[2] = 0.0;
+        set_double_array("pos1", 3, w0);
 
         w0[3] = -m1 / M * r0cosphi0;
         w0[4] = -m1 / M * r0sinphi0;
         w0[5] = 0.0;
+        set_double_array("pos2", 3, &w0[3]);
 
         w0[6] = p1_factor * p_factor1;
         w0[7] = p1_factor * p_factor2;
         w0[8] = 0.0;
+        set_double_array("p1", 3, &w0[6]);
 
         w0[9] = p2_factor * p_factor1;
         w0[10] = p2_factor * p_factor2;
         w0[11] = 0.0;
+        set_double_array("p2", 3, &w0[9]);
     }
     else{
         fprintf(stderr, "Error: dim must be either 2 or 3!\n");

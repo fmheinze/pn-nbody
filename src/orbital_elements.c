@@ -121,3 +121,16 @@ void semi_major_axes(int* bodies, double* w, struct ode_params* params, double* 
     *a1_com = params->masses[bodies[1]] / M * *a;
     *a2_com = params->masses[bodies[0]] / M * *a;
 }
+
+
+double total_energy_conservative(double* w, struct ode_params* params) {
+    // Compute conservative part of the Hamiltonian
+    double H_c = 0.0;
+    if (params->pn_terms[0] == 1)
+        H_c += H0PN(w, params);
+    if (params->pn_terms[1] == 1)
+        H_c += H1PN(w, params);
+    if (params->pn_terms[2] == 1)
+        H_c += H2PN(w, params);
+    return H_c;
+}

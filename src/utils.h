@@ -23,6 +23,8 @@ void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3]);
 int kronecker_delta(int i, int j);
 
 void print_divider();
+void print_progress_bar(int percent);
+void get_executable_path(char* buffer, size_t size);
 void errorexit(const char *file, const int line, const char *s);
 #define errorexit(s) errorexit(__FILE__, __LINE__, (s))
 

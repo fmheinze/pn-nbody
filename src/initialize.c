@@ -22,15 +22,16 @@ void initialize_parameters() {
     // Numerical parameters
     add_parameter("t_end", "0.0", "total duration of the simulation [>= 0]");
     add_parameter("dt", "0.1", "fixed time step, or initial time step for adaptive ODE integrators [> 0]");
-
-    // Cash-Karp method specific
-    add_parameter("rel_error", "1e-6", "target relative error [> 0]");
+    add_parameter("ode_integrator", "rk4", "which ODE integrator to use [rk4, cash-karp]");
+    if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
+        // Cash-Karp method specific
+        add_parameter("rel_error", "1e-6", "target relative error [> 0]");
+    }
 
     // Initial configuration presets
     add_parameter("ic_preset", "-1", "specify initial condition preset");
-    char *preset = get_parameter_string("ic_preset");
-    // Newtonian binary
-    if(strcmp(preset, "newtonian_binary") == 0) {
+    if(strcmp(get_parameter_string("ic_preset"), "newtonian_binary") == 0) {
+        // Newtonian binary specific
         add_parameter("a", "-1", "semimajor axis [> 0]");
         add_parameter("e", "0.0", "eccentricity [>= 0]");
         add_parameter("phi0", "0.0", "initial phase");
@@ -43,9 +44,6 @@ void initialize_parameters() {
         add_parameter_i("pos", i, "0.0 0.0 0.0", "x, y and z coordinates of the initial position of body i");
         add_parameter_i("p", i, "0.0 0.0 0.0", "x, y and z components of the initial momentum of body i");
     }
-
-    // Output parameters
-    add_parameter("dt_save", "0.1", "time after which outputs are saved [>= dt]");
 }
 
 

@@ -191,9 +191,9 @@ def plot_trajectories(masses, pos, com_frame=False, com_frame_bodies='all', com_
     plt.show()
 
 
-times, masses, pos, vel = read_data("/Users/fheinze/Desktop/pn-nbody/output.dat")
+times, masses, pos, vel = read_data("/Users/fheinze/Desktop/pn-nbody/output2.dat")
 
-animate_trajectories(times, masses, pos, vel, com_frame=False, com_frame_bodies=[0, 1], skip_factor=5, lim=100)
+animate_trajectories(times, masses, pos, vel, com_frame=False, com_frame_bodies=[0, 1], skip_factor=5, lim=20)
 
 plot_trajectories(masses, pos, com_frame=False, com_frame_bodies=[0, 1], com_trajectories=np.array([[0, 1]]),
-                  plot_only_coms=True, lim=60)
+                  plot_only_coms=True, lim=20)

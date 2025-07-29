@@ -4,11 +4,8 @@
 #ifndef OUTPUT_H
 #define OUTPUT_H
 
-void general_output_init(FILE** file, struct ode_params* params);
-void general_output_write(FILE* file, struct ode_params* params, double* w, double t);
-void eccentricity_output_init(FILE** file);
-void eccentricity_output_write(FILE* file, struct ode_params* params, double* w, double t);
-void semi_major_axes_output_init(FILE** file);
-void semi_major_axes_output_write(FILE* file, struct ode_params* params, double* w, double t);
+char* make_filepath(const char* outdir, const char* filename);
+void output_init(FILE** file_masses, FILE** file_pos, FILE** file_mom, FILE** file_energy, struct ode_params* params);
+void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_energy, struct ode_params* params, double* w, double t);
 
 #endif

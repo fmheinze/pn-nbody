@@ -1,6 +1,12 @@
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <libgen.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
+#include <limits.h>
 #include "integration.h"
 #include "utils.h"
 #include "pn_eom.h"
@@ -14,13 +20,27 @@ void read_command_line(int argc, char** argv)
         errorexit("Usage: pn_nbody /path/to/parfile.par");
 
     /* Determine the name of the parameter file and the output directory,
-    the output folder has the same name and location as the parfile (without .par) */
-    char* parfile = (char*) calloc(sizeof(char), strlen(argv[1])+40);
-    char* outdir  = (char*) calloc(sizeof(char), strlen(argv[1])+40);
+    the output folder has the same name as the parfile (without .par) */
+
+    // Build parfile path
+    char* parfile = (char*) calloc(strlen(argv[1]) + 40, sizeof(char));
     strcpy(parfile, argv[1]);
     if (!strstr(parfile, ".par")) strcat(parfile, ".par");
-    strcpy(outdir, parfile);
-    *strstr(outdir, ".par") = '\0';
+
+    // Extract base name (without .par)
+    char* base = basename(parfile);
+    char* dot = strstr(base, ".par");
+    if (dot) *dot = '\0';
+
+    // Get executable path
+    char base_path[] = {"/Users/fheinze/Desktop/pn-nbody"};
+
+    // Create output directory
+    char outdir[PATH_MAX];
+    snprintf(outdir, sizeof(outdir), "%s/output/%s", base_path, base);
+    if (mkdir(outdir, 0755) != 0)
+        if (errno != EEXIST)
+            errorexit("Could not create output directory");
     
     /* Add outdir and parfile as parameters, which should be the first parameters
     that lead to the creation of the parameter database */
@@ -28,7 +48,6 @@ void read_command_line(int argc, char** argv)
     add_parameter("parfile", parfile, "name of parameter file given in command line");
     
     free(parfile);
-    free(outdir);
 }
 
 
