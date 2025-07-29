@@ -217,7 +217,7 @@ tParameter* find_parameter(const char* name, const int fatal)
 /* Print all parameters in the parameter database */
 void print_parameters(void) {
     for (int i = 0; i < npdb; i++)
-        printf("pdb[%3d]:  %16s = %-16s,  %s\n", i, pdb[i].name, pdb[i].value, pdb[i].description);
+        printf("pdb[%3d]:  %16s = %-16s\n", i, pdb[i].name, pdb[i].value);
 }
 
 
@@ -281,12 +281,10 @@ void set_double_array(const char *name, int n, const double *a) {
         free(value);
         errorexit("set_double_array: parameter allocation failed.");
     }
-
     free(p->value);
     p->value = value;
-
-#if DEBUG_PARAMETERS
-    printf("Set %s = %s\n", name, value);
+#if DEBUG_PARAMETERS  
+    printf("Set %s = %s\n", p->name, p->value);
 #endif
 }
 

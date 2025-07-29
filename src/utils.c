@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include "utils.h"
 #include "pn_eom.h"
 #include "math.h"
@@ -207,6 +208,32 @@ int kronecker_delta(int i, int j) {
 
 void print_divider() {
     printf("----------------------------------------------------------------------\n");
+}
+
+
+void print_progress_bar(int percent) {
+    const int bar_width = 50;
+    int filled = (percent * bar_width) / 100;
+
+    printf("\r[");
+    for (int i = 0; i < bar_width; i++) {
+        if (i < filled)
+            printf("=");
+        else
+            printf(" ");
+    }
+    printf("] %d%%", percent);
+    fflush(stdout);
+}
+
+
+void get_executable_path(char* buffer, size_t size) {
+    ssize_t len = readlink("/proc/self/exe", buffer, size - 1);
+    if (len != -1) {
+        buffer[len] = '\0';
+    } else {
+        errorexit("Could not read executable path");
+    }
 }
 
 

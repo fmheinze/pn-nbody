@@ -20,6 +20,13 @@
         "init.h": "c",
         "string.h": "c",
         "utils.h": "c",
-        "initial_configurations.h": "c"
+        "initial_configurations.h": "c",
+        "cuba.h": "c",
+        "math.h": "c",
+        "limits": "c",
+        "ratio": "c",
+        "chrono": "c",
+        "algorithm": "c",
+        "orbital_elements.h": "c"
     }
 }
