@@ -89,7 +89,7 @@ double eccentricity(int* bodies, double* w, struct ode_params* params) {
     if (params->pn_terms[1] == 1)
         H_c += H1PN(w_bodies, &params_bodies);
     if (params->pn_terms[2] == 1)
-        H_c += H2PN(w_bodies, &params_bodies);
+        H_c += H2PN_threebody(w_bodies, &params_bodies, 0);
 
     // Compute and return eccentricity
     double M = params->masses[bodies[0]] + params->masses[bodies[1]];
@@ -115,7 +115,7 @@ void semi_major_axes(int* bodies, double* w, struct ode_params* params, double* 
     if (params->pn_terms[1] == 1)
         H_c += H1PN(w, params);
     if (params->pn_terms[2] == 1)
-        H_c += H2PN(w, params);
+        H_c += H2PN_threebody(w, params, 0);
     
     *a = - params->masses[bodies[0]] * params->masses[bodies[1]] / (2 * H_c);
     *a1_com = params->masses[bodies[1]] / M * *a;
@@ -131,6 +131,6 @@ double total_energy_conservative(double* w, struct ode_params* params) {
     if (params->pn_terms[1] == 1)
         H_c += H1PN(w, params);
     if (params->pn_terms[2] == 1)
-        H_c += H2PN(w, params);
+        H_c += H2PN_threebody(w, params, 0);
     return H_c;
 }

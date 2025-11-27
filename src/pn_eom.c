@@ -142,7 +142,7 @@ dwdt        pointer to the array of values that will be updated with the right-h
 
     // Add 2PN terms (using finite differencing on the hamiltonian)
     if (params->pn_terms[2]) {
-        update_eom_hamiltonian(w, dwdt, H2PN, 1e-5, params);
+        update_eom_hamiltonian(w, dwdt, H2PN_nbody, 1e-5, params);
     }
 
     // Add 2.5PN terms

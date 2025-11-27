@@ -27,6 +27,7 @@
         "ratio": "c",
         "chrono": "c",
         "algorithm": "c",
-        "orbital_elements.h": "c"
+        "orbital_elements.h": "c",
+        "time.h": "c"
     }
 }
