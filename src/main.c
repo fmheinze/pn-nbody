@@ -14,39 +14,49 @@
 #include "initialize.h"
 
 
+static void mkdir_or_die(const char *path, mode_t mode) {
+    if (mkdir(path, mode) != 0 && errno != EEXIST) {
+        fprintf(stderr, "Error: mkdir('%s') failed: %s\n", path, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+}
+
 void read_command_line(int argc, char** argv)
 {
     if (argc != 2)
         errorexit("Usage: pn_nbody /path/to/parfile.par");
 
-    /* Determine the name of the parameter file and the output directory,
-    the output folder has the same name as the parfile (without .par) */
-
-    // Build parfile path
-    char* parfile = (char*) calloc(strlen(argv[1]) + 40, sizeof(char));
+    // Build parfile path (append .par if missing)
+    char* parfile = calloc(strlen(argv[1]) + 5, 1);
+    if (!parfile) errorexit("Out of memory");
     strcpy(parfile, argv[1]);
     if (!strstr(parfile, ".par")) strcat(parfile, ".par");
 
     // Extract base name (without .par)
-    char* base = basename(parfile);
-    char* dot = strstr(base, ".par");
-    if (dot) *dot = '\0';
+    char *base_ptr = basename(parfile);        // points into 'parfile'
+    char *dot = strstr(base_ptr, ".par");
+    if (dot) *dot = '\0';                      // now base_ptr is just the stem
 
-    // Get executable path
-    char base_path[] = {"/Users/fheinze/Desktop/pn-nbody"};
+    // Use current working directory instead of a hardcoded absolute path
+    char cwd[PATH_MAX];
+    if (!getcwd(cwd, sizeof(cwd))) {
+        fprintf(stderr, "Error: getcwd failed: %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
 
-    // Create output directory
+    // Ensure ./output exists, then create ./output/<base>
+    char output_root[PATH_MAX];
+    snprintf(output_root, sizeof(output_root), "%s/output", cwd);
+    mkdir_or_die(output_root, 0755);
+
     char outdir[PATH_MAX];
-    snprintf(outdir, sizeof(outdir), "%s/output/%s", base_path, base);
-    if (mkdir(outdir, 0755) != 0)
-        if (errno != EEXIST)
-            errorexit("Could not create output directory");
-    
-    /* Add outdir and parfile as parameters, which should be the first parameters
-    that lead to the creation of the parameter database */
+    snprintf(outdir, sizeof(outdir), "%s/%s", output_root, base_ptr);
+    mkdir_or_die(outdir, 0755);
+
+    // Pass parameters onward
     add_parameter("outdir", outdir, "output directory");
     add_parameter("parfile", parfile, "name of parameter file given in command line");
-    
+
     free(parfile);
 }
 
