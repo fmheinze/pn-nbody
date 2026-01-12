@@ -12,6 +12,7 @@
 #include "pn_eom.h"
 #include "parameters.h"
 #include "initialize.h"
+#include "pn_eom_hamiltonians.h"
 
 
 static void mkdir_or_die(const char *path, mode_t mode) {
@@ -79,7 +80,12 @@ int main(int argc, char** argv) {
 
     // Run simulation
     printf("Starting simulation...\n"); 
-    ode_integrator(w, rhs_pn_threebody, &params);
+    if (get_parameter_int("impulse_method")) {
+        impulse_integrator(w, rhs_pn_nbody, compute_dUTT4_dx, &params);
+    }
+    else {
+        ode_integrator(w, rhs_pn_nbody, &params);
+    }
     printf("\n"); 
     print_divider();
 
