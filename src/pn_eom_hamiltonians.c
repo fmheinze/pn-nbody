@@ -302,17 +302,111 @@ double ln_integral_sum(double* w, struct ode_params* params) {
 }
 
 
-void compute_dH_int_dx_cs(double*w, struct ode_params* params, double *dH_int_dx) {
+complex double UTT4_without_ln_integral_complex(complex double* w, struct ode_params* params) {
+    int num_bodies = params->num_bodies;
+    int num_dim = params->num_dim;
+    int array_half = num_bodies * num_dim; 
+    complex double temp0, temp1, temp2, temp3;
+    double ma_inv, mb_inv, mc_inv;
+
+    // Masses
+    double m[num_bodies];
+    for (int a = 0; a < num_bodies; a++)
+        m[a] = params->masses[a];
+    
+    // Momenta
+    complex double p[num_bodies][num_dim];
+    for (int a = 0; a < num_bodies; a++)
+        for (int i = 0; i < num_dim; i++)
+            p[a][i] = w[array_half + a * num_dim + i];
+    
+    // Relative positions and distances
+    complex double x_rel[num_bodies][num_bodies][num_dim]; 
+    complex double n[num_bodies][num_bodies][num_dim];
+    complex double r[num_bodies][num_bodies];
+    complex double n_ab_ac[num_dim];
+    complex double n_ab_cb[num_dim];
+    for (int a = 0; a < num_bodies; a++) {
+        for (int b = a; b < num_bodies; b++) {
+            for (int i = 0; i < num_dim; i++){
+                x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
+                x_rel[b][a][i] = -x_rel[a][b][i];
+            } 
+            r[a][b] = norm_c(x_rel[a][b], num_dim);
+            r[b][a] = r[a][b];
+            for (int i = 0; i < num_dim; i++){
+                if (a == b){
+                        n[a][b][i] = 0.0;
+                        n[b][a][i] = 0.0;
+                } else {
+                        n[a][b][i] = x_rel[a][b][i] / r[a][b];
+                        n[b][a][i] = -n[a][b][i];
+                }
+            }
+        }
+    }
+
+    //Compute UTT4 without the ln-integral
+    complex double UTT4 = 0.0;
+
+    for (int a = 0; a < num_bodies; ++a) {
+        for (int b = 0; b < num_bodies; ++b) {
+            for (int c = 0; c < num_bodies; ++c) {
+                for (int d = 0; d < num_bodies; ++d) {
+                    if (b != a && c != a && c != b && d != a && d != b && d != c) {
+                        temp0 = r[a][b] * r[a][b];
+                        temp1 = r[b][c] * r[b][c];
+                        temp2 = r[c][d] * r[c][d];
+                        temp3 = r[a][d] * r[a][d];
+                        UTT4 += - 0.0625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp2*r[c][d] * temp3*r[a][d] * temp1*r[b][c]) * (
+                                4 * temp0*r[a][b] * temp1*r[b][c] * temp2 * temp3 / r[b][d]
+                                -6* temp1*r[b][c] * temp3 * (temp0 * temp2 + temp3 * (temp3 + temp1 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
+                                - temp0 * (r[b][d]*r[b][d] - temp1 - temp2) * (2 * r[a][b] * temp3*r[a][d] * temp1 / (r[a][c] + r[b][c] + r[a][b]) 
+                                - temp3 * temp1 - r[a][b] * temp2 * (r[a][c]*r[a][c] - temp3 - temp2)) );
+                    }
+                }
+            }
+        }
+    }
+    return UTT4;
+}
+
+
+void compute_dUTT4_dx(double*w, struct ode_params* params, double *dUdx) {
     IntegralParams integral_params;
     int num_bodies = params->num_bodies;
     int num_dim = params->num_dim;
+    int array_half = num_dim * num_bodies;
+    complex double w_c[array_half];
+    complex double UTT4_cs_val;
+
+    const double h = 1e-20;
 
     if (num_dim != 3)
         errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
 
-    for (int k = 0; k < num_dim*num_bodies; ++k)
-        dH_int_dx[k] = 0.0;
+    for (int i = 0; i < array_half; ++i)
+        dUdx[i] = 0.0;
 
+    // UTT4 part without the ln-integral
+    // Copy position part of the original array to w_c
+    for (int i = 0; i < array_half; ++i)
+        w_c[i] = (complex double)w[i];
+
+    for (int i = 0; i < array_half; ++i) {
+        // Add tiny imaginary step in coordinate i
+        w_c[i] += I * h; 
+
+        // Compute derivative
+        UTT4_cs_val = UTT4_without_ln_integral_complex(w_c, params);
+        dUdx[i] = cimag(UTT4_cs_val) / h;
+
+        // Restore original value
+        w_c[i] = (complex double)w[i];
+    }
+
+
+    // Add the ln-integral part
     cubareal integral[NCOMP_H_DERIV], error[NCOMP_H_DERIV], prob[NCOMP_H_DERIV];
     int neval, fail, nregions;
 
@@ -350,7 +444,7 @@ void compute_dH_int_dx_cs(double*w, struct ode_params* params, double *dH_int_dx
                             for (int axis = 0; axis < 3; ++axis) {
                                 int local_comp = 12*p + 3*body + axis;
                                 // Each value should be multiplied by the symmetry factor 4, but in the Hamiltonian there is a factor 1/(4*PI), so they cancel
-                                dH_int_dx[3*global_idx + axis] += INVPI * mass_factor * integral[local_comp];
+                                dUdx[3*global_idx + axis] += INVPI * mass_factor * integral[local_comp];
                             }
                         }
                     }
@@ -744,7 +838,7 @@ double H2PN_nbody(double* w, struct ode_params* params, int p_flag) {
 }
 
 
-complex double H2PN_nbody_complex(complex double* w, struct ode_params* params, int p_flag) {
+complex double H2PN_nbody_base_complex(complex double* w, struct ode_params* params, int p_flag) {
     int num_bodies = params->num_bodies;
     int num_dim = params->num_dim;
     int array_half = num_bodies * num_dim; 
@@ -877,13 +971,6 @@ complex double H2PN_nbody_complex(complex double* w, struct ode_params* params, 
                         if (b != a && c != a && d != a) {
                             H += - 0.25 * temp1 * m[c] * m[d] / (r[a][b] * r[a][c] * r[a][d]);
                         }
-                        if (b != a && c != a && c != b && d != a && d != b && d != c) {
-                            H += - 0.0625 * temp1 * m[c] * m[d] / (temp0*r[a][b] * temp12*r[c][d] * temp13*r[a][d] * temp11*r[b][c]) * (
-                                4 * temp0*r[a][b] * temp11*r[b][c] * temp12 * temp13 / r[b][d]
-                                -6* temp11*r[b][c] * temp13 * (temp0 * temp12 + temp13 * (temp13 + temp11 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
-                                - temp0 * (r[b][d]*r[b][d] - temp11 - temp12) * (2 * r[a][b] * temp13*r[a][d] * temp11 / (r[a][c] + r[b][c] + r[a][b]) 
-                                - temp13 * temp11 - r[a][b] * temp12 * (r[a][c]*r[a][c] - temp13 - temp12)) );
-                        }
                     }
                 }
             }
@@ -939,7 +1026,6 @@ void update_eom_hamiltonian_cs(double *w, double *dwdt, complex double (*hamilto
     complex double w_c[total_dim];
     complex double H_cs_val;
     double dHdw[total_dim];
-    double dH_int_dx[array_half];
     int p_flag;
 
     // Copy original array to w_copy
@@ -960,14 +1046,11 @@ void update_eom_hamiltonian_cs(double *w, double *dwdt, complex double (*hamilto
         w_c[i] = (complex double)w[i];
     }
 
-    // Compute derivatives for the ln_integral
-    compute_dH_int_dx_cs(w, params, dH_int_dx);
-
     // Compute dwdt
     for (int i = 0; i < 2 * array_half; i++) {
         if (i < array_half)
             dwdt[i] += dHdw[i + array_half];
         else
-            dwdt[i] += -dHdw[i - array_half] - dH_int_dx[i - array_half];
+            dwdt[i] += -dHdw[i - array_half];
     }
 }

@@ -23,9 +23,14 @@ void initialize_parameters() {
     add_parameter("t_end", "0.0", "total duration of the simulation [>= 0]");
     add_parameter("dt", "0.1", "fixed time step, or initial time step for adaptive ODE integrators [> 0]");
     add_parameter("ode_integrator", "rk4", "which ODE integrator to use [rk4, cash-karp]");
+    add_parameter("impulse_method", "0", "whether to use the impulse method");
     if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
         // Cash-Karp method specific
         add_parameter("rel_error", "1e-6", "target relative error [> 0]");
+    }
+    if(get_parameter_int("impulse_method") == 1) {
+        // Impulse method specific
+        add_parameter("impulse_method_n", "1", "number of substeps for the middle method of the impulse method");
     }
 
     // Initial configuration presets
@@ -87,6 +92,7 @@ struct ode_params initialize_ode_params() {
     // General parameters
     params.num_dim = get_parameter_int("num_dim");
     params.num_bodies = get_parameter_int("num_bodies");
+    params.use_impulse_method = get_parameter_int("impulse_method");
 
     // Masses
     allocate_vector(&params.masses, params.num_bodies);

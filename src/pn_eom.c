@@ -5,10 +5,11 @@
 #include "utils.h"
 #include "pn_eom.h"
 #include "pn_eom_hamiltonians.h"
+#include "parameters.h"
 
 
-void rhs_pn_threebody(double t, double* w, struct ode_params* params, double* dwdt)
-/* Right-hand side of the first order ODE system describing the evolution of three bodies under the influence of gravity,
+void rhs_pn_nbody(double t, double* w, struct ode_params* params, double* dwdt)
+/* Right-hand side of the first order ODE system describing the evolution of N bodies under the influence of gravity,
 including Post-Newtonian correction terms up to 2.5PN order.
 
 t           time
@@ -141,10 +142,18 @@ dwdt        pointer to the array of values that will be updated with the right-h
         }
     }
 
-    // Add 2PN terms (using finite differencing on the hamiltonian)
+    // Add 2PN terms
     if (params->pn_terms[2]) {
-        //update_eom_hamiltonian_fd(w, dwdt, H2PN_threebody, 1e-5, params);
-        update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_complex, 1e-20, params);
+        // Add the contributions from H2PN without UTT4
+        update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_base_complex, 1e-20, params);
+
+        // If not using impulse splitting, add UTT4 contributions directly to dp/dt
+        if (!params->use_impulse_method) {
+            double dUdx[array_half];
+            compute_dUTT4_dx(w, params, dUdx);
+            for (int i = 0; i < array_half; i++)
+                dwdt[array_half + i] -= dUdx[i];
+        }
     }
 
     // Add 2.5PN terms
