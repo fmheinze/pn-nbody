@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <complex.h>
 #include "utils.h"
 #include "pn_eom.h"
 #include "math.h"
@@ -60,7 +61,6 @@ void free_vector(double* ptr) {
         free(ptr);
 }
 
-
 void free_2d_array(double** ptr, int num_vectors) {
     if (ptr != NULL) {
         for (int i = 0; i < num_vectors; i++)
@@ -106,8 +106,20 @@ double dot_product(double *a, double *b, int dim) {
 }
 
 
+complex double dot_product_c(complex double *a, complex double *b, int dim) {
+    complex double result = 0;
+    for (int i = 0; i < dim; i++)
+        result += a[i] * b[i];
+    return result;
+}
+
+
 double norm(double *v, int dim) {
     return sqrt(dot_product(v, v, dim));
+}
+
+complex double norm_c(complex double *v, int dim) {
+    return csqrt(dot_product_c(v, v, dim));
 }
 
 

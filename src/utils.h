@@ -1,4 +1,6 @@
 #include "pn_eom.h"
+#include <complex.h>
+
 
 #ifndef UTILS_H
 #define UTILS_H
@@ -14,7 +16,9 @@ void free_4d_array(double**** ptr, int num_3d_arrays, int num_arrays, int num_ve
 void free_ode_params(struct ode_params* params);
 
 double dot_product(double *a, double *b, int dim);
+complex double dot_product_c(complex double *a, complex double *b, int dim);
 double norm(double *v, int dim);
+complex double norm_c(complex double *v, int dim);
 void normalize(double v[3], double result[3]);
 void cross_product(double a[3], double b[3], double result[3]);
 void create_rotation_matrix(double axis[3], double angle, double R[3][3]);

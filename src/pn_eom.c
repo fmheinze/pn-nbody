@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <complex.h>
 #include "utils.h"
 #include "pn_eom.h"
 #include "pn_eom_hamiltonians.h"
@@ -142,7 +143,8 @@ dwdt        pointer to the array of values that will be updated with the right-h
 
     // Add 2PN terms (using finite differencing on the hamiltonian)
     if (params->pn_terms[2]) {
-        update_eom_hamiltonian(w, dwdt, H2PN_nbody, 1e-5, params);
+        //update_eom_hamiltonian_fd(w, dwdt, H2PN_threebody, 1e-5, params);
+        update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_complex, 1e-20, params);
     }
 
     // Add 2.5PN terms
