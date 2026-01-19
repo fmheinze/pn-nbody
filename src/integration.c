@@ -349,8 +349,10 @@ void impulse_integrator(double* w, void (*rhs_mid)(double, double*, struct ode_p
     output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
 
     while (t_current < t_end) {
+        double next_save = t_save + dt_save;
         double h = dt_full;
-        if (t_current + h > t_end) h = t_end - t_current;
+        if (t_current + h > next_save) h = next_save - t_current;
+        if (t_current + h > t_end)     h = t_end - t_current;
         if (h <= 0.0) break;
 
         // --- first half kick (uses cached gradient if available) ---
@@ -363,6 +365,9 @@ void impulse_integrator(double* w, void (*rhs_mid)(double, double*, struct ode_p
         // --- middle evolution for time h ---
         impulse_advance_middle(w, w_size, t_current, h, n, middle_method, rel_error, rhs_mid, params);
         t_current += h;
+        if (fabs(t_current - next_save) < 1e-12 * dt_save) {
+            t_current = next_save;  // snap to avoid drift
+        }
 
         // --- compute gradient at end positions, do second half kick, keep for reuse ---
         grad_utt4(w, params, dUdx);
@@ -370,7 +375,7 @@ void impulse_integrator(double* w, void (*rhs_mid)(double, double*, struct ode_p
         grad_valid = 1;
 
         // output
-        if (t_current >= t_save + dt_save) {
+        if (t_current >= next_save) {
             output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
             print_progress_bar(t_current / t_end * 100.0);
             t_save += dt_save;

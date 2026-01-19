@@ -123,14 +123,17 @@ void semi_major_axes(int* bodies, double* w, struct ode_params* params, double* 
 }
 
 
-double total_energy_conservative(double* w, struct ode_params* params) {
-    // Compute conservative part of the Hamiltonian
-    double H_c = 0.0;
+void total_energy_conservative(double* w, struct ode_params* params, double* H_base, double* H_2PN_base, double* UTT4) {
+    *H_base = 0.0;
+    *H_2PN_base = 0.0;
+    *UTT4 = 0.0;
     if (params->pn_terms[0] == 1)
-        H_c += H0PN(w, params);
+        *H_base += H0PN(w, params);
     if (params->pn_terms[1] == 1)
-        H_c += H1PN(w, params);
-    if (params->pn_terms[2] == 1)
-        H_c += H2PN_threebody(w, params, 0);
-    return H_c;
+        *H_base += H1PN(w, params);
+    if (params->pn_terms[2] == 1){
+        *H_2PN_base += H2PN_nbody(w, params, 0, 0);
+        *H_base += *H_2PN_base;
+        *UTT4 += UTT4_without_ln_integral(w, params) + ln_integral_sum(w, params);
+    }
 }

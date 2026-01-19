@@ -145,7 +145,7 @@ dwdt        pointer to the array of values that will be updated with the right-h
     // Add 2PN terms
     if (params->pn_terms[2]) {
         // Add the contributions from H2PN without UTT4
-        update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_base_complex, 1e-20, params);
+        update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_base_complex, 1e-30, params);
 
         // If not using impulse splitting, add UTT4 contributions directly to dp/dt
         if (!params->use_impulse_method) {
