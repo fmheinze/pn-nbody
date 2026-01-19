@@ -46,8 +46,8 @@ static inline int role_of_body(int p, int body) {
 #define EPSABS 1e-20
 #define VERBOSE 0
 #define SEED 42
-#define MINEVAL 500000
-#define MAXEVAL 500000
+#define MINEVAL 1000000
+#define MAXEVAL 1000000
 #define KEY 11
 
 
@@ -141,7 +141,7 @@ static int ln_integral_complex(const int *ndim, const cubareal xx[], const int *
         errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
 
     IntegralParams *params = (IntegralParams*)userdata;
-    const double h = 1e-20;  // step size for complex-step differentiation
+    const double h = 1e-30;  // step size for complex-step differentiation
 
     // New variables and jacobian determinant for the transformation to an integral over the unit hypercube (can remain real-valued)
     cubareal rho = xx[0];
@@ -302,6 +302,76 @@ double ln_integral_sum(double* w, struct ode_params* params) {
 }
 
 
+double UTT4_without_ln_integral(double* w, struct ode_params* params) {
+    int num_bodies = params->num_bodies;
+    int num_dim = params->num_dim;
+    int array_half = num_bodies * num_dim; 
+    double temp0, temp1, temp2, temp3;
+    double ma_inv, mb_inv, mc_inv;
+
+    // Masses
+    double m[num_bodies];
+    for (int a = 0; a < num_bodies; a++)
+        m[a] = params->masses[a];
+    
+    // Momenta
+    double p[num_bodies][num_dim];
+    for (int a = 0; a < num_bodies; a++)
+        for (int i = 0; i < num_dim; i++)
+            p[a][i] = w[array_half + a * num_dim + i];
+    
+    // Relative positions and distances
+    double x_rel[num_bodies][num_bodies][num_dim]; 
+    double n[num_bodies][num_bodies][num_dim];
+    double r[num_bodies][num_bodies];
+    double n_ab_ac[num_dim];
+    double n_ab_cb[num_dim];
+    for (int a = 0; a < num_bodies; a++) {
+        for (int b = a; b < num_bodies; b++) {
+            for (int i = 0; i < num_dim; i++){
+                x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
+                x_rel[b][a][i] = -x_rel[a][b][i];
+            } 
+            r[a][b] = norm(x_rel[a][b], num_dim);
+            r[b][a] = r[a][b];
+            for (int i = 0; i < num_dim; i++){
+                if (a == b){
+                        n[a][b][i] = 0.0;
+                        n[b][a][i] = 0.0;
+                } else {
+                        n[a][b][i] = x_rel[a][b][i] / r[a][b];
+                        n[b][a][i] = -n[a][b][i];
+                }
+            }
+        }
+    }
+
+    //Compute UTT4 without the ln-integral
+    double UTT4 = 0.0;
+
+    for (int a = 0; a < num_bodies; ++a) {
+        for (int b = 0; b < num_bodies; ++b) {
+            for (int c = 0; c < num_bodies; ++c) {
+                for (int d = 0; d < num_bodies; ++d) {
+                    if (b != a && c != a && c != b && d != a && d != b && d != c) {
+                        temp0 = r[a][b] * r[a][b];
+                        temp1 = r[b][c] * r[b][c];
+                        temp2 = r[c][d] * r[c][d];
+                        temp3 = r[a][d] * r[a][d];
+                        UTT4 += - 0.0625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp2*r[c][d] * temp3*r[a][d] * temp1*r[b][c]) * (
+                                4 * temp0*r[a][b] * temp1*r[b][c] * temp2 * temp3 / r[b][d]
+                                -6* temp1*r[b][c] * temp3 * (temp0 * temp2 + temp3 * (temp3 + temp1 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
+                                - temp0 * (r[b][d]*r[b][d] - temp1 - temp2) * (2 * r[a][b] * temp3*r[a][d] * temp1 / (r[a][c] + r[b][c] + r[a][b]) 
+                                - temp3 * temp1 - r[a][b] * temp2 * (r[a][c]*r[a][c] - temp3 - temp2)) );
+                    }
+                }
+            }
+        }
+    }
+    return UTT4;
+}
+
+
 complex double UTT4_without_ln_integral_complex(complex double* w, struct ode_params* params) {
     int num_bodies = params->num_bodies;
     int num_dim = params->num_dim;
@@ -380,7 +450,7 @@ void compute_dUTT4_dx(double*w, struct ode_params* params, double *dUdx) {
     complex double w_c[array_half];
     complex double UTT4_cs_val;
 
-    const double h = 1e-20;
+    const double h = 1e-30;
 
     if (num_dim != 3)
         errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
@@ -466,15 +536,42 @@ double H0PN(double* w, struct ode_params* params) {
         // Kinetic energy
         p2 = 0.0;
         for (int i = 0; i < num_dim; i++)
-            p2 += pow(w[array_half + num_dim * a + i], 2);
+            p2 += w[array_half + num_dim * a + i] * w[array_half + num_dim * a + i];
         H += p2/(2 * params->masses[a]);
 
         // Potential energy
         for (int b = a+1; b < num_bodies; b++) {
             rel_dist2 = 0.0;
             for (int i = 0; i < num_dim; i++)
-                rel_dist2 += pow(w[num_dim * a + i] - w[num_dim * b + i], 2);
+                rel_dist2 += (w[num_dim * a + i] - w[num_dim * b + i]) * (w[num_dim * a + i] - w[num_dim * b + i]);
             H -= params->masses[a] * params->masses[b] / sqrt(rel_dist2);
+        }
+    }
+    return H;
+}
+
+
+complex double H0PN_complex(complex double* w, struct ode_params* params, int p_flag) {
+    int num_bodies = params->num_bodies;
+    int num_dim = params->num_dim;
+    int array_half = num_dim * num_bodies;
+
+    complex double rel_dist2, p2;
+    complex double H = 0;
+
+    for (int a = 0; a < num_bodies; a++) {
+        // Kinetic energy
+        p2 = 0.0;
+        for (int i = 0; i < num_dim; i++)
+            p2 += w[array_half + num_dim * a + i] * w[array_half + num_dim * a + i];
+        H += p2/(2 * params->masses[a]);
+
+        // Potential energy
+        for (int b = a+1; b < num_bodies; b++) {
+            rel_dist2 = 0.0;
+            for (int i = 0; i < num_dim; i++)
+                rel_dist2 += (w[num_dim * a + i] - w[num_dim * b + i]) * (w[num_dim * a + i] - w[num_dim * b + i]);
+            H -= params->masses[a] * params->masses[b] / csqrt(rel_dist2);
         }
     }
     return H;
@@ -502,7 +599,7 @@ double H1PN(double* w, struct ode_params* params) {
             pa_dot_pa += p_ai * p_ai;
         }
 
-        H += -0.125 * m_a * pow(pa_dot_pa / (m_a * m_a), 2);
+        H += -0.125 * m_a * pa_dot_pa * pa_dot_pa / (m_a * m_a * m_a * m_a) ;
 
         for (b = 0; b < num_bodies; b++) {
             if (b == a) continue;
@@ -552,6 +649,81 @@ double H1PN(double* w, struct ode_params* params) {
 
                     H += 0.5 * m_a * m_b * m_c / (r_ab * r_ac);
                 }
+            }
+        }
+    }
+    return H;
+}
+
+
+complex double H1PN_complex(complex double* w, struct ode_params* params, int p_flag) {
+    int num_bodies = params->num_bodies;
+    int num_dim    = params->num_dim;
+    int array_half = num_dim * num_bodies;
+
+    complex double H = 0.0 + 0.0*I;
+
+    for (int a = 0; a < num_bodies; ++a) {
+        double m_a = params->masses[a];
+
+        complex double pa_dot_pa = 0.0 + 0.0*I;
+        for (int i = 0; i < num_dim; ++i) {
+            complex double p_ai = w[array_half + a*num_dim + i];
+            pa_dot_pa += p_ai * p_ai;
+        }
+
+        H += -0.125 * m_a * pa_dot_pa * pa_dot_pa / (m_a*m_a*m_a*m_a);
+
+        for (int b = 0; b < num_bodies; ++b) {
+            if (b == a) continue;
+
+            double m_b = params->masses[b];
+
+            // r_ab
+            complex double r2_ab = 0.0 + 0.0*I;
+            for (int i = 0; i < num_dim; ++i) {
+                complex double dx = w[a*num_dim + i] - w[b*num_dim + i];
+                r2_ab += dx * dx;
+            }
+            complex double r_ab = csqrt(r2_ab);
+
+            complex double pb_dot_pb = 0.0 + 0.0*I;
+            complex double pa_dot_pb = 0.0 + 0.0*I;
+            complex double na_dot_pa = 0.0 + 0.0*I;
+            complex double na_dot_pb = 0.0 + 0.0*I;
+
+            for (int i = 0; i < num_dim; ++i) {
+                complex double p_ai = w[array_half + a*num_dim + i];
+                complex double p_bi = w[array_half + b*num_dim + i];
+
+                complex double dx = w[a*num_dim + i] - w[b*num_dim + i];
+                complex double ni = dx / r_ab;
+
+                pb_dot_pb += p_bi * p_bi;
+                pa_dot_pb += p_ai * p_bi;
+                na_dot_pa += ni * p_ai;
+                na_dot_pb += ni * p_bi;
+            }
+
+            H += -0.25 * m_a * m_b / r_ab *
+                 ( 6.0 * pa_dot_pa / (m_a*m_a)
+                   - 7.0 * pa_dot_pb / (m_a*m_b)
+                   - (na_dot_pa * na_dot_pb) / (m_a*m_b) );
+
+            // triple-sum term
+            for (int c = 0; c < num_bodies; ++c) {
+                if (c == a) continue;
+
+                double m_c = params->masses[c];
+
+                complex double r2_ac = 0.0 + 0.0*I;
+                for (int i = 0; i < num_dim; ++i) {
+                    complex double dx = w[a*num_dim + i] - w[c*num_dim + i];
+                    r2_ac += dx * dx;
+                }
+                complex double r_ac = csqrt(r2_ac);
+
+                H += 0.5 * m_a * m_b * m_c / (r_ab * r_ac);
             }
         }
     }
@@ -686,7 +858,7 @@ double H2PN_threebody(double* w, struct ode_params* params, int p_flag) {
 }
 
 
-double H2PN_nbody(double* w, struct ode_params* params, int p_flag) {
+double H2PN_nbody(double* w, struct ode_params* params, int p_flag, int utt4_flag) {
     int num_bodies = params->num_bodies;
     int num_dim = params->num_dim;
     int array_half = num_bodies * num_dim; 
@@ -819,12 +991,14 @@ double H2PN_nbody(double* w, struct ode_params* params, int p_flag) {
                         if (b != a && c != a && d != a) {
                             H += - 0.25 * temp1 * m[c] * m[d] / (r[a][b] * r[a][c] * r[a][d]);
                         }
-                        if (b != a && c != a && c != b && d != a && d != b && d != c) {
-                            H += - 0.0625 * temp1 * m[c] * m[d] / (temp0*r[a][b] * temp12*r[c][d] * temp13*r[a][d] * temp11*r[b][c]) * (
-                                4 * temp0*r[a][b] * temp11*r[b][c] * temp12 * temp13 / r[b][d]
-                                -6* temp11*r[b][c] * temp13 * (temp0 * temp12 + temp13 * (temp13 + temp11 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
-                                - temp0 * (r[b][d]*r[b][d] - temp11 - temp12) * (2 * r[a][b] * temp13*r[a][d] * temp11 / (r[a][c] + r[b][c] + r[a][b]) 
-                                - temp13 * temp11 - r[a][b] * temp12 * (r[a][c]*r[a][c] - temp13 - temp12)) );
+                        if (utt4_flag) {
+                            if (b != a && c != a && c != b && d != a && d != b && d != c) {
+                                H += - 0.0625 * temp1 * m[c] * m[d] / (temp0*r[a][b] * temp12*r[c][d] * temp13*r[a][d] * temp11*r[b][c]) * (
+                                    4 * temp0*r[a][b] * temp11*r[b][c] * temp12 * temp13 / r[b][d]
+                                    -6* temp11*r[b][c] * temp13 * (temp0 * temp12 + temp13 * (temp13 + temp11 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
+                                    - temp0 * (r[b][d]*r[b][d] - temp11 - temp12) * (2 * r[a][b] * temp13*r[a][d] * temp11 / (r[a][c] + r[b][c] + r[a][b]) 
+                                    - temp13 * temp11 - r[a][b] * temp12 * (r[a][c]*r[a][c] - temp13 - temp12)) );
+                            }
                         }
                     }
                 }
@@ -832,7 +1006,7 @@ double H2PN_nbody(double* w, struct ode_params* params, int p_flag) {
         } 
     }
     // ln-integral sum
-    if (!p_flag)
+    if (!p_flag && utt4_flag)
         H += INVPI * ln_integral_sum(w, params);
     return H;
 }
