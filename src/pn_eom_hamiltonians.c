@@ -314,12 +314,6 @@ double UTT4_without_ln_integral(double* w, struct ode_params* params) {
     for (int a = 0; a < num_bodies; a++)
         m[a] = params->masses[a];
     
-    // Momenta
-    double p[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++)
-        for (int i = 0; i < num_dim; i++)
-            p[a][i] = w[array_half + a * num_dim + i];
-    
     // Relative positions and distances
     double x_rel[num_bodies][num_bodies][num_dim]; 
     double n[num_bodies][num_bodies][num_dim];
@@ -383,12 +377,6 @@ complex double UTT4_without_ln_integral_complex(complex double* w, struct ode_pa
     double m[num_bodies];
     for (int a = 0; a < num_bodies; a++)
         m[a] = params->masses[a];
-    
-    // Momenta
-    complex double p[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++)
-        for (int i = 0; i < num_dim; i++)
-            p[a][i] = w[array_half + a * num_dim + i];
     
     // Relative positions and distances
     complex double x_rel[num_bodies][num_bodies][num_dim]; 

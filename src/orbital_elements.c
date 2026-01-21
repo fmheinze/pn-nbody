@@ -6,6 +6,8 @@
 #include "transformations.h"
 #include "pn_eom_hamiltonians.h"
 
+#define INVPI 0.31830988618379067153776752674503
+
 
 void total_angular_momentum_com(int* bodies, int num_bodies, double* w, struct ode_params* params, double* L) {
     int a, index_r, index_p;
@@ -134,6 +136,6 @@ void total_energy_conservative(double* w, struct ode_params* params, double* H_b
     if (params->pn_terms[2] == 1){
         *H_2PN_base += H2PN_nbody(w, params, 0, 0);
         *H_base += *H_2PN_base;
-        *UTT4 += UTT4_without_ln_integral(w, params) + ln_integral_sum(w, params);
+        *UTT4 += UTT4_without_ln_integral(w, params) + INVPI * ln_integral_sum(w, params);
     }
 }
