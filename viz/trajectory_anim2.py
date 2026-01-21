@@ -125,6 +125,7 @@ def animate_trajectories(t, coords, n_particles, save=None):
 
     # Animation update function
     def update(frame):
+        frame *= 10
         # Frame goes from 0 to n_steps-1
         for i in range(n_particles):
             x_i = coords[: frame + 1, i, 0]
