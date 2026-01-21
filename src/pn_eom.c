@@ -148,12 +148,12 @@ dwdt        pointer to the array of values that will be updated with the right-h
         update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_base_complex, 1e-30, params);
 
         // If not using impulse splitting, add UTT4 contributions directly to dp/dt
-        if (!params->use_impulse_method) {
-            double dUdx[array_half];
-            compute_dUTT4_dx(w, params, dUdx);
-            for (int i = 0; i < array_half; i++)
-                dwdt[array_half + i] -= dUdx[i];
-        }
+        // if (!params->use_impulse_method) {
+        //     double dUdx[array_half];
+        //     compute_dUTT4_dx(w, params, dUdx);
+        //     for (int i = 0; i < array_half; i++)
+        //         dwdt[array_half + i] -= dUdx[i];
+        //}
     }
 
     // Add 2.5PN terms
