@@ -24,7 +24,8 @@ void initialize_parameters() {
     add_parameter("dt", "0.1", "fixed time step, or initial time step for adaptive ODE integrators [> 0]");
     add_parameter("ode_integrator", "rk4", "which ODE integrator to use [rk4, cash-karp]");
     add_parameter("impulse_method", "0", "whether to use the impulse method");
-    if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
+    if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0 ||
+        strcmp(get_parameter_string("ode_integrator"), "implicit-midpoint") == 0) {
         // Cash-Karp method specific
         add_parameter("rel_error", "1e-6", "target relative error [> 0]");
     }

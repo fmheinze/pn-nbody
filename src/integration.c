@@ -53,6 +53,61 @@ void rk4_update(double* y, double* y_new, int y_size, double x, double dx,
 }
 
 
+static int implicit_midpoint_update(double* y, double* y_new, int y_size, double t, double h,
+                                    void (*ode_rhs)(double, double*, struct ode_params*, double*),
+                                    struct ode_params* params, double tol, int max_iter)
+{
+    if (max_iter < 1) max_iter = 1;
+    if (tol <= 0.0) tol = 1e-12;
+
+    double *y_guess, *y_mid, *f_mid, *f0;
+    allocate_vector(&y_guess, y_size);
+    allocate_vector(&y_mid,   y_size);
+    allocate_vector(&f_mid,   y_size);
+    allocate_vector(&f0,      y_size);
+
+    // Predictor: explicit Euler
+    ode_rhs(t, y, params, f0);
+    for (int i = 0; i < y_size; ++i)
+        y_guess[i] = y[i] + h * f0[i];
+
+    const double t_mid = t + 0.5 * h;
+    int converged = 0;
+
+    for (int it = 0; it < max_iter; ++it) {
+        for (int i = 0; i < y_size; ++i)
+            y_mid[i] = 0.5 * (y[i] + y_guess[i]);
+
+        ode_rhs(t_mid, y_mid, params, f_mid);
+
+        double max_delta = 0.0;
+        double max_scale = 1.0;
+        for (int i = 0; i < y_size; ++i) {
+            double y_next = y[i] + h * f_mid[i];
+            double delta  = fabs(y_next - y_guess[i]);
+            if (delta > max_delta) max_delta = delta;
+            double scale = fabs(y_next);
+            if (scale > max_scale) max_scale = scale;
+            y_guess[i] = y_next;
+        }
+
+        if (max_delta <= tol * (1.0 + max_scale)) {
+            converged = 1;
+            break;
+        }
+    }
+
+    for (int i = 0; i < y_size; ++i)
+        y_new[i] = y_guess[i];
+
+    free_vector(y_guess);
+    free_vector(y_mid);
+    free_vector(f_mid);
+    free_vector(f0);
+    return converged;
+}
+
+
 void cash_karp_update(double* y, double* y_new, double* y_err, int y_size, double x, double dx, 
                       void (*ode_rhs)(double, double*, struct ode_params*, double*), struct ode_params* params, double* k1)
 /* Updates the value or the array of values y by one step dx according to a first-order system of ordinary differential 
@@ -207,7 +262,7 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
     double rel_error = get_parameter_double("rel_error");
     char *method = get_parameter_string("ode_integrator");
 
-    double w_size = 2 * params->num_dim * params->num_bodies;
+    int w_size = 2 * params->num_dim * params->num_bodies;
     double t_current = 0.0;
     double t_save = 0.0;
 
@@ -216,20 +271,60 @@ ode_params  additional parameters for ode_rhs that modify the dynamics of the sy
     output_init(&file_masses, &file_pos, &file_mom, &file_energy, params);
     output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
 
-    // Carry out integration steps until x_end is reached and write values into new line
-    while (t_current < t_end){
-        if(strcmp(method, "cash-karp") == 0)
-            cash_karp_driver(w, w_size, &t_current, &dt, dt_save, rel_error, ode_rhs, params);
-        if(strcmp(method, "rk4") == 0) {
-            rk4_update(w, w, w_size, t_current, dt, ode_rhs, params);
-            t_current += dt;
+    // optional: allocate once to avoid malloc/free each step
+    double* w_new = NULL;
+    allocate_vector(&w_new, w_size);
+
+    while (t_current < t_end) {
+
+    // choose step size (so we don't step past t_end)
+    double dt_step = dt;
+    if (t_current + dt_step > t_end)
+        dt_step = t_end - t_current;
+
+    if (strcmp(method, "cash-karp") == 0) {
+        // cash_karp_driver updates t_current and dt internally
+        cash_karp_driver(w, w_size, &t_current, &dt, dt_save, rel_error, ode_rhs, params);
+
+    } else if (strcmp(method, "rk4") == 0) {
+        rk4_update(w, w, w_size, t_current, dt_step, ode_rhs, params);
+        t_current += dt_step;
+
+    } else if (strcmp(method, "midpoint") == 0 || strcmp(method, "implicit-midpoint") == 0) {
+        // Use rel_error as solve tolerance if sensible; otherwise default tight.
+        double tol = rel_error;
+        if (!(tol > 0.0) || tol > 1e-6) tol = 1e-12;
+
+        int max_iter = 50;
+
+        int converged = implicit_midpoint_update(w, w_new, w_size, t_current, dt_step, ode_rhs, params, tol, max_iter);
+
+        // copy back
+        for (int i = 0; i < w_size; ++i)
+            w[i] = w_new[i];
+
+        t_current += dt_step;
+
+        // Optional: fallback if solver didn't converge (recommended)
+        if (!converged) {
+            fprintf(stderr, "Warning: implicit midpoint did not converge at t = %.17g\n", t_current);
         }
-        if(t_current >= t_save + dt_save){
-            output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
-            print_progress_bar(t_current/t_end*100);
-            t_save += dt_save;
-        }
+
+    } else {
+        // fallback: treat unknown method as rk4
+        rk4_update(w, w, w_size, t_current, dt_step, ode_rhs, params);
+        t_current += dt_step;
     }
+
+    if (t_current >= t_save + dt_save) {
+        output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
+        print_progress_bar(t_current / t_end * 100.0);
+        t_save += dt_save;
+    }
+}
+
+free_vector(w_new);
+
     fclose(file_masses);
     fclose(file_pos);
     fclose(file_mom);
@@ -292,6 +387,29 @@ static void impulse_advance_middle(double* w, int w_size, double t_start, double
 
             cash_karp_driver(w, w_size, &t, &dt, dt_max, rel_error, rhs_mid, params);
         }
+        return;
+    }
+
+    if (strcmp(middle_method, "implicit-midpoint") == 0) {
+        double dt = h / (double)n;
+        double t = t_start;
+
+        double tol = rel_error;
+        if (!(tol > 0.0) || tol > 1e-6) tol = 1e-12;
+        int max_iter = 50;
+
+        double* y_new = NULL;
+        allocate_vector(&y_new, w_size);
+
+        for (int k = 0; k < n; ++k) {
+            int converged = implicit_midpoint_update(w, y_new, w_size, t, dt, rhs_mid, params, tol, max_iter);
+            for (int i = 0; i < w_size; ++i) w[i] = y_new[i];
+            t += dt;
+
+            if (!converged) printf("Warning: Fixed-point iteration did not converge at t = %lf\n", t);
+        }
+
+        free_vector(y_new);
         return;
     }
 

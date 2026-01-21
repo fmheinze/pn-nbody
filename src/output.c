@@ -86,40 +86,40 @@ void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_energy, st
         fprintf(file_mom, "%.20e\t", w[array_half + i]);
 
     // Write energy
-    double H_base, H_2PN_base, UTT4, norm_dUdx, norm_dH_2PN_base_dx, norm_dH_2PN_dx, cos_theta, norm_dHdx;
-    double dUdx[array_half];
-    double dwdt[2 * array_half];
-    for (int i = 0; i < 2 * array_half; i++)
-        dwdt[i] = 0.0;
-    for (int i = 0; i < array_half; i++)
-        dUdx[i] = 0.0;
+    // double H_base, H_2PN_base, UTT4, norm_dUdx, norm_dH_2PN_base_dx, norm_dH_2PN_dx, cos_theta, norm_dHdx;
+    // double dUdx[array_half];
+    // double dwdt[2 * array_half];
+    // for (int i = 0; i < 2 * array_half; i++)
+    //     dwdt[i] = 0.0;
+    // for (int i = 0; i < array_half; i++)
+    //     dUdx[i] = 0.0;
 
-    total_energy_conservative(w, params, &H_base, &H_2PN_base, &UTT4);
-    compute_dUTT4_dx(w, params, dUdx);
-    update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_base_complex, 1e-30, params);
+    // total_energy_conservative(w, params, &H_base, &H_2PN_base, &UTT4);
+    // compute_dUTT4_dx(w, params, dUdx);
+    // update_eom_hamiltonian_cs(w, dwdt, H2PN_nbody_base_complex, 1e-30, params);
 
-    norm_dUdx = norm(dUdx, array_half);
-    norm_dH_2PN_base_dx = 0.0;
-    norm_dH_2PN_dx = 0.0;
-    for (int i = 0; i < array_half; i++) {
-        norm_dH_2PN_base_dx += dwdt[array_half + i] * dwdt[array_half + i];
-        norm_dH_2PN_dx += (dwdt[array_half + i] - dUdx[i]) * (dwdt[array_half + i] - dUdx[i]);
-    }
-    norm_dH_2PN_base_dx = sqrt(norm_dH_2PN_base_dx);
-    norm_dH_2PN_dx = sqrt(norm_dH_2PN_dx);
+    // norm_dUdx = norm(dUdx, array_half);
+    // norm_dH_2PN_base_dx = 0.0;
+    // norm_dH_2PN_dx = 0.0;
+    // for (int i = 0; i < array_half; i++) {
+    //     norm_dH_2PN_base_dx += dwdt[array_half + i] * dwdt[array_half + i];
+    //     norm_dH_2PN_dx += (dwdt[array_half + i] - dUdx[i]) * (dwdt[array_half + i] - dUdx[i]);
+    // }
+    // norm_dH_2PN_base_dx = sqrt(norm_dH_2PN_base_dx);
+    // norm_dH_2PN_dx = sqrt(norm_dH_2PN_dx);
     
-    cos_theta = 0.0;
-    for (int i = 0; i < array_half; i++)
-        cos_theta += (-dUdx[i] * dwdt[array_half + i]) / (norm_dUdx * norm_dH_2PN_base_dx);
+    // cos_theta = 0.0;
+    // for (int i = 0; i < array_half; i++)
+    //     cos_theta += (-dUdx[i] * dwdt[array_half + i]) / (norm_dUdx * norm_dH_2PN_base_dx);
 
-    norm_dHdx = 0.0;
-    update_eom_hamiltonian_cs(w, dwdt, H0PN_complex, 1e-30, params);
-    update_eom_hamiltonian_cs(w, dwdt, H1PN_complex, 1e-30, params);
-    for (int i = 0; i < array_half; i++) {
-        norm_dHdx += (dwdt[array_half + i] - dUdx[i]) * (dwdt[array_half + i] - dUdx[i]);
-    }
-    norm_dHdx = sqrt(norm_dHdx);
+    // norm_dHdx = 0.0;
+    // update_eom_hamiltonian_cs(w, dwdt, H0PN_complex, 1e-30, params);
+    // update_eom_hamiltonian_cs(w, dwdt, H1PN_complex, 1e-30, params);
+    // for (int i = 0; i < array_half; i++) {
+    //     norm_dHdx += (dwdt[array_half + i] - dUdx[i]) * (dwdt[array_half + i] - dUdx[i]);
+    // }
+    // norm_dHdx = sqrt(norm_dHdx);
 
-    fprintf(file_energy, "%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t", 
-        H_base, H_2PN_base, UTT4, H_2PN_base + UTT4, H_base + UTT4, norm_dUdx, norm_dH_2PN_base_dx, norm_dH_2PN_dx, cos_theta, norm_dHdx);
+    // fprintf(file_energy, "%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t%.20e\t", 
+    //     H_base, H_2PN_base, UTT4, H_2PN_base + UTT4, H_base + UTT4, norm_dUdx, norm_dH_2PN_base_dx, norm_dH_2PN_dx, cos_theta, norm_dHdx);
 }
