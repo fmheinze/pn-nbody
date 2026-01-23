@@ -453,7 +453,10 @@ void impulse_integrator(double* w, void (*rhs_mid)(double, double*, struct ode_p
     int w_size     = 2 * array_half;
 
     double t_current = 0.0;
-    double t_save = 0.0;
+    
+    long long save_idx = 1;
+    double next_save = dt_save;
+    const double eps_time = 1e-12 * fmax(1.0, fabs(dt_save));
 
     // Cache gradient to reuse between steps:
     // After finishing a step, positions do not change before the next step's first half-kick,
@@ -467,10 +470,8 @@ void impulse_integrator(double* w, void (*rhs_mid)(double, double*, struct ode_p
     output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
 
     while (t_current < t_end) {
-        double next_save = t_save + dt_save;
         double h = dt_full;
-        if (t_current + h > next_save) h = next_save - t_current;
-        if (t_current + h > t_end)     h = t_end - t_current;
+        if (t_current + h > t_end) h = t_end - t_current;
         if (h <= 0.0) break;
 
         // --- first half kick (uses cached gradient if available) ---
@@ -483,9 +484,6 @@ void impulse_integrator(double* w, void (*rhs_mid)(double, double*, struct ode_p
         // --- middle evolution for time h ---
         impulse_advance_middle(w, w_size, t_current, h, n, middle_method, rel_error, rhs_mid, params);
         t_current += h;
-        if (fabs(t_current - next_save) < 1e-12 * dt_save) {
-            t_current = next_save;  // snap to avoid drift
-        }
 
         // --- compute gradient at end positions, do second half kick, keep for reuse ---
         grad_utt4(w, params, dUdx);
@@ -493,10 +491,15 @@ void impulse_integrator(double* w, void (*rhs_mid)(double, double*, struct ode_p
         grad_valid = 1;
 
         // output
-        if (t_current >= next_save) {
+        if (dt_save > 0.0 && t_current + eps_time >= next_save) {
             output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
             print_progress_bar(t_current / t_end * 100.0);
-            t_save += dt_save;
+
+            // Advance schedule robustly
+            while (t_current + eps_time >= next_save) {
+                save_idx++;
+                next_save = save_idx * dt_save;
+            }
         }
     }
 
