@@ -352,11 +352,12 @@ double UTT4_without_ln_integral(double* w, struct ode_params* params) {
                         temp1 = r[b][c] * r[b][c];
                         temp2 = r[c][d] * r[c][d];
                         temp3 = r[a][d] * r[a][d];
-                        UTT4 += - 0.0625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp2*r[c][d] * temp3*r[a][d] * temp1*r[b][c]) * (
-                                4 * temp0*r[a][b] * temp1*r[b][c] * temp2 * temp3 / r[b][d]
-                                -6* temp1*r[b][c] * temp3 * (temp0 * temp2 + temp3 * (temp3 + temp1 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
-                                - temp0 * (r[b][d]*r[b][d] - temp1 - temp2) * (2 * r[a][b] * temp3*r[a][d] * temp1 / (r[a][c] + r[b][c] + r[a][b]) 
-                                - temp3 * temp1 - r[a][b] * temp2 * (r[a][c]*r[a][c] - temp3 - temp2)) );
+                        UTT4 += - 0.015625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp2*r[c][d] * temp3*r[a][d] * temp1*r[b][c]) * (
+                                16 * temp0*r[a][b] * temp1*r[b][c] * temp2 * temp3 / r[b][d]
+                                - 24 * temp1*r[b][c] * temp3 * temp0 * temp2 
+                                - 30 * temp3 * temp3 * temp1*r[b][c] * (temp3 + temp1 - r[a][c]*r[a][c] - r[b][d]*r[b][d])
+                                + temp0 * (r[b][d]*r[b][d] - temp1 - temp2) * (-8 * temp3 * r[a][d] * temp1 + 16 * r[a][b] * temp3*r[a][d] * temp1 / (r[a][c] + r[b][c] + r[a][b]) 
+                                    + r[a][b] * temp2 * (r[a][c]*r[a][c] - temp3 - temp2)) );
                     }
                 }
             }
@@ -416,11 +417,12 @@ complex double UTT4_without_ln_integral_complex(complex double* w, struct ode_pa
                         temp1 = r[b][c] * r[b][c];
                         temp2 = r[c][d] * r[c][d];
                         temp3 = r[a][d] * r[a][d];
-                        UTT4 += - 0.0625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp2*r[c][d] * temp3*r[a][d] * temp1*r[b][c]) * (
-                                4 * temp0*r[a][b] * temp1*r[b][c] * temp2 * temp3 / r[b][d]
-                                -6* temp1*r[b][c] * temp3 * (temp0 * temp2 + temp3 * (temp3 + temp1 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
-                                - temp0 * (r[b][d]*r[b][d] - temp1 - temp2) * (2 * r[a][b] * temp3*r[a][d] * temp1 / (r[a][c] + r[b][c] + r[a][b]) 
-                                - temp3 * temp1 - r[a][b] * temp2 * (r[a][c]*r[a][c] - temp3 - temp2)) );
+                        UTT4 += - 0.015625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp2*r[c][d] * temp3*r[a][d] * temp1*r[b][c]) * (
+                                16 * temp0*r[a][b] * temp1*r[b][c] * temp2 * temp3 / r[b][d]
+                                - 24 * temp1*r[b][c] * temp3 * temp0 * temp2 
+                                - 30 * temp3 * temp3 * temp1*r[b][c] * (temp3 + temp1 - r[a][c]*r[a][c] - r[b][d]*r[b][d])
+                                + temp0 * (r[b][d]*r[b][d] - temp1 - temp2) * (-8 * temp3 * r[a][d] * temp1 + 16 * r[a][b] * temp3*r[a][d] * temp1 / (r[a][c] + r[b][c] + r[a][b]) 
+                                    + r[a][b] * temp2 * (r[a][c]*r[a][c] - temp3 - temp2)) );
                     }
                 }
             }
@@ -771,7 +773,7 @@ double H2PN_threebody(double* w, struct ode_params* params, int p_flag) {
             if (b != a){
                 H += 0.0625 * 1 / r[a][b] * (10 * m[a] * m[b] * pow(dot_product(p[a], p[a], num_dim) / (m[a] * m[a]), 2) 
                     - 11 * dot_product(p[a], p[a], num_dim) * dot_product(p[b], p[b], num_dim) / (m[a] * m[b])
-                    - 2 * dot_product(p[a], p[a], num_dim) * dot_product(p[a], p[a], num_dim) / (m[a] * m[b])
+                    - 2 * dot_product(p[a], p[b], num_dim) * dot_product(p[a], p[b], num_dim) / (m[a] * m[b])
                     + 10 * dot_product(p[a], p[a], num_dim) * pow(dot_product(n[a][b], p[b], num_dim), 2) / (m[a] * m[b]) 
                     - 12 * dot_product(p[a], p[b], num_dim) * dot_product(n[a][b], p[a], num_dim) * dot_product(n[a][b], p[b], num_dim) / (m[a] * m[b])
                     - 3 * pow(dot_product(n[a][b], p[a], num_dim), 2) * pow(dot_product(n[a][b], p[b], num_dim), 2) / (m[a] * m[b]));
@@ -912,7 +914,7 @@ double H2PN_nbody(double* w, struct ode_params* params, int p_flag, int utt4_fla
             if (b != a){
                 H += 0.0625 * 1 / r[a][b] * (10 * temp1 * temp2 * temp2
                     - 11 * temp3 * temp6
-                    - 2 * temp3 * temp
+                    - 2 * dot_product(p[a], p[b], num_dim) * temp7
                     + 10 * temp3 * temp4 * temp4
                     - 12 * temp7 * temp5 * temp4
                     - 3 * temp5 * temp5 * temp4 * temp4 * ma_inv * mb_inv);
@@ -981,11 +983,12 @@ double H2PN_nbody(double* w, struct ode_params* params, int p_flag, int utt4_fla
                         }
                         if (utt4_flag) {
                             if (b != a && c != a && c != b && d != a && d != b && d != c) {
-                                H += - 0.0625 * temp1 * m[c] * m[d] / (temp0*r[a][b] * temp12*r[c][d] * temp13*r[a][d] * temp11*r[b][c]) * (
-                                    4 * temp0*r[a][b] * temp11*r[b][c] * temp12 * temp13 / r[b][d]
-                                    -6* temp11*r[b][c] * temp13 * (temp0 * temp12 + temp13 * (temp13 + temp11 - r[a][c]*r[a][c] - r[b][d]*r[b][d]))
-                                    - temp0 * (r[b][d]*r[b][d] - temp11 - temp12) * (2 * r[a][b] * temp13*r[a][d] * temp11 / (r[a][c] + r[b][c] + r[a][b]) 
-                                    - temp13 * temp11 - r[a][b] * temp12 * (r[a][c]*r[a][c] - temp13 - temp12)) );
+                                H += - 0.015625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp12*r[c][d] * temp13*r[a][d] * temp11*r[b][c]) * (
+                                    16 * temp0*r[a][b] * temp11*r[b][c] * temp12 * temp13 / r[b][d]
+                                    - 24 * temp11*r[b][c] * temp13 * temp0 * temp12 
+                                    - 30 * temp13 * temp13 * temp11*r[b][c] * (temp13 + temp11 - r[a][c]*r[a][c] - r[b][d]*r[b][d])
+                                    + temp0 * (r[b][d]*r[b][d] - temp11 - temp12) * (-8 * temp13 * r[a][d] * temp11 + 16 * r[a][b] * temp13*r[a][d] * temp11 / (r[a][c] + r[b][c] + r[a][b]) 
+                                        + r[a][b] * temp12 * (r[a][c]*r[a][c] - temp13 - temp12)) );
                             }
                         }
                     }
@@ -1066,7 +1069,7 @@ complex double H2PN_nbody_base_complex(complex double* w, struct ode_params* par
             if (b != a){
                 H += 0.0625 * 1 / r[a][b] * (10 * temp1 * temp2 * temp2
                     - 11 * temp3 * temp6
-                    - 2 * temp3 * temp
+                    - 2 * dot_product_c(p[a], p[b], num_dim) * temp7
                     + 10 * temp3 * temp4 * temp4
                     - 12 * temp7 * temp5 * temp4
                     - 3 * temp5 * temp5 * temp4 * temp4 * ma_inv * mb_inv);
