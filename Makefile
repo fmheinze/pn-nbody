@@ -21,7 +21,7 @@ all: $(BUILD_DIR) $(EXE_DIR) $(TARGET)
 
 # Rule to build the target
 $(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $@ -L/ssd/zo86hec/Cuba-4.2.2 -lcuba -lm
+	$(CC) $(OBJS) -o $@ -L/Users/fheinze/Desktop/Cuba-4.2.2 -lcuba -lm
 
 # Rule to build object files
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c

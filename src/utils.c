@@ -215,11 +215,44 @@ int kronecker_delta(int i, int j) {
     return (i == j) ? 1 : 0;
 }
 
+double clamp0(double x) { 
+    return (x < 0.0) ? 0.0 : x; 
+}
+
+int almost_equal(double a, double b, double rel_eps) {
+    double diff = fabs(a - b);
+    double scale = fmax(fabs(a), fabs(b));
+    if (scale < 1.0) scale = 1.0;
+    return diff <= rel_eps * scale;
+}
+
 
 // --------------------- Miscellaneous --------------------- //
 
 void print_divider() {
-    printf("----------------------------------------------------------------------\n");
+    printf("----------------------------------------------------------------------------------\n");
+}
+
+
+
+void print_state_vector(const double *w0, int num_bodies, int num_dim) {
+    for (int i = 0; i < num_bodies; ++i) {
+        // Positions
+        printf("pos%-2d = ", i + 1);
+        for (int j = 0; j < num_dim; ++j) {
+            printf("% .16e", w0[i * num_dim + j]);   // fixed width, sign included
+            if (j + 1 < num_dim) printf("  ");
+        }
+        printf("\n");
+
+        // Momenta
+        printf("p%-4d = ", i + 1);
+        for (int j = 0; j < num_dim; ++j) {
+            printf("% .16e", w0[num_bodies * num_dim + i * num_dim + j]);
+            if (j + 1 < num_dim) printf("  ");
+        }
+        printf("\n");
+    }
 }
 
 

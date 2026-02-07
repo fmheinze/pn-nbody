@@ -64,11 +64,11 @@ void read_command_line(int argc, char** argv)
 
 int main(int argc, char** argv) {
     print_divider();
-    printf("Welcome to pn_nbody\n");
+    printf("Welcome to pn-nbody\n");
     print_divider();
 
     // Parameters
-    printf("Initial parameters:\n");
+    printf("Specified parameters:\n");
     read_command_line(argc, argv);
     parse_parameter_file(get_parameter_string("parfile"));
     initialize_parameters();
@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
     double* w = initialize_state_vector(&params);
 
     // Run simulation
-    printf("Starting simulation...\n"); 
+    printf("Running simulation...\n"); 
     if (get_parameter_int("impulse_method")) {
         impulse_integrator(w, rhs_pn_nbody, compute_dUTT4_dx, &params);
     }
@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
     print_divider();
 
     // Finalize
-    printf("The simulation has finished! Thanks for using pn_nbody!\n");
+    printf("The simulation has finished! Thanks for using pn-nbody!\n");
     free_vector(w);
     free_ode_params(&params);
     return 0;
