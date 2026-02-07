@@ -25,8 +25,11 @@ void create_rotation_matrix(double axis[3], double angle, double R[3][3]);
 void rotate_vector(double v[3], double R[3][3], double result[3]);
 void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3]);
 int kronecker_delta(int i, int j);
+double clamp0(double x);
+int almost_equal(double a, double b, double rel_eps);
 
 void print_divider();
+void print_state_vector(const double *w0, int num_bodies, int num_dim);
 void print_progress_bar(int percent);
 void get_executable_path(char* buffer, size_t size);
 void errorexit(const char *file, const int line, const char *s);

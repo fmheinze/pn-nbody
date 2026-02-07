@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 #include <string.h>
 #include "utils.h"
 #include "parameters.h"
@@ -288,9 +289,21 @@ void set_double_array(const char *name, int n, const double *a) {
 #endif
 }
 
+int set_if_unset_double(double *dst, double val) {
+    if (!is_set_double(*dst) && isfinite(val)) {
+        *dst = val;
+        return 1;
+    }
+    return 0;
+}
+
 
 
 /* Query functions */
+int is_set_double(double x) { 
+    return x >= 0.0; 
+}
+
 char *get_parameter_string(const char* name) {
     tParameter* p = find_parameter(name, 1);
     return p->value; 
@@ -408,4 +421,16 @@ double get_parameter_double_array_entry(const char* name, int index) {
     double result = array[index];
     free(array);
     return result;
+}
+
+
+double get_binary_parameter_double_i(const char *par, int i) {
+    char key[64];
+    if (i == 0) {
+        // Keep your legacy names without the number
+        snprintf(key, sizeof(key), "binary_%s", par);
+    } else {
+        snprintf(key, sizeof(key), "binary%d_%s", i, par);
+    }
+    return get_parameter_double(key);
 }
