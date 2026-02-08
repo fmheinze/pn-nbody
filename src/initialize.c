@@ -25,8 +25,8 @@
  * @brief Initializes needed parameters in the parameter database.
  * 
  * Initializes needed parameters in the parameter database, together with default values 
- * (-1 usually means not set), as well as a short description that contains which values
- * are valid.
+ * (-1 usually means not set, 1 on, 0 off), as well as a short description that contains which 
+ * values are valid.
  */
 void initialize_parameters() 
 {
@@ -36,9 +36,9 @@ void initialize_parameters()
     add_parameter("num_dim", "3", "number of dimensions [2, 3]");
     add_parameter("num_bodies", "0", "number of bodies [1, 2, 3, ...]");
     add_parameter("0pn_terms", "1", "whether to include 0PN (Newtonian) terms [0, 1]");
-    add_parameter("1pn_terms", "1", "whether to include 1PN terms [0, 1]");
-    add_parameter("2pn_terms", "1", "whether to include 2PN terms [0, 1]");
-    add_parameter("2.5pn_terms", "1", "whether to include 2.5PN terms [0, 1]");
+    add_parameter("1pn_terms", "0", "whether to include 1PN terms [0, 1]");
+    add_parameter("2pn_terms", "0", "whether to include 2PN terms [0, 1]");
+    add_parameter("2.5pn_terms", "0", "whether to include 2.5PN terms [0, 1]");
 
     // --------------------------------------------------------------------------------------------
     // Numerical parameters
@@ -48,27 +48,34 @@ void initialize_parameters()
     add_parameter("ode_integrator", "rk4", "which ODE integrator to use [rk4, cash-karp, ...]");
     add_parameter("impulse_method", "0", "whether to use the impulse method");
 
-    // Cash-Karp method specific
+    // Cash-Karp method
     if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
-        add_parameter("rel_error", "1e-6", "target relative error [> 0]");
+        add_parameter("rtol", "-1", "target relative error tolerance [> 0]");
+        add_parameter("dt_max", "-1", "target relative error tolerance [> 0]");
     }
 
-    // Implicit-midpoint method specific
+    // Implicit-midpoint
     if(strcmp(get_parameter_string("ode_integrator"), "implicit-midpoint") == 0) {
-        add_parameter("rel_error", "1e-6", "target relative error [> 0]");
+        add_parameter("tol", "-1", "target error tolerance [> 0]");
+        add_parameter("max_iter", "50", "maximum number of fixed-point interations [> 0]");
     }
 
-    // Impulse method specific
+    // Impulse method
     if(get_parameter_int("impulse_method") == 1) {
         add_parameter("impulse_method_n", "1", "number of substeps for the impulse method");
     }
+
+    // --------------------------------------------------------------------------------------------
+    // Output parameters
+    // --------------------------------------------------------------------------------------------
+    add_parameter("dt_save", "-1", "times at which quantities are written to a file [>= 0]");
 
     // --------------------------------------------------------------------------------------------
     // Initial configuration presets
     // --------------------------------------------------------------------------------------------
     add_parameter("ic_preset", "-1", "specify initial condition preset");
 
-    // Parameters for the Newtonian binary
+    // Newtonian binary
     if(strcmp(get_parameter_string("ic_preset"), "newtonian_binary") == 0) {
         add_parameter("binary_a", "-1", "semi-major axis [> 0]");
         add_parameter("binary_b", "-1", "semi-minor axis [> 0]");
@@ -79,7 +86,7 @@ void initialize_parameters()
         add_parameter("binary_phi0", "0.0", "initial phase");
     }
 
-    // Parameters for the Newtonian binary-single scattering
+    // Newtonian binary-single scattering
     if(strcmp(get_parameter_string("ic_preset"), "binary_single_scattering") == 0) {
         add_parameter("binary_a", "-1", "semi-major axis [> 0]");
         add_parameter("binary_b", "-1", "semi-minor axis [> 0]");
@@ -94,7 +101,7 @@ void initialize_parameters()
         add_parameter("orientation", "-1", "components of the orientation of the binary");
     }
 
-    // Parameters for the relativistic binary-single scattering
+    // Relativistic binary-single scattering
     if(strcmp(get_parameter_string("ic_preset"), "binary_single_scattering_rel") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
@@ -106,7 +113,7 @@ void initialize_parameters()
         add_parameter("binary_phi0", "0.0", "initial phase of the binary [>= 0]");
     }
 
-    // Parameters for the Newtonian binary-single scattering
+    // Newtonian binary-binary scattering
     if(strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("v0_rel", "-1", "initial relative approach velocity [>= 0]");
@@ -129,7 +136,7 @@ void initialize_parameters()
         add_parameter("orientation_2", "-1", "components of the orientation of binary 2");
     }
 
-    // Parameters for the relativistic binary-single scattering
+    // Relativistic binary-binary scattering
     if(strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering_rel") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
@@ -146,7 +153,7 @@ void initialize_parameters()
         add_parameter("binary2_phi0", "0.0", "initial phase for binary 2 [>= 0]");
     }
 
-    // Figure-eight orbit specific
+    // Figure-eight orbit
     if(strcmp(get_parameter_string("ic_preset"), "figure_eight") == 0) {
         add_parameter("figure_eight_width", "1000.0", "width of the figure-eight orbit [> 0]");
     }
@@ -164,12 +171,14 @@ void initialize_parameters()
 
 
 /**
- * @brief Initializes the parameters of ode_params.
- * 
- * Initializes the parameters of ode_params, with the specified values from the parameter database.
- * These contain general information about the system and specifications for the ODE right-hand 
- * side. These parameters are often used at each ODE right-hand side evaluation and are therefore 
- * cached to avoid repeated costly database lookups.
+ * @brief Construct and return an ode_params struct from the parameter database.
+ *
+ * Loads all global simulation/ODE configuration needed by the integrator and the ODE
+ * right-hand side (RHS), and caches them in an ode_params struct to avoid repeated
+ * parameter-database lookups during RHS evaluations. The returned struct contains heap-allocated 
+ * arrays (params.masses and params.pn_terms) and the caller is responsible for freeing these.
+ *
+ * @return Fully initialized ode_params with cached configuration and allocated arrays.
  */
 struct ode_params initialize_ode_params()
 {
@@ -186,7 +195,11 @@ struct ode_params initialize_ode_params()
         params.masses[i] = get_parameter_double_i("mass", i+1);
 
     // PN terms
-    allocate_vector(&params.pn_terms, NUM_PN_TERMS);
+    params.pn_terms = (int *)malloc(NUM_PN_TERMS * sizeof(double));
+    if (params.pn_terms == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
     params.pn_terms[0] = get_parameter_int("0pn_terms");
     params.pn_terms[1] = get_parameter_int("1pn_terms");
     params.pn_terms[2] = get_parameter_int("2pn_terms");
@@ -197,79 +210,17 @@ struct ode_params initialize_ode_params()
 
 
 /**
- * @brief Initializes the state vector w0 based on specified values.
+ * @brief Load, complete, and validate orbital parameters for a binary.
+ *
+ * Reads the orbital parameter set for binary i from the parameter database and returns a
+ * fully-initialized binary_params struct. Unspecified values must be set to -1 in the database.
+ * The function loads all supported orbital parameters, validates any user-specified values,
+ * infers missing parameters from the specified ones, and verifies that the resulting set is 
+ * self-consistent. At least two orbital parameters (in addition to phi0) must be specified to 
+ * determine a unique orbit, otherwise the function aborts with an error.
  * 
- * Initializes the state vector w0 based on either the individually specified values for the 
- * initial positions and momenta of each body, or on the specified parameters for an initial 
- * condition preset.
- * 
- * @param[in]   ode_params      Parameter struct containing general information about the system
- * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
- */
-double* initialize_state_vector(struct ode_params* ode_params)
-{
-    int num_dim = ode_params->num_dim;
-    int num_bodies = ode_params->num_bodies;
-
-    // Allocate state vector
-    double* w0;
-    allocate_vector(&w0, 2 * num_dim * num_bodies);
-
-    // Check whether an initial condition preset has been selected and initialize w0 accordinly
-    const char *preset = get_parameter_string("ic_preset");
-    if (preset && preset[0] != '\0') {
-        if (strcmp(preset, "newtonian_binary") == 0)
-            initialize_newtonian_binary(ode_params, w0);
-
-        else if (strcmp(preset, "binary_single_scattering") == 0)
-            initialize_binary_single_scattering(ode_params, w0);
-
-        else if (strcmp(preset, "binary_single_scattering_rel") == 0)
-            initialize_binary_single_scattering_rel(ode_params, w0);
-
-        else if (strcmp(preset, "binary_binary_scattering") == 0)
-            initialize_binary_binary_scattering(ode_params, w0);
-        
-        else if (strcmp(preset, "binary_binary_scattering_rel") == 0)
-            initialize_binary_binary_scattering_rel(ode_params, w0);
-
-        else if (strcmp(preset, "figure_eight") == 0)
-            initialize_figure_eight(ode_params, w0);
-
-        else errorexit("Unknown ic_preset");
-
-        // Print the computed initial positions and momenta
-        printf("Computed initial positions and momenta from the initial condition preset:\n");
-        print_state_vector(w0, num_bodies, num_dim);
-        print_divider();
-    }
-    // If no initial condition preset has been selected, use specified positions and momenta
-    else {
-        for (int i = 0; i < num_bodies; i++) {
-            double* pos = get_parameter_double_array_i("pos", i+1); 
-            double* p = get_parameter_double_array_i("p", i+1); 
-            for (int j = 0; j < num_dim; j++) {
-                w0[i * num_dim + j] = pos[j];
-                w0[num_dim * num_bodies + i * num_dim + j] = p[j];
-            }
-            free_vector(pos);
-            free_vector(p);
-        }  
-    }
-    return w0;
-}
-
-
-/**
- * @brief Initializes a binary_params struct based on specified parameters.
- * 
- * Initializes a binary_params struct based on the specified parameters of binary i in the 
- * parameter database. It loads the values from the database, checks them for validity, computes
- * missing values based on the specified ones (at least two binary parameters need to be specified
- * besides phi0), checks for consistency and finally prints all the binary parameters.
- * 
- * @param[in]    i              Index of binary (set to 0 if the system contains only one binary)
- * @param[out]   binary_params  Struct containing the binary parameters
+ * @param[in]   i   Binary index (use 0 for the default/unindexed "binary_*" parameter set)
+ * @return A fully initialized binary_params struct
  */
 struct binary_params initialize_binary_params(int i)
 {
@@ -479,6 +430,72 @@ struct binary_params initialize_binary_params(int i)
     print_divider();
 
     return params;
+}
+
+
+/**
+ * @brief Build and return the initial state vector w0.
+ *
+ * Allocates and initializes the state vector w0 = [x_1, ..., x_N, p_1, ..., p_N] with 
+ * N = ode_params->num_bodies and each x_i, p_i having dimension D = ode_params->num_dim.
+ * The initialization is done either from an initial-condition preset (ic_preset), or from 
+ * user-specified per-body arrays ("pos" and "p") if no preset is selected.
+ *
+ * @param[in]   ode_params      Parameter struct containing general information about the system
+ * @return Pointer to a newly allocated state vector of length 2 * N * D.
+ *         The caller owns the memory and must free it with the appropriate deallocator.
+ */
+double* initialize_state_vector(struct ode_params* ode_params)
+{
+    int num_dim = ode_params->num_dim;
+    int num_bodies = ode_params->num_bodies;
+
+    // Allocate state vector
+    double* w0;
+    allocate_vector(&w0, 2 * num_dim * num_bodies);
+
+    // Check whether an initial condition preset has been selected and initialize w0 accordinly
+    const char *preset = get_parameter_string("ic_preset");
+    if (strcmp(preset, "-1") != 0) {
+        if (strcmp(preset, "newtonian_binary") == 0)
+            initialize_newtonian_binary(ode_params, w0);
+
+        else if (strcmp(preset, "binary_single_scattering") == 0)
+            initialize_binary_single_scattering(ode_params, w0);
+
+        else if (strcmp(preset, "binary_single_scattering_rel") == 0)
+            initialize_binary_single_scattering_rel(ode_params, w0);
+
+        else if (strcmp(preset, "binary_binary_scattering") == 0)
+            initialize_binary_binary_scattering(ode_params, w0);
+        
+        else if (strcmp(preset, "binary_binary_scattering_rel") == 0)
+            initialize_binary_binary_scattering_rel(ode_params, w0);
+
+        else if (strcmp(preset, "figure_eight") == 0)
+            initialize_figure_eight(ode_params, w0);
+
+        else errorexit("Unknown ic_preset");
+
+        // Print the computed initial positions and momenta
+        printf("Computed initial positions and momenta from the initial condition preset:\n");
+        print_state_vector(w0, num_bodies, num_dim);
+        print_divider();
+    }
+    // If no initial condition preset has been selected, use specified positions and momenta
+    else {
+        for (int i = 0; i < num_bodies; i++) {
+            double* pos = get_parameter_double_array_i("pos", i+1); 
+            double* p = get_parameter_double_array_i("p", i+1); 
+            for (int j = 0; j < num_dim; j++) {
+                w0[i * num_dim + j] = pos[j];
+                w0[num_dim * num_bodies + i * num_dim + j] = p[j];
+            }
+            free_vector(pos);
+            free_vector(p);
+        }  
+    }
+    return w0;
 }
 
 

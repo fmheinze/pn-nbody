@@ -31,7 +31,9 @@ int almost_equal(double a, double b, double rel_eps);
 void print_divider();
 void print_state_vector(const double *w0, int num_bodies, int num_dim);
 void print_progress_bar(int percent);
+void progress_bar_break_line();
 void get_executable_path(char* buffer, size_t size);
+void mkdir_or_die(const char *path, mode_t mode);
 void errorexit(const char *file, const int line, const char *s);
 #define errorexit(s) errorexit(__FILE__, __LINE__, (s))
 

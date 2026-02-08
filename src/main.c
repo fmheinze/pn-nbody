@@ -1,3 +1,12 @@
+/**
+ * @file main.c
+ * @brief Main program entry point and high-level control flow.
+ *
+ * High-level control flow for reading the command line, initializing parameters and initial
+ * conditions and performing the numerical ODE integration.
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,13 +24,15 @@
 #include "pn_eom_hamiltonians.h"
 
 
-static void mkdir_or_die(const char *path, mode_t mode) {
-    if (mkdir(path, mode) != 0 && errno != EEXIST) {
-        fprintf(stderr, "Error: mkdir('%s') failed: %s\n", path, strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-}
-
+/**
+ * @brief Parses command-line arguments and creates output directory.
+ * 
+ * Parses command-line arguments, creates the project output directory, and initializes the 
+ * parameter database by adding the first parameters (parameter file name and output directory)
+ * 
+ * @param[in]   argc    Number of command-line arguments
+ * @param[in]   argv    Array of command-line argument strings
+ */
 void read_command_line(int argc, char** argv)
 {
     if (argc != 2)
@@ -34,11 +45,11 @@ void read_command_line(int argc, char** argv)
     if (!strstr(parfile, ".par")) strcat(parfile, ".par");
 
     // Extract base name (without .par)
-    char *base_ptr = basename(parfile);        // points into 'parfile'
+    char *base_ptr = basename(parfile);
     char *dot = strstr(base_ptr, ".par");
-    if (dot) *dot = '\0';                      // now base_ptr is just the stem
+    if (dot) *dot = '\0';
 
-    // Use current working directory instead of a hardcoded absolute path
+    // Use current working directory
     char cwd[PATH_MAX];
     if (!getcwd(cwd, sizeof(cwd))) {
         fprintf(stderr, "Error: getcwd failed: %s\n", strerror(errno));
@@ -62,7 +73,19 @@ void read_command_line(int argc, char** argv)
 }
 
 
-int main(int argc, char** argv) {
+/**
+ * @brief Program entry point.
+ * 
+ * Parses command-line arguments, initializes the simulation, executes the numerical ODE 
+ * integration, and performs the final cleanup.
+ * 
+ * @param[in]   argc    Number of command-line arguments
+ * @param[in]   argv    Array of command-line argument strings
+ * @return EXIT_SUCCESS on successful completion,
+ *         EXIT_FALIURE if an error occurs during execution.
+ */
+int main(int argc, char** argv) 
+{
     print_divider();
     printf("Welcome to pn-nbody\n");
     print_divider();
@@ -81,7 +104,7 @@ int main(int argc, char** argv) {
     // Run simulation
     printf("Running simulation...\n"); 
     if (get_parameter_int("impulse_method")) {
-        impulse_integrator(w, rhs_pn_nbody, compute_dUTT4_dx, &params);
+        ode_integrator_impulse(w, rhs_pn_nbody, compute_dUTT4_dx, &params);
     }
     else {
         ode_integrator(w, rhs_pn_nbody, &params);
@@ -93,5 +116,5 @@ int main(int argc, char** argv) {
     printf("The simulation has finished! Thanks for using pn-nbody!\n");
     free_vector(w);
     free_ode_params(&params);
-    return 0;
+    return EXIT_SUCCESS;
 }
