@@ -1,3 +1,12 @@
+/**
+ * @file integration.c
+ * @brief Routines for the numerical integration of ODEs
+ *
+ * Routines for the numerical integration of ODEs, including single-step methods, method drivers,
+ * high-level control flow for method selection and writing output, as well as helper functions.
+ */
+
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -40,8 +49,8 @@ static void check_integration_parameter_validity()
     double t_end = get_parameter_double("t_end");
     double dt = get_parameter_double("dt");
     int impulse_method = get_parameter_int("impulse_method");
-    if(t_end < 0.0) errorexit("Please specify a valid t_end (t_end >= 0)");
-    if(dt <= 0.0) errorexit("Please specify a valid dt (dt > 0)");
+    if(t_end < 0.0) errorexit("Please specify a valid t_end (must be t_end >= 0)");
+    if(dt <= 0.0) errorexit("Please specify a valid dt (must be dt > 0)");
     if(impulse_method != 0 && impulse_method != 1) 
         errorexit("Please set impulse_method to 0 (off) or 1 (on)");
 
@@ -49,7 +58,7 @@ static void check_integration_parameter_validity()
     if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
         double rtol = get_parameter_double("rtol");
         if(rtol <= 0.0) 
-            errorexit("Please specify a valid rtol of the Cash-Karp method (rtol > 0)");
+            errorexit("Please specify a valid rtol of the Cash-Karp method (must be rtol > 0)");
     }
 
     // Implicit-midpoint method
@@ -57,15 +66,15 @@ static void check_integration_parameter_validity()
         double tol = get_parameter_double("tol");
         int max_iter = get_parameter_int("max_iter");
         if(tol <= 0.0)
-            errorexit("Please specify a valid tol for the implicit midpoint method (tol > 0)");
-        if(max_iter <= 0) errorexit("Please specify a valid max_iter (max_iter > 0)");
+            errorexit("Please specify a valid tol (must be tol > 0)");
+        if(max_iter <= 0) errorexit("Please specify a valid max_iter (must be max_iter > 0)");
     }
 
     // Impulse method
     if(get_parameter_int("impulse_method") == 1) {
         int impulse_method_n = get_parameter_int("impulse_method_n");
         if(impulse_method_n <= 0) 
-            errorexit("Please specify a valid impulse_method_n (impulse_method_n > 0)");
+            errorexit("Please specify a valid impulse_method_n (must be impulse_method_n > 0)");
     }
 }
 
@@ -427,8 +436,8 @@ void ode_integrator(double* w, ode_rhs ode_rhs, struct ode_params* ode_params)
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_masses, *file_pos, *file_mom, *file_energy;
-    output_init(&file_masses, &file_pos, &file_mom, &file_energy, ode_params);
+    FILE *file_mass, *file_pos, *file_mom, *file_energy;
+    output_init(&file_mass, &file_pos, &file_mom, &file_energy, ode_params);
     output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
 
     // Iterate until the final time
@@ -496,7 +505,7 @@ void ode_integrator(double* w, ode_rhs ode_rhs, struct ode_params* ode_params)
 
     // Cleanup
     ode_ws_free(&ws);
-    fclose(file_masses);
+    fclose(file_mass);
     fclose(file_pos);
     fclose(file_mom);
     fclose(file_energy);
@@ -680,8 +689,8 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_masses, *file_pos, *file_mom, *file_energy;
-    output_init(&file_masses, &file_pos, &file_mom, &file_energy, params);
+    FILE *file_mass, *file_pos, *file_mom, *file_energy;
+    output_init(&file_mass, &file_pos, &file_mom, &file_energy, params);
     output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
 
     // Cache gradient to reuse between steps:
@@ -728,7 +737,7 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     }
 
     // Cleanup
-    fclose(file_masses);
+    fclose(file_mass);
     fclose(file_pos);
     fclose(file_mom);
     fclose(file_energy);
