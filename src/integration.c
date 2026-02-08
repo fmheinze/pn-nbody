@@ -6,7 +6,6 @@
  * high-level control flow for method selection and writing output, as well as helper functions.
  */
 
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

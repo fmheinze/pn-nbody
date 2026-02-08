@@ -1,3 +1,11 @@
+/**
+ * @file parameters.c
+ * @brief Functions for managing the parameter database.
+ *
+ * Functions for managing the parameter database, e.g. parsing parameter files, creating,
+ * querying and modifying parameters.
+ */
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,21 +14,29 @@
 #include "utils.h"
 #include "parameters.h"
 
+
 // Parameter database
 tParameter* pdb;
 
 // Number of parameters
 int npdb, npdbmax = 1000;
 
-// Parse a given parameter file
+
+/**
+ * @brief Parses a given parameter file.
+ * 
+ * Parses a given parameter file and writes the parameter values to the parameter database.
+ * If a line starts with a #, it is seen as a comment. Multiple white spaces and " are collapsed
+ * to a single space.
+ * 
+ * @param[in]   parfile     Path to the parameter file
+ */
 void parse_parameter_file(const char *parfile)
 {
     FILE* fp;
     int c, i, j;
-    int nbuffer;
-    char *buffer;
-    char *par, *val;
-    int lpar, lval;
+    int nbuffer, lpar, lval;
+    char *buffer, *par, *val;
 
     // Read file into memory, add one space at end and beginning
     fp = fopen(parfile, "r");
@@ -79,7 +95,7 @@ void parse_parameter_file(const char *parfile)
             buffer[j-1] = '\0';
         }
     }
-
+    
     // Loop over all parameter/value pairs and make/set the parameter values
     for (i = 1; i < nbuffer; i += lpar + lval + 2) {
         par = buffer+i;
@@ -96,12 +112,12 @@ void parse_parameter_file(const char *parfile)
 }
 
 
-/***************************************************************************/
-/* Functions for the parameter database */
+// ------------------------------------------------------------------------------------------------
+// Helper functions for the parameter database
+// ------------------------------------------------------------------------------------------------
 
-/* Make new parameter in parameter database, merge if already there */
-void make_parameter(const char *name, const char *value, const char *description)
-{
+// Create a new parameter in parameter database, merge if already there
+static void make_parameter(const char *name, const char *value, const char *description) {
     static int firstcall = 1;
     tParameter* p;
 
@@ -122,8 +138,9 @@ void make_parameter(const char *name, const char *value, const char *description
         p->value = (char *) calloc(sizeof(char), strlen(value)+1);
         strcpy(p->name, name);
         strcpy(p->value, value);
+    } 
     // If it is already there, update the description
-    } else {
+    else {
         free(p->description);
     }
     p->description = (char *) calloc(sizeof(char), strlen(description)+1);
@@ -136,15 +153,11 @@ void make_parameter(const char *name, const char *value, const char *description
 }
 
 
-/* Free parameter database memory */
-void free_parameters()
-{
+// Free parameter database memory
+static void free_parameters() {
     if (!pdb) return;
 
     for (int i = 0; i < npdb; i++) {
-        #if DEBUG_PARAMETERS
-            printf("Delete parameter %d: %s\n", i, pdb[i].name);
-        #endif
         free(pdb[i].name);
         free(pdb[i].value);
         free(pdb[i].description);
@@ -156,9 +169,8 @@ void free_parameters()
 }
 
 
-/* Set parameter in the parameter database */
-void set_parameter(const char* name, const char* value)
-{
+// Set parameter in the parameter database
+static void set_parameter(const char* name, const char* value) {
     tParameter* p = find_parameter(name, 1);
     if (!p)
         errorexit("set_parameter: parameter not found or could not be created.");
@@ -170,9 +182,8 @@ void set_parameter(const char* name, const char* value)
 }
 
 
-/* Find parameter in the parameter database */
-tParameter* find_parameter(const char* name, const int fatal)
-{
+// Find parameter in the parameter database
+static tParameter* find_parameter(const char* name, const int fatal) {
     if (!name) 
         errorexit("find_parameter: called without parameter name");
 
@@ -188,24 +199,19 @@ tParameter* find_parameter(const char* name, const int fatal)
 }
 
 
-/* Print all parameters in the parameter database */
-void print_parameters(void) {
-    for (int i = 0; i < npdb; i++)
-        printf("pdb[%3d]:  %16s = %-16s\n", i, pdb[i].name, pdb[i].value);
-}
+// ------------------------------------------------------------------------------------------------
+// Functions for external calls
+// ------------------------------------------------------------------------------------------------
 
 
-/***************************************************************************/
-/* Functions for external calls */
+/* --- Creation functions --- */
 
-/* Creation functions */
 void add_parameter(const char* name, const char* value, const char* description) {
     make_parameter(name, value, description);
     printf("%-30s  =  %s\n", name, get_parameter_string(name));
 }
 
 void add_parameter_i(const char* name, const int i, const char* value, const char* description) {
-    // Adds a parameter with an additional integer i at the end
     char new[100];
     sprintf(new, "%s%d", name, i);
     make_parameter(new, value, description);
@@ -213,7 +219,8 @@ void add_parameter_i(const char* name, const int i, const char* value, const cha
 }
 
 
-/* Assignment functions */
+/* --- Assignment functions --- */
+
 void set_parameter_string(const char* name, const char *value) {
     set_parameter(name, value);
 }
@@ -268,8 +275,8 @@ int set_if_unset_double(double *dst, double val) {
 }
 
 
+/* --- Query functions --- */
 
-/* Query functions */
 int is_set_double(double x) { 
     return x >= 0.0; 
 }
@@ -290,7 +297,6 @@ double get_parameter_double(const char* name) {
 }
 
 double get_parameter_double_i(const char* name, int i) {
-    // Gets the values of parameter name indexed with i
     char new[100];
     sprintf(new, "%s%d", name, i);
     return get_parameter_double(new);
@@ -349,7 +355,6 @@ double* get_parameter_double_array(const char* name) {
 }
 
 double* get_parameter_double_array_i(const char* name, const int i) {
-    // Gets the values of parameter name indexed with i
     char new[100];
     sprintf(new, "%s%d", name, i);
     return get_parameter_double_array(new);
@@ -393,14 +398,11 @@ double get_parameter_double_array_entry(const char* name, int index) {
     return result;
 }
 
-
 double get_binary_parameter_double_i(const char *par, int i) {
     char key[64];
-    if (i == 0) {
-        // Keep your legacy names without the number
+    if (i == 0)
         snprintf(key, sizeof(key), "binary_%s", par);
-    } else {
+    else
         snprintf(key, sizeof(key), "binary%d_%s", i, par);
-    }
     return get_parameter_double(key);
 }

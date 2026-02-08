@@ -9,20 +9,16 @@ typedef struct {
 } tParameter;
 
 void parse_parameter_file(const char *parfile);
-void make_parameter(const char *name, const char *value, const char *description);
-void free_parameters();
-void set_parameter(const char *name, const char *value);
-tParameter* find_parameter(const char *name, const int fatal);
-void print_parameters(void);
 
 void add_parameter(const char *name, const char *value, const char *description);
 void add_parameter_i(const char *name, const int i, const char *value, const char *description);
-void AppPar(const char *name, const char *value);
+
 void set_parameter_string(const char *name, const char *value);
 void set_parameter_int(const char *name, const int i);
 void set_parameter_double(const char *name, const double d);
 void set_double_array(const char *name, int n, const double *a);
 int set_if_unset_double(double *dst, double val);
+
 int is_set_double(double x);
 char *get_parameter_string(const char *name);
 int get_parameter_int(const char *name);

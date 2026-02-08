@@ -3,7 +3,6 @@
 #ifndef INTEGRATION_H
 #define INTEGRATION_H
 
-
 #define ODE_WS_MAXSIZE 9
 
 struct ode_ws {
