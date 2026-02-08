@@ -5,6 +5,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <limits.h>
+#include <libgen.h>
 #include <errno.h>
 #include "utils.h"
 #include "pn_eom.h"
@@ -281,13 +283,40 @@ void progress_bar_break_line() {
 }
 
 
-void get_executable_path(char* buffer, size_t size) {
-    ssize_t len = readlink("/proc/self/exe", buffer, size - 1);
-    if (len != -1) {
-        buffer[len] = '\0';
-    } else {
-        errorexit("Could not read executable path");
+int get_executable_dir(char out_dir[PATH_MAX])
+{
+    char exe_path[PATH_MAX];
+
+#ifdef __APPLE__
+    uint32_t size = (uint32_t)sizeof(exe_path);
+    if (_NSGetExecutablePath(exe_path, &size) != 0) {
+        // Buffer too small (shouldn't happen with PATH_MAX, but handle anyway)
+        errno = ENAMETOOLONG;
+        return 1;
     }
+    // _NSGetExecutablePath may return a path with ../; normalize it
+    char resolved[PATH_MAX];
+    if (!realpath(exe_path, resolved)) return 1;
+    snprintf(exe_path, sizeof(exe_path), "%s", resolved);
+#else
+    ssize_t len = readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+    if (len < 0) return 1;
+    exe_path[len] = '\0';
+#endif
+
+    // dirname() may modify its input, so use a temp buffer
+    char tmp[PATH_MAX];
+    snprintf(tmp, sizeof(tmp), "%s", exe_path);
+
+    char *dir = dirname(tmp);
+    if (!dir) return 1;
+
+    // Normalize directory to an absolute path
+    char resolved_dir[PATH_MAX];
+    if (!realpath(dir, resolved_dir)) return 1;
+
+    snprintf(out_dir, PATH_MAX, "%s", resolved_dir);
+    return 0;
 }
 
 
