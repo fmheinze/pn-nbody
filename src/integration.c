@@ -88,11 +88,11 @@ static void check_integration_parameter_validity()
  * @param[in]       w_size      Number of values in state w
  * @param[in]       t           Current time
  * @param[in]       dt          Timestep
- * @param[in]       ode_rhs     Pointer to the function that specifies the ODE right-hand side
+ * @param[in]       rhs         Pointer to the function that specifies the ODE right-hand side
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * @param[in]       ws          ODE workspace for storing intermediate results
  */
-static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs ode_rhs, 
+static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs rhs, 
     struct ode_params* ode_params, struct ode_ws* ws) 
 {
     // ODE workspace setup
@@ -106,17 +106,17 @@ static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs ode_r
     double t_dt_half = t + dt_half;
 
     // Compute k1/dt
-    ode_rhs(t, w, ode_params, k1);
+    rhs(t, w, ode_params, k1);
 
     // Compute k2/dt
     for (int i = 0; i < w_size; i++)
         w_temp[i] = w[i] + dt_half * k1[i];
-    ode_rhs(t_dt_half, w_temp, ode_params, k_temp1);
+    rhs(t_dt_half, w_temp, ode_params, k_temp1);
 
     // Compute k3/dt
     for (int i = 0; i < w_size; i++)
         w_temp[i] = w[i] + dt_half * k_temp1[i];
-    ode_rhs(t_dt_half, w_temp, ode_params, k_temp2);
+    rhs(t_dt_half, w_temp, ode_params, k_temp2);
 
     // Compute k4/dt
     for (int i = 0; i < w_size; i++) {
@@ -124,7 +124,7 @@ static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs ode_r
         // Combine k2/dt and k3/dt in the same variable as they have the same coefficient later
         k_temp1[i] += k_temp2[i];
     }
-    ode_rhs(t + dt, w_temp, ode_params, k_temp2);
+    rhs(t + dt, w_temp, ode_params, k_temp2);
 
     // Update y
     for (int i = 0; i < w_size; i++)
@@ -145,7 +145,7 @@ static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs ode_r
  * @param[in]       w_size      Number of values in state w
  * @param[in]       t           Current time
  * @param[in]       dt          Timestep
- * @param[in]       ode_rhs     Pointer to the function that specifies the ODE right-hand side
+ * @param[in]       rhs         Pointer to the function that specifies the ODE right-hand side
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * @param[in]       tol         Tolerance for the convergence criterion
  * @param[in]       max_iter    Maximum number of iterations in the fixed-point iteration
@@ -154,7 +154,7 @@ static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs ode_r
  * 
  * TODO: Implement a residual-based convergence criterion
  */
-static int implicit_midpoint_update(double* w, int w_size, double t, double dt, ode_rhs ode_rhs, 
+static int implicit_midpoint_update(double* w, int w_size, double t, double dt, ode_rhs rhs, 
     struct ode_params* ode_params, double tol, int max_iter, struct ode_ws* ws)
 {
     // ODE workspace setup
@@ -165,7 +165,7 @@ static int implicit_midpoint_update(double* w, int w_size, double t, double dt, 
     double* w_guess = ws_vec(ws, 3);
 
     // Predictor: explicit Euler
-    ode_rhs(t, w, ode_params, f0);
+    rhs(t, w, ode_params, f0);
     for (int i = 0; i < w_size; ++i)
         w_guess[i] = w[i] + dt * f0[i];
 
@@ -177,7 +177,7 @@ static int implicit_midpoint_update(double* w, int w_size, double t, double dt, 
         for (int i = 0; i < w_size; ++i)
             w_mid[i] = 0.5 * (w[i] + w_guess[i]);
 
-        ode_rhs(t_mid, w_mid, ode_params, f_mid);
+        rhs(t_mid, w_mid, ode_params, f_mid);
 
         double max_delta = 0.0;
         double max_scale = 1.0;
@@ -226,13 +226,13 @@ static int implicit_midpoint_update(double* w, int w_size, double t, double dt, 
  * @param[in]   w_size      Number of values in state w
  * @param[in]   t           Current time
  * @param[in]   dt          Timestep
- * @param[in]   ode_rhs     Pointer to the function that specifies the ODE right-hand side
+ * @param[in]   rhs         Pointer to the function that specifies the ODE right-hand side
  * @param[in]   ode_params  Parameter struct containing general information about the system
  * @param[in]   k1          Pointer to k1/dt (doesn't need to be computed multiple times)
  * @param[in]   ws          ODE workspace for storing intermediate results
  */
 static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size, double t, 
-    double dt, ode_rhs ode_rhs, struct ode_params* ode_params, double* k1, struct ode_ws* ws)
+    double dt, ode_rhs rhs, struct ode_params* ode_params, double* k1, struct ode_ws* ws)
 {
     // ODE workspace setup
     ws_check(ws, w_size);
@@ -260,27 +260,27 @@ static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size
     // Compute k2/dt
     for (int i = 0; i < w_size; i++)
         w_temp[i] = w[i] + b21 * dt * k1[i];
-    ode_rhs(t + a2 * dt, w_temp, ode_params, k2);
+    rhs(t + a2 * dt, w_temp, ode_params, k2);
 
     // Compute k3/dt
     for (int i = 0; i < w_size; i++)
         w_temp[i] = w[i] + dt * (b31 * k1[i] + b32 * k2[i]);
-    ode_rhs(t + a3 * dt, w_temp, ode_params, k3);
+    rhs(t + a3 * dt, w_temp, ode_params, k3);
 
     // Compute k4/dt
     for (int i = 0; i < w_size; i++)
         w_temp[i] = w[i] + dt * (b41 * k1[i] + b42 * k2[i] + b43 * k3[i]);
-    ode_rhs(t + a4 * dt, w_temp, ode_params, k4);
+    rhs(t + a4 * dt, w_temp, ode_params, k4);
 
     // Compute k5/dt
     for (int i = 0; i < w_size; i++)
         w_temp[i] = w[i] + dt * (b51 * k1[i] + b52 * k2[i] + b53 * k3[i] + b54 * k4[i]);
-    ode_rhs(t + a5 * dt, w_temp, ode_params, k5);
+    rhs(t + a5 * dt, w_temp, ode_params, k5);
 
     // Compute k6/dt
     for (int i = 0; i < w_size; i++)
         w_temp[i] = w[i] + dt * (b61 * k1[i] + b62 * k2[i] + b63 * k3[i] + b64 * k4[i] + b65 * k5[i]);
-    ode_rhs(t + a6 * dt, w_temp, ode_params, k6);
+    rhs(t + a6 * dt, w_temp, ode_params, k6);
 
     // Update y (c2 and c5 are zero for RK5)
     for (int i = 0; i < w_size; i++)
@@ -308,13 +308,13 @@ static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size
  * @param[in,out]   dt          Timestep (gets updated)
  * @param[in]       dt_max      Maximum timestep
  * @param[in]       rtol        Error tolerance
- * @param[in]       ode_rhs     Pointer to the function that specifies the ODE right-hand side
+ * @param[in]       rhs         Pointer to the function that specifies the ODE right-hand side
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * @param[in]       ws          ODE workspace for storing intermediate results
  * @return Outcome of the Cash-Karp step (0 success, 1 failed)
  */
 static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double dt_max, 
-    double rtol, ode_rhs ode_rhs, struct ode_params* ode_params, struct ode_ws *ws)
+    double rtol, ode_rhs rhs, struct ode_params* ode_params, struct ode_ws *ws)
 {
     if (!(rtol > 0.0)) return 1;
 
@@ -333,14 +333,14 @@ static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double
     double *w_temp = ws_vec(ws, 2);
 
     // Compute k1/dx (the same for each time step, only needs to be computed once)
-    ode_rhs(*t, w, ode_params, k1);
+    rhs(*t, w, ode_params, k1);
 
     // Compute step as long as the estimated error is larger than the specified error threshold
     double dt_temp;
     for (int it = 0; it < MAX_REJECT; it++) {
 
         // Perform a Cash-Karp step and get the updated values w and the error estimates w_err
-        cash_karp_update(w, w_temp, w_err, w_size, *t, *dt, ode_rhs, ode_params, k1, ws);
+        cash_karp_update(w, w_temp, w_err, w_size, *t, *dt, rhs, ode_params, k1, ws);
 
         // Compute scaled error estimate
         double max_error = 0.0;
@@ -387,12 +387,12 @@ static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double
  * is written to files at user-specified intervals.
  * 
  * @param[in,out]   w           State vector (on input initial state, on output final state)
- * @param[in]       ode_rhs     Pointer to the function that specifies the ODE right-hand side
+ * @param[in]       rhs         Pointer to the function that specifies the ODE right-hand side
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * 
  * TODO: Add interpolator for writing outputs at exactly the right times
  */
-void ode_integrator(double* w, ode_rhs ode_rhs, struct ode_params* ode_params)
+void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 {
     // Determine integration method 
     ode_method m = M_UNKNOWN;
@@ -449,7 +449,7 @@ void ode_integrator(double* w, ode_rhs ode_rhs, struct ode_params* ode_params)
         switch (m) {
             case M_CASH_KARP:
                 // The Cash-Karp driver updates t_current and dt internally
-                failure = cash_karp_driver(w, w_size, &t_current, &dt, dt_max, rtol, ode_rhs,
+                failure = cash_karp_driver(w, w_size, &t_current, &dt, dt_max, rtol, rhs,
                     ode_params, &ws);
 
                 // Use RK4 if the Cash-Karp method is stuck
@@ -459,18 +459,18 @@ void ode_integrator(double* w, ode_rhs ode_rhs, struct ode_params* ode_params)
                         "t = %.7g, using RK4 for this timestep instead.\n", t_current);
                     if (t_current + dt == t_current)
                         errorexit("Stepsize underflow in ode_integrator");
-                    rk4_update(w, w_size, t_current, dt, ode_rhs, ode_params, &ws);
+                    rk4_update(w, w_size, t_current, dt, rhs, ode_params, &ws);
                     t_current += dt;
                 }
                 break;
 
             case M_RK4:
-                rk4_update(w, w_size, t_current, dt, ode_rhs, ode_params, &ws);
+                rk4_update(w, w_size, t_current, dt, rhs, ode_params, &ws);
                 t_current += dt;
                 break;
 
             case M_IMPLICIT_MIDPOINT:
-                failure = implicit_midpoint_update(w, w_size, t_current, dt, ode_rhs,
+                failure = implicit_midpoint_update(w, w_size, t_current, dt, rhs,
                     ode_params, tol, max_iter, &ws);
             
                 // Use RK4 if the fixed-point iteration did not converge
@@ -478,13 +478,13 @@ void ode_integrator(double* w, ode_rhs ode_rhs, struct ode_params* ode_params)
                     progress_bar_break_line();
                     fprintf(stderr, "Warning: The implicit midpoint method did not converge at "
                         "t = %.7g, using RK4 for this timestep instead.\n", t_current);
-                    rk4_update(w, w_size, t_current, dt, ode_rhs, ode_params, &ws);
+                    rk4_update(w, w_size, t_current, dt, rhs, ode_params, &ws);
                 }
                 t_current += dt;
                 break;
 
             default:
-                rk4_update(w, w_size, t_current, dt, ode_rhs, ode_params, &ws);
+                rk4_update(w, w_size, t_current, dt, rhs, ode_params, &ws);
                 t_current += dt;
                 break;
         }

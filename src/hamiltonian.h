@@ -1,5 +1,5 @@
-#ifndef HAMILTONIANS_H
-#define HAMILTONIANS_H
+#ifndef HAMILTONIAN_H
+#define HAMILTONIAN_H
 
 #include <complex.h>
 

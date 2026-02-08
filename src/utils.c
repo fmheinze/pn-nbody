@@ -1,3 +1,11 @@
+/**
+ * @file utils.c
+ * @brief Various small useful functions.
+ *
+ * Various small useful functions, e.g. for allocation/freeing, mathematics, printing or
+ * system calls.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,7 +21,9 @@
 #include "math.h"
 
 
-// ------------------- Allocation/Free ------------------- //
+// ------------------------------------------------------------------------------------------------
+// Allocate / free
+// ------------------------------------------------------------------------------------------------
 
 void allocate_vector(double** ptr, int num_elements) {
     *ptr = (double *)malloc(num_elements * sizeof(double));
@@ -48,7 +58,8 @@ void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_
     }
 }
 
-void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors, int num_elements) {
+void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors, 
+    int num_elements) {
     // Allocate memory for the array of 2D arrays
     *ptr = (double ****)malloc(num_3d_arrays * sizeof(double ***));
     if (*ptr == NULL) {
@@ -101,8 +112,9 @@ void free_ode_params(struct ode_params* params) {
 }
 
 
-
-// --------------------- Math Utils --------------------- //
+// ------------------------------------------------------------------------------------------------
+// Math utils
+// ------------------------------------------------------------------------------------------------
 
 double dot_product(double *a, double *b, int dim) {
     double result = 0;
@@ -123,6 +135,7 @@ complex double dot_product_c(complex double *a, complex double *b, int dim) {
 double norm(double *v, int dim) {
     return sqrt(dot_product(v, v, dim));
 }
+
 
 complex double norm_c(complex double *v, int dim) {
     return csqrt(dot_product_c(v, v, dim));
@@ -151,7 +164,7 @@ void create_rotation_matrix(double axis[3], double angle, double R[3][3]) {
     double s = sin(angle);
     double t = 1.0 - c;
 
-    double axis_norm[3];
+    double axis_norm[3] = {0.0, 0.0, 0.0};
     normalize(axis, axis_norm);
 
     R[0][0] = t * axis_norm[0] * axis_norm[0] + c;
@@ -181,8 +194,8 @@ void rotate_vector(double v[3], double R[3][3], double result[3]) {
 
 
 void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3]) {
-    double v_norm[3];
-    double v_target_norm[3];
+    double v_norm[3] = {0.0, 0.0, 0.0};
+    double v_target_norm[3] = {0.0, 0.0, 0.0};
     normalize(v, v_norm);
     normalize(v_target, v_target_norm);
 
@@ -221,9 +234,11 @@ int delta(int i, int j) {
     return (i == j) ? 1 : 0;
 }
 
+
 double clamp0(double x) { 
     return (x < 0.0) ? 0.0 : x; 
 }
+
 
 int almost_equal(double a, double b, double rel_eps) {
     double diff = fabs(a - b);
@@ -233,7 +248,9 @@ int almost_equal(double a, double b, double rel_eps) {
 }
 
 
-// --------------------- Miscellaneous --------------------- //
+// ------------------------------------------------------------------------------------------------
+// Print output
+// ------------------------------------------------------------------------------------------------
 
 void print_divider() {
     printf("----------------------------------------------------------------------------------\n");
@@ -262,7 +279,7 @@ void print_state_vector(const double *w0, int num_bodies, int num_dim) {
 
 
 void print_progress_bar(int percent) {
-    const int bar_width = 50;
+    const int bar_width = 75;
     int filled = (percent * bar_width) / 100;
 
     printf("\r[");
@@ -282,6 +299,18 @@ void progress_bar_break_line() {
     fflush(stdout);
 }
 
+
+noreturn void errorexit_function(const char *file, int line, const char *s)
+{
+    fprintf(stderr, "Error: %s (%s:%d)\n", s, file, line);
+    fflush(stderr);
+    exit(EXIT_FAILURE);
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// System calls
+// ------------------------------------------------------------------------------------------------
 
 int get_executable_dir(char out_dir[PATH_MAX])
 {
@@ -331,32 +360,15 @@ char* make_filepath(const char* outdir, const char* filename) {
 }
 
 
+void path_join(char out[PATH_MAX], const char *a, const char *b) {
+    int n = snprintf(out, PATH_MAX, "%s/%s", a, b);
+    if (n < 0 || n >= PATH_MAX) errorexit("Path too long");
+}
+
+
 void mkdir_or_die(const char *path, mode_t mode) {
     if (mkdir(path, mode) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: mkdir('%s') failed: %s\n", path, strerror(errno));
         exit(EXIT_FAILURE);
     }
 }
-
-
-/* Errorexit fuction*/
-/* Note that utils.h defines a macro so that the user does not have
-   to specify __FILE__ and __LINE__ for the location where the error occured */
-#undef errorexit
-
-// Switch between exit(1) (normal termination) and abort() (crash with core dump)
-#define ABORT 0
-#define EXIT 1
-#define THE_END if(EXIT) exit(1);  else abort();
-
-void errorexit(const char *file, const int line, const char *s)
-{
-    fprintf(stderr, "Error: %s  ", s);
-    fprintf(stderr, "(%s, line %d)\n", file, line);
-    fflush(stdout);
-    fflush(stderr);
-    THE_END
-}
-
-/* Do not write functions beyond this line because the undef/define 
-   method for the errorexit function means that it should go last! */

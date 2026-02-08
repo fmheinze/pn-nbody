@@ -20,12 +20,7 @@
 #include "eom.h"
 #include "parameters.h"
 #include "initialize.h"
-#include "hamiltonians.h"
-
-
-#ifdef __APPLE__
-  #include <mach-o/dyld.h>
-#endif
+#include "hamiltonian.h"
 
 
 /**
@@ -63,7 +58,8 @@ void read_command_line(int argc, char** argv)
     }
 
     char parent_dir[PATH_MAX];
-    snprintf(parent_dir, sizeof(parent_dir), "%s/..", exe_dir);
+    snprintf(parent_dir, sizeof(parent_dir), "%s", exe_dir);
+    if (!dirname(parent_dir)) errorexit("dirname failed");
 
     char parent_real[PATH_MAX];
     if (!realpath(parent_dir, parent_real)) {
@@ -73,11 +69,11 @@ void read_command_line(int argc, char** argv)
 
     // Ensure <parent>/output exists, then create <parent>/output/<base>
     char output_root[PATH_MAX];
-    snprintf(output_root, sizeof(output_root), "%s/output", parent_real);
+    path_join(output_root, parent_real, "output");
     mkdir_or_die(output_root, 0755);
 
     char outdir[PATH_MAX];
-    snprintf(outdir, sizeof(outdir), "%s/%s", output_root, base_ptr);
+    path_join(outdir, output_root, base_ptr);
     mkdir_or_die(outdir, 0755);
 
     // Pass parameters onward
@@ -105,7 +101,7 @@ int main(int argc, char** argv)
     printf("Welcome to pn-nbody\n");
     print_divider();
 
-    // Read an initialize parameters
+    // Read and initialize parameters
     printf("Specified parameters:\n");
     read_command_line(argc, argv);
     parse_parameter_file(get_parameter_string("parfile"));
@@ -131,5 +127,6 @@ int main(int argc, char** argv)
     printf("The simulation has finished! Thanks for using pn-nbody!\n");
     free_vector(w);
     free_ode_params(&params);
+    free_parameters();
     return EXIT_SUCCESS;
 }

@@ -18,7 +18,7 @@
 #include "eom.h"
 #include "physical_quantities.h"
 #include "parameters.h"
-#include "hamiltonians.h"
+#include "hamiltonian.h"
 
 
 /**

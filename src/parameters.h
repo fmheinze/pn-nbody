@@ -9,6 +9,7 @@ typedef struct {
 } tParameter;
 
 void parse_parameter_file(const char *parfile);
+void free_parameters(void);
 
 void add_parameter(const char *name, const char *value, const char *description);
 void add_parameter_i(const char *name, const int i, const char *value, const char *description);

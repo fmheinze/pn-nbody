@@ -3,8 +3,8 @@
 
 #include "eom.h"
 
-void initialize_parameters();
-struct ode_params initialize_ode_params();
+void initialize_parameters(void);
+struct ode_params initialize_ode_params(void);
 struct binary_params initialize_binary_params(int i);
 double* initialize_state_vector(struct ode_params* params);
 void initialize_newtonian_binary(struct ode_params* ode_params, double* w0);
