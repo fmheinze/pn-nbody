@@ -9,7 +9,7 @@
 #include <libgen.h>
 #include <errno.h>
 #include "utils.h"
-#include "pn_eom.h"
+#include "eom.h"
 #include "math.h"
 
 
@@ -217,7 +217,7 @@ void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3]) 
 }
 
 
-int kronecker_delta(int i, int j) {
+int delta(int i, int j) {
     return (i == j) ? 1 : 0;
 }
 

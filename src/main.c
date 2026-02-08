@@ -17,10 +17,10 @@
 #include <limits.h>
 #include "integration.h"
 #include "utils.h"
-#include "pn_eom.h"
+#include "eom.h"
 #include "parameters.h"
 #include "initialize.h"
-#include "pn_eom_hamiltonians.h"
+#include "hamiltonians.h"
 
 
 #ifdef __APPLE__

@@ -1,7 +1,7 @@
-#include "pn_eom.h"
-
 #ifndef INITIAL_CONFIGURATIONS_H
 #define INITIAL_CONFIGURATIONS_H
+
+#include "eom.h"
 
 // Binary struct
 struct binary_params {

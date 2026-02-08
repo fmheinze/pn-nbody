@@ -22,6 +22,96 @@ tParameter* pdb;
 int npdb, npdbmax = 1000;
 
 
+// ------------------------------------------------------------------------------------------------
+// Helper functions for the parameter database
+// ------------------------------------------------------------------------------------------------
+
+// Find parameter in the parameter database
+static tParameter* find_parameter(const char* name, const int fatal) {
+    if (!name) 
+        errorexit("find_parameter: called without parameter name");
+
+    for (int i = 0; i < npdb; i++)
+        if (!strcmp(pdb[i].name, name))
+        return &pdb[i];
+
+    if (fatal) {
+        printf("Could not find parameter \"%s\"\n", name);
+        errorexit("this one is required!");
+    }
+    return 0;
+}
+
+// Create a new parameter in parameter database, merge if already there
+static void make_parameter(const char *name, const char *value, const char *description) {
+    static int firstcall = 1;
+    tParameter* p;
+
+    // If this function is called for the first time, allocate memory for parameter database
+    if (firstcall) {
+        firstcall = 0;
+        pdb = (tParameter *) calloc(sizeof(tParameter), npdbmax);
+        if (!pdb) errorexit("make_parameter: out of memory");
+        npdb = 0;
+    }
+
+    p = find_parameter(name, 0);
+
+    // If the parameter cannot be found in the dat base, create it
+    if (!p) {
+        p = &pdb[npdb++];
+        p->name = (char *) calloc(sizeof(char), strlen(name)+1);
+        p->value = (char *) calloc(sizeof(char), strlen(value)+1);
+        strcpy(p->name, name);
+        strcpy(p->value, value);
+    } 
+    // If it is already there, update the description
+    else {
+        free(p->description);
+    }
+    p->description = (char *) calloc(sizeof(char), strlen(description)+1);
+    strcpy(p->description, description);
+
+    if (npdb >= npdbmax) {
+        printf("The maximum number of %d parameters has been exceeded!", npdbmax);
+        errorexit("There is no more space for new parameters");
+    }
+}
+
+
+// Free parameter database memory
+static void free_parameters() {
+    if (!pdb) return;
+
+    for (int i = 0; i < npdb; i++) {
+        free(pdb[i].name);
+        free(pdb[i].value);
+        free(pdb[i].description);
+    }
+
+    free(pdb);
+    pdb = NULL;
+    npdb = 0;
+}
+
+
+// Set parameter in the parameter database
+static void set_parameter(const char* name, const char* value) {
+    tParameter* p = find_parameter(name, 1);
+    if (!p)
+        errorexit("set_parameter: parameter not found or could not be created.");
+
+    free(p->value);
+    p->value = strdup(value);
+    if (!p->value)
+        errorexit("set_parameter: out of memory while duplicating value string.");
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// Functions for external calls
+// ------------------------------------------------------------------------------------------------
+
 /**
  * @brief Parses a given parameter file.
  * 
@@ -110,98 +200,6 @@ void parse_parameter_file(const char *parfile)
     }  
     free(buffer);
 }
-
-
-// ------------------------------------------------------------------------------------------------
-// Helper functions for the parameter database
-// ------------------------------------------------------------------------------------------------
-
-// Create a new parameter in parameter database, merge if already there
-static void make_parameter(const char *name, const char *value, const char *description) {
-    static int firstcall = 1;
-    tParameter* p;
-
-    // If this function is called for the first time, allocate memory for parameter database
-    if (firstcall) {
-        firstcall = 0;
-        pdb = (tParameter *) calloc(sizeof(tParameter), npdbmax);
-        if (!pdb) errorexit("make_parameter: out of memory");
-        npdb = 0;
-    }
-
-    p = find_parameter(name, 0);
-
-    // If the parameter cannot be found in the dat base, create it
-    if (!p) {
-        p = &pdb[npdb++];
-        p->name = (char *) calloc(sizeof(char), strlen(name)+1);
-        p->value = (char *) calloc(sizeof(char), strlen(value)+1);
-        strcpy(p->name, name);
-        strcpy(p->value, value);
-    } 
-    // If it is already there, update the description
-    else {
-        free(p->description);
-    }
-    p->description = (char *) calloc(sizeof(char), strlen(description)+1);
-    strcpy(p->description, description);
-
-    if (npdb >= npdbmax) {
-        printf("The maximum number of %d parameters has been exceeded!", npdbmax);
-        errorexit("There is no more space for new parameters");
-    }
-}
-
-
-// Free parameter database memory
-static void free_parameters() {
-    if (!pdb) return;
-
-    for (int i = 0; i < npdb; i++) {
-        free(pdb[i].name);
-        free(pdb[i].value);
-        free(pdb[i].description);
-    }
-
-    free(pdb);
-    pdb = NULL;
-    npdb = 0;
-}
-
-
-// Set parameter in the parameter database
-static void set_parameter(const char* name, const char* value) {
-    tParameter* p = find_parameter(name, 1);
-    if (!p)
-        errorexit("set_parameter: parameter not found or could not be created.");
-
-    free(p->value);
-    p->value = strdup(value);
-    if (!p->value)
-        errorexit("set_parameter: out of memory while duplicating value string.");
-}
-
-
-// Find parameter in the parameter database
-static tParameter* find_parameter(const char* name, const int fatal) {
-    if (!name) 
-        errorexit("find_parameter: called without parameter name");
-
-    for (int i = 0; i < npdb; i++)
-        if (!strcmp(pdb[i].name, name))
-        return &pdb[i];
-
-    if (fatal) {
-        printf("Could not find parameter \"%s\"\n", name);
-        errorexit("this one is required!");
-    }
-    return 0;
-}
-
-
-// ------------------------------------------------------------------------------------------------
-// Functions for external calls
-// ------------------------------------------------------------------------------------------------
 
 
 /* --- Creation functions --- */

@@ -15,10 +15,10 @@
 #include <string.h>
 #include "utils.h"
 #include "integration.h"
-#include "pn_eom.h"
+#include "eom.h"
 #include "physical_quantities.h"
 #include "parameters.h"
-#include "pn_eom_hamiltonians.h"
+#include "hamiltonians.h"
 
 
 /**

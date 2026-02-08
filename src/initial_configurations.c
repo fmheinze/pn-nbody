@@ -11,7 +11,7 @@
 #include <math.h>
 #include "initial_configurations.h"
 #include "utils.h"
-#include "pn_eom.h"
+#include "eom.h"
 #include "parameters.h"
 
 
