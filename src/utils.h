@@ -1,10 +1,9 @@
-#include "pn_eom.h"
-#include <complex.h>
-#include <limits.h>
-
-
 #ifndef UTILS_H
 #define UTILS_H
+
+#include "eom.h"
+#include <complex.h>
+#include <limits.h>
 
 void allocate_vector(double** ptr, int num_elements);
 void allocate_2d_array(double*** ptr, int num_vectors, int num_elements);
@@ -25,7 +24,7 @@ void cross_product(double a[3], double b[3], double result[3]);
 void create_rotation_matrix(double axis[3], double angle, double R[3][3]);
 void rotate_vector(double v[3], double R[3][3], double result[3]);
 void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3]);
-int kronecker_delta(int i, int j);
+int delta(int i, int j);
 double clamp0(double x);
 int almost_equal(double a, double b, double rel_eps);
 

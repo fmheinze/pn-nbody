@@ -12,7 +12,7 @@
 #include <string.h>
 #include <math.h>
 #include "initialize.h"
-#include "pn_eom.h"
+#include "eom.h"
 #include "parameters.h"
 #include "utils.h"
 #include "initial_configurations.h"

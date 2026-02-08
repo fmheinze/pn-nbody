@@ -1,0 +1,18 @@
+#ifndef EOM_H
+#define EOM_H
+
+#include "hamiltonians.h"
+
+struct ode_params {
+    int num_dim;
+    int num_bodies;
+    int use_impulse_method;
+    int* pn_terms;
+    double* masses;
+};
+
+void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dwdt);
+void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_params* ode_params,
+    double *dwdt);
+
+#endif

@@ -27,9 +27,9 @@ rel_error		= 1e-8
 # Initial conditions
 # -------------------------------------------------------------------------------
 ic_preset 		= figure_eight
-mass1			= 1.0
-mass2			= 1.0
-mass3			= 1.0
+mass1			= 0.1
+mass2			= 0.1
+mass3			= 0.1
 figure_eight_width	= 108.1
 
 

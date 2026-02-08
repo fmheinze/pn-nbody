@@ -1,7 +1,7 @@
-#include "pn_eom.h"
-
 #ifndef OUTPUT_H
 #define OUTPUT_H
+
+#include "eom.h"
 
 void initialize_parameters();
 struct ode_params initialize_ode_params();

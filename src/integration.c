@@ -12,7 +12,7 @@
 #include <math.h>
 #include "utils.h"
 #include "integration.h"
-#include "pn_eom.h"
+#include "eom.h"
 #include "output.h"
 #include "parameters.h"
 
@@ -645,7 +645,7 @@ static void impulse_advance_middle(double* w, int w_size, double t_start, double
  * TODO: Add interpolator for writing outputs at exactly the right times
  */
 void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4, 
-    struct ode_params* params)
+    struct ode_params* ode_params)
 {
     // Determine integration method 
     ode_method m = M_UNKNOWN;
@@ -673,8 +673,8 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
         max_iter = get_parameter_int("max_iter"); 
     }
 
-    int num_bodies = params->num_bodies;
-    int num_dim    = params->num_dim;
+    int num_bodies = ode_params->num_bodies;
+    int num_dim    = ode_params->num_dim;
     int array_half = num_bodies * num_dim;
     int w_size     = 2 * array_half;
 
@@ -689,8 +689,8 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
 
     // Initialize output files
     FILE *file_mass, *file_pos, *file_mom, *file_energy;
-    output_init(&file_mass, &file_pos, &file_mom, &file_energy, params);
-    output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
+    output_init(&file_mass, &file_pos, &file_mom, &file_energy, ode_params);
+    output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
 
     // Cache gradient to reuse between steps:
     // After finishing a step, positions do not change before the next step's first half-kick,
@@ -707,24 +707,24 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
 
         // First half kick (uses cached gradient if available)
         if (!grad_valid) {
-            grad_utt4(w, params, dUdx);
+            grad_utt4(w, ode_params, dUdx);
             grad_valid = 1;
         }
         impulse_apply_kick(w, num_bodies, num_dim, 0.5 * h, dUdx);
 
         // Middle evolution for timestep h
         impulse_advance_middle(w, w_size, t_current, h, n, m, err_tol, max_iter,
-            rhs_mid, params, &ws);
+            rhs_mid, ode_params, &ws);
         t_current += h;
 
         // Compute gradient at end positions, do second half kick, keep for reuse
-        grad_utt4(w, params, dUdx);
+        grad_utt4(w, ode_params, dUdx);
         impulse_apply_kick(w, num_bodies, num_dim, 0.5 * h, dUdx);
         grad_valid = 1;
 
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
-            output_write_timestep(file_pos, file_mom, file_energy, params, w, t_current);
+            output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
             print_progress_bar((int)(100.0 * t_current / t_end));
 
             // Advance output schedule robustly

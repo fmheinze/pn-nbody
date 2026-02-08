@@ -9,9 +9,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
-#include "pn_eom.h"
+#include "eom.h"
 #include "utils.h"
-#include "pn_eom_hamiltonians.h"
+#include "hamiltonians.h"
 
 
 /**
@@ -31,6 +31,6 @@ double total_energy_conservative(double* w, struct ode_params* ode_params)
     if (ode_params->pn_terms[1] == 1)
         H += H1PN(w, ode_params);
     if (ode_params->pn_terms[2] == 1)
-        H += H2PN_nbody(w, ode_params, 0, 1);
+        H += H2PN(w, ode_params, 1);
     return H;
 }
