@@ -7,7 +7,6 @@
  * consistency and validity and missing parameters are computed from user-specified ones.
  */
 
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>

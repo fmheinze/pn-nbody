@@ -3,7 +3,6 @@
 #ifndef INITIAL_CONFIGURATIONS_H
 #define INITIAL_CONFIGURATIONS_H
 
-
 // Binary struct
 struct binary_params {
     double a;       // Semi-major axis
@@ -14,7 +13,6 @@ struct binary_params {
     double p;       // Semi-latus rectum
     double phi0;    // Initial phase
 };
-
 
 void ic_newtonian_binary(struct ode_params* ode_params, struct binary_params* binary_params,
     double* w0);

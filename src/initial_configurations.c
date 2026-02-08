@@ -6,7 +6,6 @@
  * the corresponding initial positions and momenta of all the bodies are computed. 
  */
 
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>

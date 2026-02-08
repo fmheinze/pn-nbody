@@ -9,7 +9,6 @@
  * output quantities (angular momentum, eccentricity, ...).
  */
 
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -88,7 +87,7 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
  * @param[in]   file_mom       Pointer to the file containing the particle momenta
  * @param[in]   file_energy    Pointer to the file containing the particle energies
  * @param[in]   ode_params     Parameter struct containing general information about the system
- * @param[in]   w              Current state of the system, w = [positions, momenta]
+ * @param[in]   w              Current state of the full system, w = [positions, momenta]
  * @param[in]   t              Current time
  */
 void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_energy, 
