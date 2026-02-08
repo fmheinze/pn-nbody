@@ -2,6 +2,10 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <complex.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <errno.h>
 #include "utils.h"
 #include "pn_eom.h"
 #include "math.h"
@@ -234,7 +238,6 @@ void print_divider() {
 }
 
 
-
 void print_state_vector(const double *w0, int num_bodies, int num_dim) {
     for (int i = 0; i < num_bodies; ++i) {
         // Positions
@@ -272,12 +275,26 @@ void print_progress_bar(int percent) {
 }
 
 
+void progress_bar_break_line() {
+    printf("\r\033[2K\n");
+    fflush(stdout);
+}
+
+
 void get_executable_path(char* buffer, size_t size) {
     ssize_t len = readlink("/proc/self/exe", buffer, size - 1);
     if (len != -1) {
         buffer[len] = '\0';
     } else {
         errorexit("Could not read executable path");
+    }
+}
+
+
+void mkdir_or_die(const char *path, mode_t mode) {
+    if (mkdir(path, mode) != 0 && errno != EEXIST) {
+        fprintf(stderr, "Error: mkdir('%s') failed: %s\n", path, strerror(errno));
+        exit(EXIT_FAILURE);
     }
 }
 

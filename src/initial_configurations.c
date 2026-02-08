@@ -30,13 +30,10 @@
 void ic_newtonian_binary(struct ode_params* ode_params, struct binary_params* binary_params,
     double* w0)
 {
-    // Unpack parameters
+    // Unpack needed parameters
     double a = binary_params->a;
-    double b = binary_params->b;
     double e = binary_params->e;
     double phi0 = binary_params->phi0;
-    double r_a = binary_params->r_a;
-    double r_p = binary_params->r_p;
     double p = binary_params->p;
     double m1 = ode_params->masses[0];
     double m2 = ode_params->masses[1];
@@ -105,7 +102,7 @@ void ic_newtonian_binary(struct ode_params* ode_params, struct binary_params* bi
  * @param[in]       orientation Target orientation vector (does not have to be normalized)
  * @param[in,out]   w0          Initial and target positions and momenta, w = [pos1, pos2, p1, p2]
  */
-void position_binary(double com_pos[3], double orientation[3], double w0[12]) 
+static void position_binary(double com_pos[3], double orientation[3], double w0[12]) 
 {
     double initial_orientation[3] = {0, 0, 1};
     double pos1[3] = {w0[0], w0[1], w0[2]};
