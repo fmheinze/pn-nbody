@@ -1,44 +1,66 @@
 # Compiler
-CC = gcc-14
-
-# Compiler flags
-CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -Wcast-qual -O3
+CC = gcc
 
 # Directories
-SRC_DIR = src
-BUILD_DIR = build
-EXE_DIR = exe
+SRC_DIR   := src
+BUILD_DIR := build
+EXE_DIR   := exe
 
-# Source files and object files
-SRCS = $(wildcard $(SRC_DIR)/*.c)
-OBJS = $(patsubst $(SRC_DIR)/%.c, $(BUILD_DIR)/%.o, $(SRCS))
+# Target
+TARGET := $(EXE_DIR)/pn-nbody
 
-# Output executable
-TARGET = $(EXE_DIR)/pn_nbody
+# Sources / objects
+SRCS := $(wildcard $(SRC_DIR)/*.c)
+OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+DEPS := $(OBJS:.o=.d)
+
+# Cuba configuration
+CUBA_DIR ?=
+
+# If CUBA_DIR is set, use it. Otherwise rely on system paths.
+ifeq ($(strip $(CUBA_DIR)),)
+  CUBA_CPPFLAGS :=
+  CUBA_LDFLAGS  :=
+else
+  CUBA_CPPFLAGS := -I$(CUBA_DIR)/include
+  CUBA_LDFLAGS  := -L$(CUBA_DIR)
+endif
+
+# Libraries
+LDLIBS  += -lcuba -lm
+LDFLAGS += $(CUBA_LDFLAGS)
+CPPFLAGS += $(CUBA_CPPFLAGS)
+
+# Compile flags
+CFLAGS ?= -O3
+CFLAGS += -Wall -Wextra -MMD -MP
 
 # Default target
 all: $(BUILD_DIR) $(EXE_DIR) $(TARGET)
 
-# Rule to build the target
+# Link
 $(TARGET): $(OBJS)
-	$(CC) $(OBJS) -o $@ -L/Users/fheinze/Desktop/Cuba-4.2.2 -lcuba -lm
+	$(CC) $(OBJS) -o $@ $(LDFLAGS) $(LDLIBS)
 
-# Rule to build object files
-$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	$(CC) $(CFLAGS) -c $< -o $@
+# Compile
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
-# Ensure the build directory exists
+# Directories
 $(BUILD_DIR):
-	mkdir -p $(BUILD_DIR)
+	mkdir -p $@
 
-# Ensure the exe directory exists
 $(EXE_DIR):
-	mkdir -p $(EXE_DIR)
+	mkdir -p $@
 
-# Clean up build artifacts
+# Include auto-generated header dependencies
+-include $(DEPS)
+
+# Convenience targets
+debug: CFLAGS := -O0 -g -Wall -Wextra -MMD -MP
+debug: all
+
 clean:
 	rm -rf $(BUILD_DIR) $(EXE_DIR)
 
-# Phony targets
-.PHONY: all clean
-
+.PHONY: all clean debug
