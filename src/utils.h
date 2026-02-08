@@ -1,5 +1,6 @@
 #include "pn_eom.h"
 #include <complex.h>
+#include <limits.h>
 
 
 #ifndef UTILS_H
@@ -33,6 +34,7 @@ void print_state_vector(const double *w0, int num_bodies, int num_dim);
 void print_progress_bar(int percent);
 void progress_bar_break_line();
 int get_executable_dir(char out_dir[PATH_MAX]);
+char* make_filepath(const char* outdir, const char* filename);
 void mkdir_or_die(const char *path, mode_t mode);
 void errorexit(const char *file, const int line, const char *s);
 #define errorexit(s) errorexit(__FILE__, __LINE__, (s))

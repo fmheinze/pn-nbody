@@ -106,15 +106,15 @@ int main(int argc, char** argv)
     printf("Welcome to pn-nbody\n");
     print_divider();
 
-    // Parameters
+    // Read an initialize parameters
     printf("Specified parameters:\n");
     read_command_line(argc, argv);
     parse_parameter_file(get_parameter_string("parfile"));
     initialize_parameters();
+    struct ode_params params = initialize_ode_params();
     print_divider();
 
-    // Initial values
-    struct ode_params params = initialize_ode_params();
+    // Initialize state vector with specified initial conditions
     double* w = initialize_state_vector(&params);
 
     // Run simulation

@@ -6,15 +6,13 @@
 #include "utils.h"
 #include "parameters.h"
 
-#define DEBUG_PARAMETERS 0
-
 // Parameter database
 tParameter* pdb;
 
 // Number of parameters
 int npdb, npdbmax = 1000;
 
-/* Parse a given parameter file*/
+// Parse a given parameter file
 void parse_parameter_file(const char *parfile)
 {
     FILE* fp;
@@ -23,10 +21,6 @@ void parse_parameter_file(const char *parfile)
     char *buffer;
     char *par, *val;
     int lpar, lval;
-
-#if DEBUG_PARAMETERS 
-    printf("Reading parameter file \"%s\"\n", parfile);
-#endif
 
     // Read file into memory, add one space at end and beginning
     fp = fopen(parfile, "r");
@@ -76,11 +70,6 @@ void parse_parameter_file(const char *parfile)
     buffer[j-1] = '\0';
     nbuffer = strlen(buffer);
 
-    // Now the buffer is: par=val ... val par=val ... val
-#if DEBUG_PARAMETERS  
-    printf("Buffer: %s\n", buffer);
-#endif
-
     // Split parameter names and values by inserting zeros
     for (i = 1; i < nbuffer; i++) {
         if (buffer[i] == '=') {
@@ -97,21 +86,12 @@ void parse_parameter_file(const char *parfile)
         lpar = strlen(par);
         val = par + lpar + 1;
         lval = strlen(val);
-#if DEBUG_PARAMETERS  
-        printf("%s = %s\n", par, val);
-#endif
 
         if (!find_parameter(par, 0))
             make_parameter(par, val, "not in library of initialized parameters");
         else
             set_parameter(par, val);
     }  
-
-    // Print parameters for debugging
-#if DEBUG_PARAMETERS 
-    printf("After reading the parameter file:\n");
-    print_parameters();
-#endif
     free(buffer);
 }
 
@@ -124,11 +104,6 @@ void make_parameter(const char *name, const char *value, const char *description
 {
     static int firstcall = 1;
     tParameter* p;
-
-    // Print parameter for debugging
-#if DEBUG_PARAMETERS  
-    printf("Make parameter %s = %s,  %s\n", name, value, description);
-#endif
 
     // If this function is called for the first time, allocate memory for parameter database
     if (firstcall) {
@@ -174,9 +149,7 @@ void free_parameters()
         free(pdb[i].value);
         free(pdb[i].description);
     }
-#if DEBUG_PARAMETERS  
-    printf("Total number of parameters: %d\n", npdb);
-#endif
+
     free(pdb);
     pdb = NULL;
     npdb = 0;
@@ -284,9 +257,6 @@ void set_double_array(const char *name, int n, const double *a) {
     }
     free(p->value);
     p->value = value;
-#if DEBUG_PARAMETERS  
-    printf("Set %s = %s\n", p->name, p->value);
-#endif
 }
 
 int set_if_unset_double(double *dst, double val) {

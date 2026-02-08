@@ -163,7 +163,7 @@ void initialize_parameters()
     // --------------------------------------------------------------------------------------------
     int num_bodies = get_parameter_int("num_bodies"); 
     for(int i = 1; i < num_bodies+1; i++) {
-        add_parameter_i("mass", i, "0.0", "mass of body i");
+        add_parameter_i("mass", i, "0.0", "mass of body i [>= 0]");
         add_parameter_i("pos", i, "0.0 0.0 0.0", "coordinates of the initial position of body i");
         add_parameter_i("p", i, "0.0 0.0 0.0", "components of the initial momentum of body i");
     }
@@ -205,6 +205,22 @@ struct ode_params initialize_ode_params()
     params.pn_terms[2] = get_parameter_int("2pn_terms");
     params.pn_terms[3] = get_parameter_int("2.5pn_terms");
 
+    // Check validity
+    if (params.num_dim != 2 && params.num_dim != 3) 
+        errorexit("Please specify a valid num_dim (must be 2 or 3)");
+    if (params.num_bodies <= 0) 
+        errorexit("Please specify a valid num_bodies (must be num_bodies > 0)");
+    if (params.use_impulse_method != 0 && params.use_impulse_method != 1) 
+        errorexit("Please set impulse_method to 0 (off) or 1 (on)");
+    for (int i = 0; i < params.num_bodies; i++) {
+        if (params.masses[i] < 0) 
+            errorexit("Please specify valid masses (must be mass >= 0)");
+    }
+    for (int i = 0; i < NUM_PN_TERMS; i++) {
+        if (params.pn_terms[i] != 0 && params.pn_terms[i] != 1) 
+            errorexit("Please set pn_terms to 0 (off) or 1 (on)");
+    }
+
     return params;
 }
 
@@ -237,21 +253,21 @@ struct binary_params initialize_binary_params(int i)
 
     // Check the user-specified values
     if (is_set_double(params.a) && params.a <= 0.0) 
-        errorexit("Invalid a (must be > 0)");
+        errorexit("Please specify a valid a (must be > 0)");
     if (is_set_double(params.e) && (params.e < 0.0 || params.e >= 1.0)) 
-        errorexit("Invalid e (must be 0 <= e < 1 for an elliptical orbit)");
+        errorexit("Please specify a valid e (must be 0 <= e < 1 for an elliptical orbit)");
     if (is_set_double(params.b) && params.b <= 0.0) 
-        errorexit("Invalid b (must be > 0)");
+        errorexit("Please specify a valid b (must be > 0)");
     if (is_set_double(params.a) && is_set_double(params.b) && params.a < params.b) 
         errorexit("Invalid a and b (must be a >= b)");
     if (is_set_double(params.r_p) && params.r_p <= 0.0) 
-        errorexit("Invalid r_p (must be > 0)");
+        errorexit("Please specify a valid r_p (must be > 0)");
     if (is_set_double(params.r_a) && params.r_a <= 0.0)
-        errorexit("Invalid r_a (must be > 0)");
+        errorexit("Please specify a valid r_a (must be > 0)");
     if (is_set_double(params.r_a) && is_set_double(params.r_p) && params.r_a < params.r_p) 
         errorexit("Invalid r_a and r_p (must be r_a >= r_p)");
     if (is_set_double(params.p) && params.p <= 0.0) 
-        errorexit("Invalid p (must be > 0)");
+        errorexit("Please specify a valid p (must be > 0)");
 
     // Iteratively infer missing values from whatever is known
     int changed = 1;
@@ -546,9 +562,9 @@ void initialize_binary_single_scattering(struct ode_params* ode_params, double* 
     }
 
     // Check specified values for validity
-    if (d0 < 0) errorexit("Please specify a valid d0 (d0 >= 0)");
-    if (v0_rel < 0) errorexit("Please specify a valid v0_rel (v0_rel >= 0)");
-    if (fabs(b) > d0) errorexit("Please specify a valid b (|b| <= d0)");
+    if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
+    if (v0_rel < 0) errorexit("Please specify a valid v0_rel (must be v0_rel >= 0)");
+    if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
 
     ic_binary_single_scattering(ode_params, &binary_params, d0, v0_rel, b, orientation, w0);
     free_vector(orientation);
@@ -587,13 +603,13 @@ void initialize_binary_single_scattering_rel(struct ode_params* ode_params, doub
     }
 
     // Check specified values for validity
-    if (d0 < 0) errorexit("Please specify a valid d0 (d0 >= 0)");
-    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (v0_rel >= 0)");
-    if (fabs(b) > d0) errorexit("Please specify a valid b (|b| <= d0)");
-    if (binary_r0 <= 0) errorexit("Please specify a valid binary_r0 (binary_r0 > 0)");
-    if (binary_pt0 < 0) errorexit("Please specify a valid binary_pt0 (binary_pt0 >= 0)");
-    if (binary_pr0 < 0) errorexit("Please specify a valid binary_pr0 (binary_pr0 >= 0)");
-    if (binary_phi0 < 0) errorexit("Please specify a valid binary_phi0 (binary_phi0 >= 0)");
+    if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
+    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be v0_rel >= 0)");
+    if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
+    if (binary_r0 <= 0) errorexit("Please specify a valid binary_r0 (must be binary_r0 > 0)");
+    if (binary_pt0 < 0) errorexit("Please specify a valid binary_pt0 (must be binary_pt0 >= 0)");
+    if (binary_pr0 < 0) errorexit("Please specify a valid binary_pr0 (must be binary_pr0 >= 0)");
+    if (binary_phi0 < 0) errorexit("Please specify a valid binary_phi0 (must be binary_phi0 >= 0)");
     if (ode_params->masses[0] != ode_params->masses[1])
         errorexit("Currently only equal-mass binaries supported in rel. binary-single scattering");
 
@@ -698,17 +714,17 @@ void initialize_binary_binary_scattering_rel(struct ode_params* ode_params, doub
     }
 
     // Check specified values for validity
-    if (d0 < 0) errorexit("Please specify a valid d0 (d0 >= 0)");
-    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (v0_rel >= 0)");
-    if (fabs(b) > d0) errorexit("Please specify a valid b (|b| <= d0)");
-    if (binary1_r0 <= 0) errorexit("Please specify a valid binary1_r0 (binary1_r0 > 0)");
-    if (binary1_pt0 < 0) errorexit("Please specify a valid binary1_pt0 (binary1_pt0 >= 0)");
-    if (binary1_pr0 < 0) errorexit("Please specify a valid binary1_pr0 (binary1_pr0 >= 0)");
-    if (binary1_phi0 < 0) errorexit("Please specify a valid binary1_phi0 (binary1_phi0 >= 0)");
-    if (binary2_r0 <= 0) errorexit("Please specify a valid binary2_r0 (binary2_r0 > 0)");
-    if (binary2_pt0 < 0) errorexit("Please specify a valid binary2_pt0 (binary2_pt0 >= 0)");
-    if (binary2_pr0 < 0) errorexit("Please specify a valid binary2_pr0 (binary2_pr0 >= 0)");
-    if (binary2_phi0 < 0) errorexit("Please specify a valid binary2_phi0 (binary2_phi0 >= 0)");
+    if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
+    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be v0_rel >= 0)");
+    if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
+    if (binary1_r0 <= 0) errorexit("Please specify a valid binary1_r0 (must be binary1_r0 > 0)");
+    if (binary1_pt0 < 0) errorexit("Please specify a valid binary1_pt0 (must be binary1_pt0 >= 0)");
+    if (binary1_pr0 < 0) errorexit("Please specify a valid binary1_pr0 (must be binary1_pr0 >= 0)");
+    if (binary1_phi0 < 0) errorexit("Please specify a valid binary1_phi0 (must be binary1_phi0 >= 0)");
+    if (binary2_r0 <= 0) errorexit("Please specify a valid binary2_r0 (must be binary2_r0 > 0)");
+    if (binary2_pt0 < 0) errorexit("Please specify a valid binary2_pt0 (must be binary2_pt0 >= 0)");
+    if (binary2_pr0 < 0) errorexit("Please specify a valid binary2_pr0 (must be binary2_pr0 >= 0)");
+    if (binary2_phi0 < 0) errorexit("Please specify a valid binary2_phi0 (must be binary2_phi0 >= 0)");
     if (ode_params->masses[0] != ode_params->masses[1] || 
         ode_params->masses[2] != ode_params->masses[3])
         errorexit("Currently only equal-mass binaries supported in rel. binary-binary scattering");

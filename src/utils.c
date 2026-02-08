@@ -320,6 +320,17 @@ int get_executable_dir(char out_dir[PATH_MAX])
 }
 
 
+char* make_filepath(const char* outdir, const char* filename) {
+    size_t len = strlen(outdir);
+    size_t extra_slash = (outdir[len - 1] == '/' || outdir[len - 1] == '\\') ? 0 : 1;
+    char* filepath = malloc(len + extra_slash + strlen(filename) + 1);
+    if (!filepath)
+        errorexit("Filepath could not be allocated");
+    sprintf(filepath, "%s%s%s", outdir, (extra_slash ? "/" : ""), filename);
+    return filepath;
+}
+
+
 void mkdir_or_die(const char *path, mode_t mode) {
     if (mkdir(path, mode) != 0 && errno != EEXIST) {
         fprintf(stderr, "Error: mkdir('%s') failed: %s\n", path, strerror(errno));
