@@ -1,8 +1,8 @@
 # Compiler
-CC = gcc
+CC = gcc-14
 
 # Compiler flags
-CFLAGS = -Wall -Wextra -O3
+CFLAGS = -Wall -Wextra -Wpedantic -Wshadow -Wcast-qual -O3
 
 # Directories
 SRC_DIR = src

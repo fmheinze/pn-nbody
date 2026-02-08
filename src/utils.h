@@ -4,6 +4,11 @@
 #include "eom.h"
 #include <complex.h>
 #include <limits.h>
+#include <stdnoreturn.h>
+
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 void allocate_vector(double** ptr, int num_elements);
 void allocate_2d_array(double*** ptr, int num_vectors, int num_elements);
@@ -28,14 +33,16 @@ int delta(int i, int j);
 double clamp0(double x);
 int almost_equal(double a, double b, double rel_eps);
 
-void print_divider();
+void print_divider(void);
 void print_state_vector(const double *w0, int num_bodies, int num_dim);
 void print_progress_bar(int percent);
-void progress_bar_break_line();
+void progress_bar_break_line(void);
+noreturn void errorexit_function(const char *file, int line, const char *s);
+#define errorexit(s) errorexit_function(__FILE__, __LINE__, (s))
+
 int get_executable_dir(char out_dir[PATH_MAX]);
 char* make_filepath(const char* outdir, const char* filename);
+void path_join(char out[PATH_MAX], const char *a, const char *b);
 void mkdir_or_die(const char *path, mode_t mode);
-void errorexit(const char *file, const int line, const char *s);
-#define errorexit(s) errorexit(__FILE__, __LINE__, (s))
 
 #endif

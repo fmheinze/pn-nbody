@@ -1,5 +1,5 @@
 /**
- * @file hamiltonians.c
+ * @file hamiltonian.c
  * @brief Functions for the computation of the post-Newtonian N-body Hamiltonian
  *
  * Functions for the computation of the post-Newtonian N-body Hamiltonian H = H_N + H_1PN + H_2PN.
@@ -18,7 +18,7 @@
 #include <stdio.h>
 #include <complex.h>
 #include "eom.h"
-#include "hamiltonians.h"
+#include "hamiltonian.h"
 #include "utils.h"
 
 #if REALSIZE == 16
@@ -70,6 +70,7 @@ static inline int role_of_body(int p, int body) {
 static int ln_integral(const int *ndim, const cubareal xx[], const int *ncomp, cubareal ff[], 
     void *userdata) 
 {
+    (void)ncomp;    // Unused
     if (*ndim != 3)
         errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
 
@@ -159,6 +160,7 @@ static int ln_integral(const int *ndim, const cubareal xx[], const int *ncomp, c
 static int ln_integral_gradient(const int *ndim, const cubareal xx[], const int *ncomp, 
     cubareal ff[], void *userdata)
 {
+    (void)ncomp;    // Unused
     if (*ndim != 3)
         errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
 
@@ -338,9 +340,7 @@ static complex double UTT4_without_ln_integral_complex(complex double* w,
 {
     int num_bodies = ode_params->num_bodies;
     int num_dim = ode_params->num_dim;
-    int array_half = num_bodies * num_dim; 
     complex double temp0, temp1, temp2, temp3;
-    double ma_inv, mb_inv, mc_inv;
 
     // Masses
     double m[num_bodies];
@@ -351,8 +351,6 @@ static complex double UTT4_without_ln_integral_complex(complex double* w,
     complex double x_rel[num_bodies][num_bodies][num_dim]; 
     complex double n[num_bodies][num_bodies][num_dim];
     complex double r[num_bodies][num_bodies];
-    complex double n_ab_ac[num_dim];
-    complex double n_ab_cb[num_dim];
     for (int a = 0; a < num_bodies; a++) {
         for (int b = a; b < num_bodies; b++) {
             for (int i = 0; i < num_dim; i++){
@@ -529,7 +527,7 @@ double H1PN(double* w, struct ode_params* ode_params)
     int array_half = num_dim * num_bodies;
     int a, b, c, i;
     double m_a, m_b, m_c;
-    double pa_dot_pa, pb_dot_pb, pa_dot_pb;
+    double pa_dot_pa, pa_dot_pb;
     double dx, r_ab, r_ac, ni, na_dot_pa, na_dot_pb;
     double p_ai, p_bi, dx_ac;
     double H = 0.0;
@@ -551,7 +549,6 @@ double H1PN(double* w, struct ode_params* ode_params)
 
             m_b = ode_params->masses[b];
             r_ab = 0.0;
-            pb_dot_pb = 0.0;
             pa_dot_pb = 0.0;
             na_dot_pa = 0.0;
             na_dot_pb = 0.0;
@@ -570,7 +567,6 @@ double H1PN(double* w, struct ode_params* ode_params)
                 dx = w[a * num_dim + i] - w[b * num_dim + i];
                 ni = dx / r_ab;
 
-                pb_dot_pb += p_bi * p_bi;
                 pa_dot_pb += p_ai * p_bi;
                 na_dot_pa += ni * p_ai;
                 na_dot_pb += ni * p_bi;
@@ -762,7 +758,7 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
     int num_dim = ode_params->num_dim;
     int array_half = num_bodies * num_dim; 
     complex double temp, temp0, temp1, temp2, temp3, temp4, temp5, temp6,
-        temp7, temp8, temp9, temp10, temp11, temp12, temp13;
+        temp7, temp8, temp9, temp10, temp11;
     double ma_inv, mb_inv, mc_inv;
 
     // Masses
@@ -882,15 +878,10 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
                 // G^3 quadruple sum terms
                 if (!p_flag) {
                     for (int d = 0; d < num_bodies; d++) {
-                        temp12 = r[c][d]*r[c][d];
-                        temp13 = r[a][d]*r[a][d];
-
-                        if (b != a && c != b && d != c) {
+                        if (b != a && c != b && d != c)
                             H += - 0.375 * temp1 * m[c] * m[d] / (r[a][b] * r[b][c] * r[c][d]);
-                        }
-                        if (b != a && c != a && d != a) {
+                        if (b != a && c != a && d != a)
                             H += - 0.25 * temp1 * m[c] * m[d] / (r[a][b] * r[a][c] * r[a][d]);
-                        }
                     }
                 }
             }

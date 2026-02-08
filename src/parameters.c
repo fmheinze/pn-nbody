@@ -42,6 +42,7 @@ static tParameter* find_parameter(const char* name, const int fatal) {
     return 0;
 }
 
+
 // Create a new parameter in parameter database, merge if already there
 static void make_parameter(const char *name, const char *value, const char *description) {
     static int firstcall = 1;
@@ -50,7 +51,7 @@ static void make_parameter(const char *name, const char *value, const char *desc
     // If this function is called for the first time, allocate memory for parameter database
     if (firstcall) {
         firstcall = 0;
-        pdb = (tParameter *) calloc(sizeof(tParameter), npdbmax);
+        pdb = (tParameter *) calloc(npdbmax, sizeof(tParameter));
         if (!pdb) errorexit("make_parameter: out of memory");
         npdb = 0;
     }
@@ -60,8 +61,8 @@ static void make_parameter(const char *name, const char *value, const char *desc
     // If the parameter cannot be found in the dat base, create it
     if (!p) {
         p = &pdb[npdb++];
-        p->name = (char *) calloc(sizeof(char), strlen(name)+1);
-        p->value = (char *) calloc(sizeof(char), strlen(value)+1);
+        p->name = (char *) calloc(strlen(name)+1, sizeof(char));
+        p->value = (char *) calloc(strlen(value)+1, sizeof(char));
         strcpy(p->name, name);
         strcpy(p->value, value);
     } 
@@ -69,29 +70,13 @@ static void make_parameter(const char *name, const char *value, const char *desc
     else {
         free(p->description);
     }
-    p->description = (char *) calloc(sizeof(char), strlen(description)+1);
+    p->description = (char *) calloc(strlen(description)+1, sizeof(char));
     strcpy(p->description, description);
 
     if (npdb >= npdbmax) {
         printf("The maximum number of %d parameters has been exceeded!", npdbmax);
         errorexit("There is no more space for new parameters");
     }
-}
-
-
-// Free parameter database memory
-static void free_parameters() {
-    if (!pdb) return;
-
-    for (int i = 0; i < npdb; i++) {
-        free(pdb[i].name);
-        free(pdb[i].value);
-        free(pdb[i].description);
-    }
-
-    free(pdb);
-    pdb = NULL;
-    npdb = 0;
 }
 
 
@@ -202,12 +187,29 @@ void parse_parameter_file(const char *parfile)
 }
 
 
+// Free parameter database memory
+void free_parameters() {
+    if (!pdb) return;
+
+    for (int i = 0; i < npdb; i++) {
+        free(pdb[i].name);
+        free(pdb[i].value);
+        free(pdb[i].description);
+    }
+
+    free(pdb);
+    pdb = NULL;
+    npdb = 0;
+}
+
+
 /* --- Creation functions --- */
 
 void add_parameter(const char* name, const char* value, const char* description) {
     make_parameter(name, value, description);
     printf("%-30s  =  %s\n", name, get_parameter_string(name));
 }
+
 
 void add_parameter_i(const char* name, const int i, const char* value, const char* description) {
     char new[100];
@@ -223,17 +225,20 @@ void set_parameter_string(const char* name, const char *value) {
     set_parameter(name, value);
 }
 
+
 void set_parameter_int(const char* name, const int i) {
     char value[100];
     sprintf(value, "%d", i);
     set_parameter(name, value);
 }
 
+
 void set_parameter_double(const char* name, const double d) {
     char value[100];
     sprintf(value, "%.20e", d);
     set_parameter(name, value);
 }
+
 
 void set_double_array(const char *name, int n, const double *a) {
     if (n <= 0 || !a) return;
@@ -264,6 +269,7 @@ void set_double_array(const char *name, int n, const double *a) {
     p->value = value;
 }
 
+
 int set_if_unset_double(double *dst, double val) {
     if (!is_set_double(*dst) && isfinite(val)) {
         *dst = val;
@@ -279,26 +285,31 @@ int is_set_double(double x) {
     return x >= 0.0; 
 }
 
+
 char *get_parameter_string(const char* name) {
     tParameter* p = find_parameter(name, 1);
     return p->value; 
 }
+
 
 int get_parameter_int(const char* name) {
     tParameter* p = find_parameter(name, 1);
     return atoi(p->value);
 }
 
+
 double get_parameter_double(const char* name) {
     tParameter* p = find_parameter(name, 1);
     return atof(p->value);
 }
+
 
 double get_parameter_double_i(const char* name, int i) {
     char new[100];
     sprintf(new, "%s%d", name, i);
     return get_parameter_double(new);
 }
+
 
 double* get_parameter_double_array(const char* name) {
     char* param_string = get_parameter_string(name);
@@ -352,11 +363,13 @@ double* get_parameter_double_array(const char* name) {
     return array;
 }
 
+
 double* get_parameter_double_array_i(const char* name, const int i) {
     char new[100];
     sprintf(new, "%s%d", name, i);
     return get_parameter_double_array(new);
 }
+
 
 int get_parameter_array_count(const char* name) {
     char* param_string = get_parameter_string(name);
@@ -395,6 +408,7 @@ double get_parameter_double_array_entry(const char* name, int index) {
     free(array);
     return result;
 }
+
 
 double get_binary_parameter_double_i(const char *par, int i) {
     char key[64];

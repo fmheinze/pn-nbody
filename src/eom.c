@@ -9,20 +9,21 @@
 #include <complex.h>
 #include "utils.h"
 #include "eom.h"
-#include "hamiltonians.h"
+#include "hamiltonian.h"
 #include "parameters.h"
 
 
 /**
  * @brief Right-hand side of the N-body equations of motion up to 2.5PN order
  * 
- * @param[in]       t           Time (currently not needed, but kept for completeness)
+ * @param[in]       t           Time (currently not used, but kept for completeness)
  * @param[in]       w           State of the system, w = [positions, momenta]
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * @param[out]      dwdt        Right-hand side of the equations of motion
  */
 void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dwdt)
 {
+    (void)t;    // Unused
     // --------------------------------------------------------------------------------------------
     // Initialize the arrays
     // --------------------------------------------------------------------------------------------
@@ -50,8 +51,6 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     double n[num_bodies][num_bodies][num_dim];
     double r[num_bodies][num_bodies];
     double inv_r[num_bodies][num_bodies];
-    double n_ab_ac[num_dim];
-    double n_ab_cb[num_dim];
     for (int a = 0; a < num_bodies; a++) {
         for (int b = a; b < num_bodies; b++) {
             for (int i = 0; i < num_dim; i++){

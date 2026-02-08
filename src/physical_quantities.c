@@ -11,7 +11,7 @@
 #include <math.h>
 #include "eom.h"
 #include "utils.h"
-#include "hamiltonians.h"
+#include "hamiltonian.h"
 
 
 /**

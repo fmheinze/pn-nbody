@@ -547,7 +547,9 @@ void ic_binary_binary_scattering_rel(double d0, double p0_rel, double b, double 
  */
 void ic_figure_eight_orbit(struct ode_params* params, double width, double* w0)
 {
-    double pos_x, pos_y, px, py, lambda;
+    double pos_x, pos_y, lambda;
+    double px = 0.0; 
+    double py = 0.0;
 
     // Scaling
     lambda = width/108.1;
@@ -564,14 +566,14 @@ void ic_figure_eight_orbit(struct ode_params* params, double width, double* w0)
         py = -0.08647/sqrt(lambda);
     }
     // 1PN momenta
-    else if (params->pn_terms[0] == 1 & params->pn_terms[1] == 1 & params->pn_terms[2] == 0) {
+    else if (params->pn_terms[0] == 1 && params->pn_terms[1] == 1 && params->pn_terms[2] == 0) {
         px = -sqrt(0.008693032833827606/lambda + 0.000798860400642637/pow(lambda, 2) 
                                                + 0.00013381114672890315/pow(lambda, 3));
         py = -sqrt(0.007480061222224325/lambda + 0.001241927410006741/pow(lambda, 2) 
                                                + 0.00028564641727617235/pow(lambda, 3));
     }
     // 2PN momenta
-    else if (params->pn_terms[0] == 1 & params->pn_terms[1] == 1 & params->pn_terms[2] == 1) {
+    else if (params->pn_terms[0] == 1 && params->pn_terms[1] == 1 && params->pn_terms[2] == 1) {
         px = -sqrt(0.008692910686038705/lambda + 0.0007977722653187864/pow(lambda, 2) 
              + 6.351332174711012e-05/pow(lambda, 3) - 3.0103527312470005e-05/pow(lambda, 4));
         py = -sqrt(0.007477759360235814/lambda + 0.0012723359375445093/pow(lambda, 2) 

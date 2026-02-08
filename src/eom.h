@@ -1,7 +1,7 @@
 #ifndef EOM_H
 #define EOM_H
 
-#include "hamiltonians.h"
+#include "hamiltonian.h"
 
 struct ode_params {
     int num_dim;
