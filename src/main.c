@@ -24,6 +24,11 @@
 #include "pn_eom_hamiltonians.h"
 
 
+#ifdef __APPLE__
+  #include <mach-o/dyld.h>
+#endif
+
+
 /**
  * @brief Parses command-line arguments and creates output directory.
  * 
@@ -45,20 +50,31 @@ void read_command_line(int argc, char** argv)
     if (!strstr(parfile, ".par")) strcat(parfile, ".par");
 
     // Extract base name (without .par)
-    char *base_ptr = basename(parfile);
+    char parfile_copy[PATH_MAX];
+    snprintf(parfile_copy, sizeof(parfile_copy), "%s", parfile);
+    char *base_ptr = basename(parfile_copy);
     char *dot = strstr(base_ptr, ".par");
     if (dot) *dot = '\0';
 
-    // Use current working directory
-    char cwd[PATH_MAX];
-    if (!getcwd(cwd, sizeof(cwd))) {
-        fprintf(stderr, "Error: getcwd failed: %s\n", strerror(errno));
+    // Get executable directory and then its parent
+    char exe_dir[PATH_MAX];
+    if (get_executable_dir(exe_dir) != 0) {
+        fprintf(stderr, "Error: could not resolve executable directory: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
 
-    // Ensure ./output exists, then create ./output/<base>
+    char parent_dir[PATH_MAX];
+    snprintf(parent_dir, sizeof(parent_dir), "%s/..", exe_dir);
+
+    char parent_real[PATH_MAX];
+    if (!realpath(parent_dir, parent_real)) {
+        fprintf(stderr, "Error: realpath(%s) failed: %s\n", parent_dir, strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+
+    // Ensure <parent>/output exists, then create <parent>/output/<base>
     char output_root[PATH_MAX];
-    snprintf(output_root, sizeof(output_root), "%s/output", cwd);
+    snprintf(output_root, sizeof(output_root), "%s/output", parent_real);
     mkdir_or_die(output_root, 0755);
 
     char outdir[PATH_MAX];
