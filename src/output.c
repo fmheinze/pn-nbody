@@ -11,14 +11,10 @@
 
 #include <stdlib.h>
 #include <stdio.h>
-#include <math.h>
-#include <string.h>
 #include "utils.h"
-#include "integration.h"
-#include "eom.h"
-#include "physical_quantities.h"
 #include "parameters.h"
-#include "hamiltonian.h"
+#include "physical_quantities.h"
+#include "eom.h"
 
 
 /**

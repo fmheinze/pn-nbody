@@ -1,14 +1,11 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "eom.h"
+struct ode_params;
 #include <complex.h>
 #include <limits.h>
 #include <stdnoreturn.h>
-
-#ifdef __APPLE__
-#include <mach-o/dyld.h>
-#endif
+#include <sys/types.h>
 
 void allocate_vector(double** ptr, int num_elements);
 void allocate_2d_array(double*** ptr, int num_vectors, int num_elements);

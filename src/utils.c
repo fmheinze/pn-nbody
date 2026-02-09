@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <math.h>
 #include <complex.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -18,7 +19,10 @@
 #include <errno.h>
 #include "utils.h"
 #include "eom.h"
-#include "math.h"
+
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 
 // ------------------------------------------------------------------------------------------------
