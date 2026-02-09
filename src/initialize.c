@@ -25,7 +25,10 @@
  * 
  * Initializes needed parameters in the parameter database, together with default values 
  * (-1 usually means not set, 1 on, 0 off), as well as a short description that contains which 
- * values are valid.
+ * values are valid. When main() calls this function, the parameters from the parameter file should
+ * already be saved in the parameter database. Calling the function add_parameter() for these
+ * parameters only updates the description. Parameters that are not included in the parameter file
+ * will be added to the parameter database with their default value.
  */
 void initialize_parameters() 
 {
@@ -45,23 +48,26 @@ void initialize_parameters()
     add_parameter("t_end", "0.0", "total duration of the simulation [>= 0]");
     add_parameter("dt", "0.1", "time step / initial time step for adaptive ODE integrators [> 0]");
     add_parameter("ode_integrator", "rk4", "which ODE integrator to use [rk4, cash-karp, ...]");
-    add_parameter("impulse_method", "0", "whether to use the impulse method");
 
     // Cash-Karp method
-    if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
+    if (strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
         add_parameter("rtol", "-1", "target relative error tolerance [> 0]");
         add_parameter("dt_max", "-1", "target relative error tolerance [> 0]");
     }
 
     // Implicit-midpoint
-    if(strcmp(get_parameter_string("ode_integrator"), "implicit-midpoint") == 0) {
+    if (strcmp(get_parameter_string("ode_integrator"), "implicit-midpoint") == 0) {
         add_parameter("tol", "-1", "target error tolerance [> 0]");
         add_parameter("max_iter", "50", "maximum number of fixed-point interations [> 0]");
     }
 
-    // Impulse method
-    if(get_parameter_int("impulse_method") == 1) {
-        add_parameter("impulse_method_n", "1", "number of substeps for the impulse method");
+    // UTT4 Integration
+    if (get_parameter_int("2pn_terms") == 1 && get_parameter_int("num_bodies") >= 4) {
+        add_parameter("include_utt4", "1", "whether to include UTT4 in the Hamiltonian [0, 1]");
+        add_parameter("impulse_method", "0", "whether to use the impulse method");
+
+        if (get_parameter_int("impulse_method") == 1)
+            add_parameter("impulse_method_n", "1", "number of substeps for the impulse method");
     }
 
     // --------------------------------------------------------------------------------------------
@@ -75,7 +81,7 @@ void initialize_parameters()
     add_parameter("ic_preset", "-1", "specify initial condition preset");
 
     // Newtonian binary
-    if(strcmp(get_parameter_string("ic_preset"), "newtonian_binary") == 0) {
+    if (strcmp(get_parameter_string("ic_preset"), "newtonian_binary") == 0) {
         add_parameter("binary_a", "-1", "semi-major axis [> 0]");
         add_parameter("binary_b", "-1", "semi-minor axis [> 0]");
         add_parameter("binary_e", "-1", "eccentricity [>= 0]");
@@ -86,7 +92,7 @@ void initialize_parameters()
     }
 
     // Newtonian binary-single scattering
-    if(strcmp(get_parameter_string("ic_preset"), "binary_single_scattering") == 0) {
+    if (strcmp(get_parameter_string("ic_preset"), "binary_single_scattering") == 0) {
         add_parameter("binary_a", "-1", "semi-major axis [> 0]");
         add_parameter("binary_b", "-1", "semi-minor axis [> 0]");
         add_parameter("binary_e", "-1", "eccentricity [>= 0]");
@@ -101,7 +107,7 @@ void initialize_parameters()
     }
 
     // Relativistic binary-single scattering
-    if(strcmp(get_parameter_string("ic_preset"), "binary_single_scattering_rel") == 0) {
+    if (strcmp(get_parameter_string("ic_preset"), "binary_single_scattering_rel") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
@@ -113,7 +119,7 @@ void initialize_parameters()
     }
 
     // Newtonian binary-binary scattering
-    if(strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering") == 0) {
+    if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("v0_rel", "-1", "initial relative approach velocity [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
@@ -136,7 +142,7 @@ void initialize_parameters()
     }
 
     // Relativistic binary-binary scattering
-    if(strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering_rel") == 0) {
+    if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering_rel") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
@@ -153,7 +159,7 @@ void initialize_parameters()
     }
 
     // Figure-eight orbit
-    if(strcmp(get_parameter_string("ic_preset"), "figure_eight") == 0) {
+    if (strcmp(get_parameter_string("ic_preset"), "figure_eight") == 0) {
         add_parameter("figure_eight_width", "1000.0", "width of the figure-eight orbit [> 0]");
     }
 
@@ -186,7 +192,6 @@ struct ode_params initialize_ode_params()
     // General parameters
     params.num_dim = get_parameter_int("num_dim");
     params.num_bodies = get_parameter_int("num_bodies");
-    params.use_impulse_method = get_parameter_int("impulse_method");
 
     // Masses
     allocate_vector(&params.masses, params.num_bodies);
@@ -204,13 +209,21 @@ struct ode_params initialize_ode_params()
     params.pn_terms[2] = get_parameter_int("2pn_terms");
     params.pn_terms[3] = get_parameter_int("2.5pn_terms");
 
+    // UTT4 Integration
+    if (params.pn_terms[2] == 1 && params.num_bodies >= 4) {
+        params.use_impulse_method = get_parameter_int("impulse_method");
+        params.include_utt4 = get_parameter_int("include_utt4");
+    }
+    else {
+        params.use_impulse_method = 0;
+        params.include_utt4 = 0;
+    }
+
     // Check validity
     if (params.num_dim != 2 && params.num_dim != 3) 
         errorexit("Please specify a valid num_dim (must be 2 or 3)");
     if (params.num_bodies <= 0) 
         errorexit("Please specify a valid num_bodies (must be num_bodies > 0)");
-    if (params.use_impulse_method != 0 && params.use_impulse_method != 1) 
-        errorexit("Please set impulse_method to 0 (off) or 1 (on)");
     for (int i = 0; i < params.num_bodies; i++) {
         if (params.masses[i] < 0) 
             errorexit("Please specify valid masses (must be mass >= 0)");
@@ -218,6 +231,20 @@ struct ode_params initialize_ode_params()
     for (int i = 0; i < NUM_PN_TERMS; i++) {
         if (params.pn_terms[i] != 0 && params.pn_terms[i] != 1) 
             errorexit("Please set pn_terms to 0 (off) or 1 (on)");
+    }
+    if (params.use_impulse_method != 0 && params.use_impulse_method != 1)
+        errorexit("Please set impulse_method to 0 (off) or 1 (on)");
+    if (params.include_utt4 != 0 && params.include_utt4 != 1)
+        errorexit("Please set include_utt4 to 0 (off) or 1 (on)");
+    if (params.use_impulse_method == 1 && params.include_utt4 == 0) {
+        errorexit("You cannot use the impulse method without also including UTT4!");
+    }
+    
+    // UTT4 Warning
+    if (params.include_utt4) {
+        print_divider();
+        printf("Warning: Including UTT4 is computationally very expensive! "
+            "Consider turning it off via include_utt4 = 0\n");
     }
 
     return params;

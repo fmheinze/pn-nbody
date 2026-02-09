@@ -1,5 +1,5 @@
-#ifndef OUTPUT_H
-#define OUTPUT_H
+#ifndef INITIALIZE_H
+#define INITIALIZE_H
 
 #include "eom.h"
 

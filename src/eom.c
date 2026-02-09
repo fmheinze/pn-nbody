@@ -179,8 +179,9 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         // Add the contributions from H2PN without UTT4
         update_eom_hamiltonian_cs(w, H2PN_base_complex, 1e-30, ode_params, dwdt);
 
-        // If N >= 4 and not using impulse splitting, add UTT4 contributions directly to dp/dt
-        if (ode_params->num_bodies >= 4 && !ode_params->use_impulse_method) {
+        // If not using impulse splitting, add UTT4 contributions directly to dp/dt
+        if (ode_params->include_utt4 && !ode_params->use_impulse_method)
+        {
             double dUdx[array_half];
             compute_dUTT4_dx(w, ode_params, dUdx);
             for (int i = 0; i < array_half; i++)

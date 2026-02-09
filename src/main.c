@@ -58,8 +58,7 @@ void read_command_line(int argc, char** argv)
     }
 
     char parent_dir[PATH_MAX];
-    snprintf(parent_dir, sizeof(parent_dir), "%s", exe_dir);
-    if (!dirname(parent_dir)) errorexit("dirname failed");
+    snprintf(parent_dir, sizeof(parent_dir), "%s/..", exe_dir);
 
     char parent_real[PATH_MAX];
     if (!realpath(parent_dir, parent_real)) {
@@ -106,19 +105,19 @@ int main(int argc, char** argv)
     read_command_line(argc, argv);
     parse_parameter_file(get_parameter_string("parfile"));
     initialize_parameters();
-    struct ode_params params = initialize_ode_params();
+    struct ode_params ode_params = initialize_ode_params();
     print_divider();
 
     // Initialize state vector with specified initial conditions
-    double* w = initialize_state_vector(&params);
+    double* w = initialize_state_vector(&ode_params);
 
     // Run simulation
     printf("Running simulation...\n"); 
-    if (get_parameter_int("impulse_method")) {
-        ode_integrator_impulse(w, rhs_pn_nbody, compute_dUTT4_dx, &params);
+    if (ode_params.use_impulse_method) {
+        ode_integrator_impulse(w, rhs_pn_nbody, compute_dUTT4_dx, &ode_params);
     }
     else {
-        ode_integrator(w, rhs_pn_nbody, &params);
+        ode_integrator(w, rhs_pn_nbody, &ode_params);
     }
     printf("\n"); 
     print_divider();
@@ -126,7 +125,7 @@ int main(int argc, char** argv)
     // Finalize
     printf("The simulation has finished! Thanks for using pn-nbody!\n");
     free_vector(w);
-    free_ode_params(&params);
+    free_ode_params(&ode_params);
     free_parameters();
     return EXIT_SUCCESS;
 }
