@@ -177,10 +177,12 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     // --------------------------------------------------------------------------------------------
     if (ode_params->pn_terms[2]) {
         // Add the contributions from H2PN without UTT4
-        update_eom_hamiltonian_cs(w, H2PN_base_complex, 1e-30, ode_params, dwdt);
+        update_eom_hamiltonian_cs(w, H2PN_base_complex, ode_params, dwdt);
 
         // If N >= 4 and not using impulse splitting, add UTT4 contributions directly to dp/dt
-        if (ode_params->num_bodies >= 4 && !ode_params->use_impulse_method) {
+        if (ode_params->num_bodies >= 4 && !ode_params->use_impulse_method 
+            && ode_params->include_utt4) 
+        {
             double dUdx[array_half];
             compute_dUTT4_dx(w, ode_params, dUdx);
             for (int i = 0; i < array_half; i++)
@@ -291,11 +293,10 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
  * 
  * @param[in]       w           State of the system, w = [positions, momenta]
  * @param[in]       H           Complex-valued Hamiltonian
- * @param[in]       h           Complex step size
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * @param[out]      dwdt        Right-hand side of the ODE
  */
-void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_params* ode_params,
+void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, struct ode_params* ode_params,
     double *dwdt)
 {
     int array_half = ode_params->num_dim * ode_params->num_bodies;
@@ -303,6 +304,7 @@ void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_
     complex double w_c[total_dim];
     complex double H_cs_val;
     double dHdw[total_dim];
+    double h = ode_params->utt4_h;
     int p_flag;
 
     // Copy original array to w_copy

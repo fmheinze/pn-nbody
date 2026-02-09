@@ -37,12 +37,8 @@
 
 // Integration parameters
 #define NVEC 1
-#define EPSREL 1e-16
-#define EPSABS 1e-20
 #define VERBOSE 0
 #define SEED 42
-#define MINEVAL 1000000
-#define MAXEVAL 1000000
 #define KEY 11
 
 typedef struct {
@@ -314,11 +310,17 @@ static double ln_integral_sum(double* w, struct ode_params* ode_params)
 
                     // Integrate 6 symmetry-inequivalent terms
                     Cuhre(num_dim, 6, ln_integral, &integral_params, NVEC,
-                          EPSREL, EPSABS, 0,
-                          MINEVAL, MAXEVAL, KEY,
+                          ode_params->utt4_epsrel, ode_params->utt4_epsabs, 0,
+                          ode_params->utt4_mineval, ode_params->utt4_maxeval, KEY,
                           NULL, NULL,
                           &nregions, &neval, &fail,
                           integral, error, prob);
+                    
+                    if (fail) {
+                        progress_bar_break_line();
+                        printf("Warning: Integral evaluation could not reach the specified error "
+                            "tolerance! Consider increasing utt4_maxeval\n");
+                    }
 
                     // Accumulate contributions to full quadruple sum
                     // Each value should be multiplied by the symmetry factor 4, 
@@ -460,11 +462,17 @@ void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx)
 
                     // Integrate: one call, 72 outputs
                     Cuhre(num_dim, NCOMP_H_DERIV, ln_integral_gradient, &integral_params, NVEC,
-                          EPSREL, EPSABS, 0,
-                          MINEVAL, MAXEVAL, KEY,
+                          ode_params->utt4_epsrel, ode_params->utt4_epsabs, 0,
+                          ode_params->utt4_mineval, ode_params->utt4_maxeval, KEY,
                           NULL, NULL,
                           &nregions, &neval, &fail,
                           integral, error, prob);
+                        
+                    if (fail) {
+                        progress_bar_break_line();
+                        printf("Warning: Integral evaluation could not reach the specified error "
+                            "tolerance! Consider increasing utt4_maxeval\n");
+                    }
 
                     // Accumulate derivatives into global gradient
                     for (int p = 0; p < 6; ++p) {
