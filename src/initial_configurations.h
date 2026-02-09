@@ -1,7 +1,7 @@
 #ifndef INITIAL_CONFIGURATIONS_H
 #define INITIAL_CONFIGURATIONS_H
 
-#include "eom.h"
+struct ode_params; 
 
 // Binary struct
 struct binary_params {

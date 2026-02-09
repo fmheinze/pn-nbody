@@ -7,12 +7,10 @@
  */
 
 #include <stdlib.h>
-#include <stdio.h>
 #include <math.h>
 #include "initial_configurations.h"
 #include "utils.h"
 #include "eom.h"
-#include "parameters.h"
 
 
 /**

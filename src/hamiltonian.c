@@ -14,13 +14,12 @@
 
 
 #include <math.h>
-#include <stdlib.h>
 #include <stdio.h>
 #include <complex.h>
 #include "eom.h"
 #include "hamiltonian.h"
 #include "utils.h"
-#include "cuba.h"
+#include "cuba.h" 
 
 #define PI 3.1415926535897932384626433832795
 #define INVPI 0.31830988618379067153776752674503

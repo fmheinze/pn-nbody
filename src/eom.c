@@ -3,14 +3,10 @@
  * @brief Functions for the right-hand side of the post-Newtonian equations of motion
  */
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <math.h>
 #include <complex.h>
 #include "utils.h"
 #include "eom.h"
 #include "hamiltonian.h"
-#include "parameters.h"
 
 
 /**

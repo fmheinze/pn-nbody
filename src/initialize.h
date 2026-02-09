@@ -1,7 +1,9 @@
 #ifndef INITIALIZE_H
 #define INITIALIZE_H
 
-#include "eom.h"
+#include "initial_configurations.h"
+
+struct ode_params;  
 
 void initialize_parameters(void);
 struct ode_params initialize_ode_params(void);
