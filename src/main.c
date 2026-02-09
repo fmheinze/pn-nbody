@@ -58,7 +58,8 @@ void read_command_line(int argc, char** argv)
     }
 
     char parent_dir[PATH_MAX];
-    snprintf(parent_dir, sizeof(parent_dir), "%s/..", exe_dir);
+    snprintf(parent_dir, sizeof(parent_dir), "%s", exe_dir);
+    if (!dirname(parent_dir)) errorexit("dirname failed");
 
     char parent_real[PATH_MAX];
     if (!realpath(parent_dir, parent_real)) {
