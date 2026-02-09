@@ -6,9 +6,10 @@
  * A complicated part of the N-body 2PN Hamiltonian is the four-point correlation function UTT4,
  * which contains an integral that can currently only be computed numerically, which is very
  * computationally expensive (see Heinze, Schäfer and Brügmann 2026 for more details). The first
- * set of functions in this file are for a separate computation of UTT4 and the integral.
+ * set of functions in this file are for a separate computation of UTT4 and the integral, and they
+ * are not compiled if the user doesn't compile pn-nbody with the Cuba library.
  * 
- * TODO: For the ln_integral functions, compute geometirc quantities (distances, n-vectors) once 
+ * TODO: For the ln_integral functions, compute geometric quantities (distances, n-vectors) once 
  * outside and pass them as userdata, if possible.
  */
 
@@ -19,19 +20,21 @@
 #include "eom.h"
 #include "hamiltonian.h"
 #include "utils.h"
-#include "cuba.h" 
 
 #define PI 3.1415926535897932384626433832795
 #define INVPI 0.31830988618379067153776752674503
-#define NUM_LOCAL_BODIES 4
-#define NCOMP_H_DERIV 72
-#define NUM_PERMS 6    // 4!/4 = 6 unique permutations due to symmetry factor 4
+
+#if HAVE_CUBA
+#include "cuba.h" 
 
 // Integration parameters
 #define NVEC 1
 #define VERBOSE 0
 #define SEED 42
 #define KEY 11
+#define NUM_LOCAL_BODIES 4
+#define NCOMP_H_DERIV 72
+#define NUM_PERMS 6    // 4!/4 = 6 unique permutations due to symmetry factor 4
 
 typedef struct {
     double pos[NUM_LOCAL_BODIES][3];
@@ -54,7 +57,7 @@ static inline int role_of_body(int p, int body) {
 }
 
 
-// Numerically computes the value of the ln-integral occuring in UTT4
+// Numerically computes the value of the ln-integral occurring in UTT4
 static int ln_integral(const int *ndim, const cubareal xx[], const int *ncomp, cubareal ff[], 
     void *userdata) 
 {
@@ -98,7 +101,7 @@ static int ln_integral(const int *ndim, const cubareal xx[], const int *ncomp, c
         double *C = params->pos[C_idx];
         double *D = params->pos[D_idx];
 
-        // Quantities occuring in the integrand
+        // Quantities occurring in the integrand
         double dx_a[3], dx_b[3], dx_c[3], dx_d[3], ab[3];
         double n_a[3], n_b[3], n_c[3], n_d[3], n_ab[3];
         double r_a, r_b, r_c, r_d, r_ab, s_ab;
@@ -215,7 +218,7 @@ static int ln_integral_gradient(const int *ndim, const cubareal xx[], const int 
                 double complex *C = BODY(C_idx);
                 double complex *D = BODY(D_idx);
 
-                // Quantities occuring in the integrand
+                // Quantities occurring in the integrand
                 double complex dx_a[3], dx_b[3], dx_c[3], dx_d[3], ab[3];
                 double complex n_a[3], n_b[3], n_c[3], n_d[3], n_ab[3];
                 double complex r_a, r_b, r_c, r_d, r_ab, s_ab;
@@ -254,7 +257,7 @@ static int ln_integral_gradient(const int *ndim, const cubareal xx[], const int 
                     n_b_dot_n_d  += n_b[i] * n_d[i];
                 }
 
-                // Compute the integrand and multiply by jaconian determinant
+                // Compute the integrand and multiply by Jacobian determinant
                 double complex F = 1.0 / (r_c*r_c * r_d*r_d) *
                     ( (n_c_dot_n_ab - n_a_dot_n_c) * (n_d_dot_n_ab + n_b_dot_n_d) / (s_ab*s_ab)
                     - (n_c_dot_n_d - n_c_dot_n_ab * n_d_dot_n_ab) / (r_ab * s_ab) );
@@ -481,6 +484,8 @@ void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx)
         }
     }
 }
+
+#endif
 
 
 // ------------------------------------------------------------------------------------------------
@@ -741,9 +746,11 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
             }
         } 
     }
-    // ln-integral sum of UTT4 (the masses are accounted included in ln_integral_sum, 
+    // ln-integral sum of UTT4 (the masses are included in ln_integral_sum, 
     // the factor 1/4 cancels the symmetry factor 4)
+    #if HAVE_CUBA
     if (utt4_flag) H += INVPI * ln_integral_sum(w, ode_params);
+    #endif
     return H;
 }
 

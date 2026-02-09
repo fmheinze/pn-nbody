@@ -58,7 +58,10 @@ void read_command_line(int argc, char** argv)
     }
 
     char parent_dir[PATH_MAX];
-    snprintf(parent_dir, sizeof(parent_dir), "%s/..", exe_dir);
+    int n = snprintf(parent_dir, sizeof(parent_dir), "%s/..", exe_dir);
+    if (n < 0 || (size_t)n >= sizeof parent_dir) {
+        errorexit("Executable path too long");
+    }
 
     char parent_real[PATH_MAX];
     if (!realpath(parent_dir, parent_real)) {
@@ -92,7 +95,7 @@ void read_command_line(int argc, char** argv)
  * @param[in]   argc    Number of command-line arguments
  * @param[in]   argv    Array of command-line argument strings
  * @return EXIT_SUCCESS on successful completion,
- *         EXIT_FALIURE if an error occurs during execution.
+ *         EXIT_FAILURE if an error occurs during execution.
  */
 int main(int argc, char** argv) 
 {
@@ -105,6 +108,7 @@ int main(int argc, char** argv)
     read_command_line(argc, argv);
     parse_parameter_file(get_parameter_string("parfile"));
     initialize_parameters();
+    print_divider();
     struct ode_params ode_params = initialize_ode_params();
     print_divider();
 
@@ -113,10 +117,12 @@ int main(int argc, char** argv)
 
     // Run simulation
     printf("Running simulation...\n"); 
+    #if HAVE_CUBA
     if (ode_params.use_impulse_method) {
         ode_integrator_impulse(w, rhs_pn_nbody, compute_dUTT4_dx, &ode_params);
     }
-    else {
+    #endif
+    if (!ode_params.use_impulse_method) {
         ode_integrator(w, rhs_pn_nbody, &ode_params);
     }
     printf("\n"); 
