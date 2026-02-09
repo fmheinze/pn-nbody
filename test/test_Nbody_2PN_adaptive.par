@@ -8,8 +8,6 @@ num_bodies 		= 4
 2pn_terms		= 1
 2.5pn_terms		= 0
 
-include_utt4		= 1
-
 
 # -------------------------------------------------------------------------------
 # Numerical parameters

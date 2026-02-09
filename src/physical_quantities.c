@@ -30,11 +30,7 @@ double total_energy_conservative(double* w, struct ode_params* ode_params)
         H += H0PN(w, ode_params);
     if (ode_params->pn_terms[1] == 1)
         H += H1PN(w, ode_params);
-    if (ode_params->pn_terms[2] == 1) {
-        if (ode_params->include_utt4)
-            H += H2PN(w, ode_params, 1);
-        else
-            H += H2PN(w, ode_params, 0);
-    }
+    if (ode_params->pn_terms[2] == 1)
+        H += H2PN(w, ode_params, 1);
     return H;
 }
