@@ -16,6 +16,26 @@ DEPS := $(OBJS:.o=.d)
 
 # Cuba configuration
 CUBA_DIR ?=
+USE_CUBA ?= auto
+
+# --- Auto-detect whether we can build with CUBA ---
+# Priority:
+#  1) If USE_CUBA is explicitly 0/1 -> obey
+#  2) If CUBA_DIR set -> enable
+#  3) If pkg-config knows "cuba" -> enable
+#  4) Else try a tiny link test against -lcuba -> enable/disable
+
+ifeq ($(USE_CUBA),auto)
+  ifneq ($(strip $(CUBA_DIR)),)
+    USE_CUBA := 1
+  else ifneq ($(shell pkg-config --exists cuba && echo yes),)
+    USE_CUBA := 1
+  else ifneq ($(shell printf 'int main(){return 0;}\n' | $(CC) -x c -o /tmp/.cuba_test - -lcuba >/dev/null 2>&1 && echo yes),)
+    USE_CUBA := 1
+  else
+    USE_CUBA := 0
+  endif
+endif
 
 # If CUBA_DIR is set, use it. Otherwise rely on system paths.
 ifeq ($(strip $(CUBA_DIR)),)
@@ -26,10 +46,15 @@ else
   CUBA_LDFLAGS  := -L$(CUBA_DIR)
 endif
 
-# Libraries
-LDLIBS  += -lcuba -lm
-LDFLAGS += $(CUBA_LDFLAGS)
-CPPFLAGS += $(CUBA_CPPFLAGS)
+# Apply flags and libs based on USE_CUBA
+ifeq ($(USE_CUBA),1)
+  CPPFLAGS += $(CUBA_CPPFLAGS) -DHAVE_CUBA=1
+  LDFLAGS  += $(CUBA_LDFLAGS)
+  LDLIBS   += -lcuba -lm
+else
+  CPPFLAGS += -DHAVE_CUBA=0
+  LDLIBS   += -lm
+endif
 
 # Compile flags
 CFLAGS ?= -O3
