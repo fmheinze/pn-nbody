@@ -20,14 +20,7 @@
 #include "eom.h"
 #include "hamiltonian.h"
 #include "utils.h"
-
-#if REALSIZE == 16
-#include "cubaq.h"
-#elif REALSIZE == 10
-#include "cubal.h"
-#else
 #include "cuba.h"
-#endif
 
 #define PI 3.1415926535897932384626433832795
 #define INVPI 0.31830988618379067153776752674503
@@ -37,12 +30,8 @@
 
 // Integration parameters
 #define NVEC 1
-#define EPSREL 1e-16
-#define EPSABS 1e-20
 #define VERBOSE 0
 #define SEED 42
-#define MINEVAL 1000000
-#define MAXEVAL 1000000
 #define KEY 11
 
 typedef struct {
@@ -314,8 +303,8 @@ static double ln_integral_sum(double* w, struct ode_params* ode_params)
 
                     // Integrate 6 symmetry-inequivalent terms
                     Cuhre(num_dim, 6, ln_integral, &integral_params, NVEC,
-                          EPSREL, EPSABS, 0,
-                          MINEVAL, MAXEVAL, KEY,
+                          ode_params->utt4_epsrel, ode_params->utt4_epsabs, 0,
+                          ode_params->utt4_mineval, ode_params->utt4_maxeval, KEY,
                           NULL, NULL,
                           &nregions, &neval, &fail,
                           integral, error, prob);
@@ -460,11 +449,21 @@ void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx)
 
                     // Integrate: one call, 72 outputs
                     Cuhre(num_dim, NCOMP_H_DERIV, ln_integral_gradient, &integral_params, NVEC,
-                          EPSREL, EPSABS, 0,
-                          MINEVAL, MAXEVAL, KEY,
+                          ode_params->utt4_epsrel, ode_params->utt4_epsabs, 0,
+                          ode_params->utt4_mineval, ode_params->utt4_maxeval, KEY,
                           NULL, NULL,
                           &nregions, &neval, &fail,
                           integral, error, prob);
+                    
+                    if (fail) {
+                        static int warned = 0;
+                        if (!warned) {
+                            progress_bar_break_line();
+                            printf("Warning: CUBA was not able to achieve the specified error "
+                                "tolerance! Please consider increasing utt4_maxeval\n");
+                            warned = 1;
+                        }
+                    }
 
                     // Accumulate derivatives into global gradient
                     for (int p = 0; p < 6; ++p) {

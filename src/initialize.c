@@ -64,8 +64,14 @@ void initialize_parameters()
     // UTT4 Integration
     if (get_parameter_int("2pn_terms") == 1 && get_parameter_int("num_bodies") >= 4) {
         add_parameter("include_utt4", "1", "whether to include UTT4 in the Hamiltonian [0, 1]");
-        add_parameter("impulse_method", "0", "whether to use the impulse method");
+        if (get_parameter_int("include_utt4") == 1) {
+            add_parameter("utt4_mineval", "1e5", "minimum integrand evaluations for UTT4 [> 0]");
+            add_parameter("utt4_maxeval", "1e7", "maximum integrand evaluations for UTT4 [> 0]");
+            add_parameter("utt4_epsrel", "1e-4", "rel. error threshold for UTT4 integral [> 0]");
+            add_parameter("utt4_epsabs", "1e-20", "abs. error threshold for UTT4 integral [> 0]");
+        }
 
+        add_parameter("impulse_method", "0", "whether to use the impulse method");
         if (get_parameter_int("impulse_method") == 1)
             add_parameter("impulse_method_n", "1", "number of substeps for the impulse method");
     }
@@ -213,10 +219,20 @@ struct ode_params initialize_ode_params()
     if (params.pn_terms[2] == 1 && params.num_bodies >= 4) {
         params.use_impulse_method = get_parameter_int("impulse_method");
         params.include_utt4 = get_parameter_int("include_utt4");
-    }
-    else {
+    } else {
         params.use_impulse_method = 0;
         params.include_utt4 = 0;
+    }
+    if (params.include_utt4 == 1) {
+        params.utt4_mineval = (int) get_parameter_double("utt4_mineval");
+        params.utt4_maxeval = (int) get_parameter_double("utt4_maxeval");
+        params.utt4_epsrel = get_parameter_double("utt4_epsrel");
+        params.utt4_epsabs = get_parameter_double("utt4_epsabs");
+    } else {
+        params.utt4_mineval = -1;
+        params.utt4_maxeval = -1;
+        params.utt4_epsrel = -1;
+        params.utt4_epsabs = -1;
     }
 
     // Check validity
@@ -236,9 +252,18 @@ struct ode_params initialize_ode_params()
         errorexit("Please set impulse_method to 0 (off) or 1 (on)");
     if (params.include_utt4 != 0 && params.include_utt4 != 1)
         errorexit("Please set include_utt4 to 0 (off) or 1 (on)");
-    if (params.use_impulse_method == 1 && params.include_utt4 == 0) {
+    if (params.use_impulse_method == 1 && params.include_utt4 == 0)
         errorexit("You cannot use the impulse method without also including UTT4!");
-    }
+    if (params.include_utt4 == 1 && params.utt4_mineval <= 0) 
+        errorexit("Please specify a valid utt4_mineval (must be utt4_mineval > 0)");
+    if (params.include_utt4 == 1 && params.utt4_maxeval <= 0) 
+        errorexit("Please specify a valid utt4_maxeval (must be utt4_maxeval > 0)");
+    if (params.include_utt4 == 1 && params.utt4_maxeval < params.utt4_mineval) 
+        errorexit("Please ensure utt4_maxeval >= utt4_mineval");
+    if (params.include_utt4 == 1 && params.utt4_epsrel <= 0) 
+        errorexit("Please specify a valid utt4_epsrel (must be utt4_epsrel > 0)");
+    if (params.include_utt4 == 1 && params.utt4_epsabs <= 0) 
+        errorexit("Please specify a valid utt4_epsabs (must be utt4_epsabs > 0)");
     
     // UTT4 Warning
     if (params.include_utt4) {

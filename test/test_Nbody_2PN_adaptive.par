@@ -21,9 +21,12 @@ dt			= 1.0
 # -------------------------------------------------------------------------------
 ode_integrator		= rk4
 rtol	        	= 1e-16
-impulse_method		= 1
+impulse_method		= 0
 impulse_n		= 10
-include_utt4		= 1
+
+include_utt4		= 0
+utt4_epsrel = 1e-3
+utt4_maxeval = 1e5
 
 
 # -------------------------------------------------------------------------------
