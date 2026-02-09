@@ -6,9 +6,11 @@
 struct ode_params {
     int num_dim;
     int num_bodies;
-    int use_impulse_method;
     int* pn_terms;
     double* masses;
+
+    int use_impulse_method;
+    int include_utt4;
 };
 
 void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dwdt);

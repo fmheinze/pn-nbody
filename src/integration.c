@@ -47,11 +47,8 @@ static void check_integration_parameter_validity()
 {
     double t_end = get_parameter_double("t_end");
     double dt = get_parameter_double("dt");
-    int impulse_method = get_parameter_int("impulse_method");
     if(t_end < 0.0) errorexit("Please specify a valid t_end (must be t_end >= 0)");
     if(dt <= 0.0) errorexit("Please specify a valid dt (must be dt > 0)");
-    if(impulse_method != 0 && impulse_method != 1) 
-        errorexit("Please set impulse_method to 0 (off) or 1 (on)");
 
     // Cash-Karp method
     if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
@@ -67,13 +64,6 @@ static void check_integration_parameter_validity()
         if(tol <= 0.0)
             errorexit("Please specify a valid tol (must be tol > 0)");
         if(max_iter <= 0) errorexit("Please specify a valid max_iter (must be max_iter > 0)");
-    }
-
-    // Impulse method
-    if(get_parameter_int("impulse_method") == 1) {
-        int impulse_method_n = get_parameter_int("impulse_method_n");
-        if(impulse_method_n <= 0) 
-            errorexit("Please specify a valid impulse_method_n (must be impulse_method_n > 0)");
     }
 }
 
