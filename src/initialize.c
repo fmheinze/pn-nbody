@@ -205,7 +205,7 @@ struct ode_params initialize_ode_params()
         params.masses[i] = get_parameter_double_i("mass", i+1);
 
     // PN terms
-    params.pn_terms = (int *)malloc(NUM_PN_TERMS * sizeof(double));
+    params.pn_terms = (int *)malloc(NUM_PN_TERMS * sizeof *params.pn_terms);
     if (params.pn_terms == NULL) {
         fprintf(stderr, "Memory allocation failed\n");
         exit(EXIT_FAILURE);
@@ -264,10 +264,16 @@ struct ode_params initialize_ode_params()
         errorexit("Please specify a valid utt4_epsrel (must be utt4_epsrel > 0)");
     if (params.include_utt4 == 1 && params.utt4_epsabs <= 0) 
         errorexit("Please specify a valid utt4_epsabs (must be utt4_epsabs > 0)");
+
+    #if !HAVE_CUBA
+    if (params.include_utt4) {
+        errorexit("include_utt4 = 1, but this executable was compiled without CUBA.\n"
+            "The computation of UTT4 requires CUBA. Please recompile with CUBA!");
+    }
+    #endif
     
     // UTT4 Warning
     if (params.include_utt4) {
-        print_divider();
         printf("Warning: Including UTT4 is computationally very expensive! "
             "Consider turning it off via include_utt4 = 0\n");
     }
