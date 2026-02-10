@@ -1,20 +1,21 @@
-# Test for a Newtonian binary-single scattering
+# Test for a relativistic binary-binary scattering with all terms up to 2.5 PN order
+# (also includes the expensive computation of UTT4, use include_utt4 = 0 to turn it off)
 
 # -------------------------------------------------------------------------------------------------
 # General parameters
 # -------------------------------------------------------------------------------------------------
 num_dim			= 3				# Number of dimensions
-num_bodies 		= 3				# Number of bodies
+num_bodies 		= 4				# Number of bodies
 0pn_terms		= 1				# Whether to include 0PN (Newtonian) terms
-1pn_terms		= 0				# Whether to include 1PN terms
-2pn_terms		= 0				# Whether to include 2PN terms
+1pn_terms		= 1				# Whether to include 1PN terms
+2pn_terms		= 1				# Whether to include 2PN terms
 2.5pn_terms		= 0				# Whether to include 2.5PN terms
 
 
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end			= 7000.0			# Final time
+t_end			= 2500.0			# Final time
 dt			= 0.1				# Timestep
 
 
@@ -23,26 +24,31 @@ dt			= 0.1				# Timestep
 # -------------------------------------------------------------------------------------------------
 ode_integrator		= cash-karp			# ODE integration method
 rtol	        	= 1e-16				# Error tolerance for the Cash-Karp method
+impulse_method		= 1				# Whether to use the impulse-method
+impulse_method_n	= 10				# Number of substeps for the impulse method
+
+include_utt4		= 1				# Whether to include UTT4
+utt4_epsrel 		= 1e-3				# Relative error tolerance for integral
+utt4_maxeval 		= 1e6				# Maximum number of integrand evaluations
 
 
 # -------------------------------------------------------------------------------------------------
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
-ic_preset 		= binary_single_scattering	# Initial condition preset
-mass1			= 0.5				# Mass of body 1
-mass2			= 1.5				# Mass of body 2
-mass3			= 1.0				# Mass of body 3
-mass4			= 1.0				# Mass of body 4
+mass1			= 0.25
+mass2			= 0.25
+mass3			= 0.25
+mass4			= 0.25
 
-binary_a		= 40.0				# Semi-major axis of binary
-binary_e 		= 0.3				# Eccentricity of binary
-binary_phi0 		= 1.7				# Initial phase of binary
-orientation		= 1.0 -1.0 0.0			# Orientation of binary
+pos1			= -9.15192258 -11.557844025 -21.650635095
+pos2			= -3.34807742 -10.09279107 -21.650635095
+pos3			= 5.058522725 8.07975174 21.650635095
+pos4			= 7.441477275 13.570883355 21.650635095
 
-d0 			= 500.0				# Initial distance for the scattering
-v0_rel			= 0.15				# Initial velocity for the scattering
-b			= -100.0 			# Scattering impact parameter
-
+p1			= 0.01061056 -0.04124137 0.007501
+p2			= -0.01061056 0.04124137 0.007501
+p3			= 0.039141425 -0.016774495 -0.007501
+p4			= -0.039141425 0.016774495 -0.007501
 
 # -------------------------------------------------------------------------------------------------
 # Output parameters
