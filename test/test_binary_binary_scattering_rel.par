@@ -16,20 +16,20 @@ num_bodies 		= 4				# Number of bodies
 # Time parameters
 # -------------------------------------------------------------------------------------------------
 t_end			= 2500.0			# Final time
-dt			= 0.1				# Timestep
+dt			= 1.0				# Timestep
 
 
 # -------------------------------------------------------------------------------------------------
 # ODE integrator
 # -------------------------------------------------------------------------------------------------
 ode_integrator		= cash-karp			# ODE integration method
-rtol	        	= 1e-16				# Error tolerance for the Cash-Karp method
+rtol	        	= 1e-14				# Error tolerance for the Cash-Karp method
 impulse_method		= 1				# Whether to use the impulse-method
-impulse_method_n	= 10				# Number of substeps for the impulse method
+impulse_method_n	= 1				# Number of substeps for the impulse method
 
 include_utt4		= 1				# Whether to include UTT4
 utt4_epsrel 		= 1e-3				# Relative error tolerance for integral
-utt4_maxeval 		= 1e6				# Maximum number of integrand evaluations
+utt4_maxeval 		= 1e7				# Maximum number of integrand evaluations
 
 
 # -------------------------------------------------------------------------------------------------
