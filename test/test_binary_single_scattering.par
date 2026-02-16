@@ -3,49 +3,49 @@
 # -------------------------------------------------------------------------------------------------
 # General parameters
 # -------------------------------------------------------------------------------------------------
-num_dim			= 3				# Number of dimensions
-num_bodies 		= 3				# Number of bodies
-0pn_terms		= 1				# Whether to include 0PN (Newtonian) terms
-1pn_terms		= 0				# Whether to include 1PN terms
-2pn_terms		= 0				# Whether to include 2PN terms
-2.5pn_terms		= 0				# Whether to include 2.5PN terms
+num_dim              = 3                               # Number of dimensions
+num_bodies           = 3                               # Number of bodies
+0pn_terms            = 1                               # Whether to include 0PN (Newtonian) terms
+1pn_terms            = 0                               # Whether to include 1PN terms
+2pn_terms            = 0                               # Whether to include 2PN terms
+2.5pn_terms          = 0                               # Whether to include 2.5PN terms
 
 
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end			= 7000.0			# Final time
-dt			= 0.1				# Timestep
+t_end                = 7000.0                          # Final time
+dt                   = 0.1                             # Timestep
 
 
 # -------------------------------------------------------------------------------------------------
 # ODE integrator
 # -------------------------------------------------------------------------------------------------
-ode_integrator		= cash-karp			# ODE integration method
-rtol	        	= 1e-16				# Error tolerance for the Cash-Karp method
+ode_integrator       = cash-karp                       # ODE integration method
+rtol                 = 1e-16                           # Error tolerance for the Cash-Karp method
 
 
 # -------------------------------------------------------------------------------------------------
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
-ic_preset 		= binary_single_scattering	# Initial condition preset
-mass1			= 0.5				# Mass of body 1
-mass2			= 1.5				# Mass of body 2
-mass3			= 1.0				# Mass of body 3
-mass4			= 1.0				# Mass of body 4
+ic_preset            = binary_single_scattering        # Initial condition preset
+mass1                = 0.5                             # Mass of body 1
+mass2                = 1.5                             # Mass of body 2
+mass3                = 1.0                             # Mass of body 3
+mass4                = 1.0                             # Mass of body 4
 
-binary_a		= 40.0				# Semi-major axis of binary
-binary_e 		= 0.3				# Eccentricity of binary
-binary_phi0 		= 1.7				# Initial phase of binary
-orientation		= 1.0 -1.0 0.0			# Orientation of binary
+binary_a             = 40.0                            # Semi-major axis of binary
+binary_e             = 0.3                             # Eccentricity of binary
+binary_phi0          = 1.7                             # Initial phase of binary
+orientation          = 1.0 -1.0 0.0                    # Orientation of binary
 
-d0 			= 500.0				# Initial distance for the scattering
-v0_rel			= 0.15				# Initial velocity for the scattering
-b			= -100.0 			# Scattering impact parameter
+d0                   = 500.0                           # Initial distance for the scattering
+v0_rel               = 0.15                            # Initial velocity for the scattering
+b                    = -100.0                          # Scattering impact parameter
 
 
 # -------------------------------------------------------------------------------------------------
 # Output parameters
 # -------------------------------------------------------------------------------------------------
-dt_save			= 1.0				# Output times
+dt_save              = 1.0                             # Output times
 
