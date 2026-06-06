@@ -7,10 +7,204 @@
  */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 #include "initial_configurations.h"
 #include "utils.h"
 #include "eom.h"
+
+
+static double pn_hhat_rel(double x, double pr_hat, double j, double nu, int use_1pn, int use_2pn)
+{
+    const double inv_x = 1.0 / x;
+    const double inv_x2 = inv_x * inv_x;
+    const double inv_x3 = inv_x2 * inv_x;
+
+    const double pr2 = pr_hat * pr_hat;
+    const double j2 = j * j;
+    const double p2 = pr2 + j2 * inv_x2;
+
+    const double p4 = p2 * p2;
+    const double p6 = p4 * p2;
+
+    double h = 0.5 * p2 - inv_x;
+
+    if (use_1pn) {
+        h += 0.125 * (3.0 * nu - 1.0) * p4
+           - 0.5 * inv_x * ((3.0 + nu) * p2 + nu * pr2)
+           + 0.5 * inv_x2;
+    }
+
+    if (use_2pn) {
+        h += (1.0 - 5.0 * nu + 5.0 * nu * nu) * p6 / 16.0
+
+           + inv_x / 8.0 *
+             ((5.0 - 20.0 * nu - 3.0 * nu * nu) * p4
+              - 2.0 * nu * nu * pr2 * p2
+              - 3.0 * nu * nu * pr2 * pr2)
+
+           + 0.5 * inv_x2 *
+             ((5.0 + 8.0 * nu) * p2 + 3.0 * nu * pr2)
+
+           - 0.25 * (1.0 + 3.0 * nu) * inv_x3;
+    }
+
+    return h;
+}
+
+
+static double pn_hhat_turning_point(double x, double j, double nu, int use_1pn, int use_2pn)
+{
+    return pn_hhat_rel(x, 0.0, j, nu, use_1pn, use_2pn);
+}
+
+
+static double pn_dh_dx_turning_numeric(double x, double j, double nu, int use_1pn, int use_2pn)
+{
+    double dx = 1e-6 * fabs(x);
+
+    if (dx < 1e-8) dx = 1e-8;
+    if (x - dx <= 0.0) dx = 0.5 * x;
+
+    const double hp = pn_hhat_turning_point(x + dx, j, nu, use_1pn, use_2pn);
+    const double hm = pn_hhat_turning_point(x - dx, j, nu, use_1pn, use_2pn);
+
+    return (hp - hm) / (2.0 * dx);
+}
+
+
+static double pn_solve_circular_j(double x, double nu, int use_1pn, int use_2pn)
+{
+    double lo = 0.0;
+    double hi = sqrt(x) * 2.0 + 1.0;
+
+    double flo = pn_dh_dx_turning_numeric(x, lo, nu, use_1pn, use_2pn);
+    double fhi = pn_dh_dx_turning_numeric(x, hi, nu, use_1pn, use_2pn);
+
+    int expand_count = 0;
+    while (flo * fhi > 0.0 && expand_count < 80) {
+        hi *= 2.0;
+        fhi = pn_dh_dx_turning_numeric(x, hi, nu, use_1pn, use_2pn);
+        expand_count++;
+    }
+
+    if (flo * fhi > 0.0)
+        errorexit("could not bracket circular angular momentum");
+
+    for (int i = 0; i < 160; i++) {
+        const double mid = 0.5 * (lo + hi);
+        const double fmid = pn_dh_dx_turning_numeric(x, mid, nu, use_1pn, use_2pn);
+
+        if (flo * fmid <= 0.0) {
+            hi = mid;
+            fhi = fmid;
+        }
+        else {
+            lo = mid;
+            flo = fmid;
+        }
+    }
+
+    return 0.5 * (lo + hi);
+}
+
+
+static double pn_solve_eccentric_j(double xp, double xa, double nu, int use_1pn, int use_2pn)
+{
+    double lo = 0.0;
+    double hi = sqrt(0.5 * (xp + xa)) * 2.0 + 1.0;
+
+    double flo = pn_hhat_turning_point(xp, lo, nu, use_1pn, use_2pn)
+               - pn_hhat_turning_point(xa, lo, nu, use_1pn, use_2pn);
+
+    double fhi = pn_hhat_turning_point(xp, hi, nu, use_1pn, use_2pn)
+               - pn_hhat_turning_point(xa, hi, nu, use_1pn, use_2pn);
+
+    int expand_count = 0;
+    while (flo * fhi > 0.0 && expand_count < 80) {
+        hi *= 2.0;
+        fhi = pn_hhat_turning_point(xp, hi, nu, use_1pn, use_2pn)
+            - pn_hhat_turning_point(xa, hi, nu, use_1pn, use_2pn);
+        expand_count++;
+    }
+
+    if (flo * fhi > 0.0)
+        errorexit("could not bracket eccentric angular momentum");
+
+    for (int i = 0; i < 160; i++) {
+        const double mid = 0.5 * (lo + hi);
+        const double fmid = pn_hhat_turning_point(xp, mid, nu, use_1pn, use_2pn)
+                          - pn_hhat_turning_point(xa, mid, nu, use_1pn, use_2pn);
+
+        if (flo * fmid <= 0.0) {
+            hi = mid;
+            fhi = fmid;
+        }
+        else {
+            lo = mid;
+            flo = fmid;
+        }
+    }
+
+    return 0.5 * (lo + hi);
+}
+
+
+static double pn_solve_pr_hat_abs(double x, double j, double energy, double nu, 
+    int use_1pn, int use_2pn)
+{
+    /*
+     * Solve H(x, pr, j) = energy for |pr| at fixed x and j.
+     * The Hamiltonian is even in pr, so solve in q = pr^2.
+     */
+
+    double qlo = 0.0;
+    double flo = pn_hhat_rel(x, 0.0, j, nu, use_1pn, use_2pn) - energy;
+
+    if (fabs(flo) < 1e-13) {
+        return 0.0;
+    }
+
+    if (flo > 0.0) {
+        /*
+         * This can happen if phi0 puts r slightly outside the PN-compatible
+         * radial interval because of roundoff or inconsistent a/e/p.
+         */
+        if (flo < 1e-10) {
+            return 0.0;
+        }
+        errorexit("requested phase gives no real radial momentum");
+    }
+
+    double qhi = 1e-12;
+    double fhi = pn_hhat_rel(x, sqrt(qhi), j, nu, use_1pn, use_2pn) - energy;
+
+    int expand_count = 0;
+    while (fhi <= 0.0 && expand_count < 120) {
+        qhi *= 2.0;
+        fhi = pn_hhat_rel(x, sqrt(qhi), j, nu, use_1pn, use_2pn) - energy;
+        expand_count++;
+    }
+
+    if (fhi <= 0.0)
+        errorexit("could not bracket radial momentum");
+
+    for (int i = 0; i < 160; i++) {
+        const double qmid = 0.5 * (qlo + qhi);
+        const double fmid = pn_hhat_rel(x, sqrt(qmid), j, nu, use_1pn, use_2pn) - energy;
+
+        if (fmid <= 0.0) {
+            qlo = qmid;
+            flo = fmid;
+        }
+        else {
+            qhi = qmid;
+            fhi = fmid;
+        }
+    }
+
+    return sqrt(0.5 * (qlo + qhi));
+}
 
 
 /**
@@ -28,64 +222,120 @@ void ic_newtonian_binary(struct ode_params* ode_params, struct binary_params* bi
     double* w0)
 {
     // Unpack needed parameters
-    double a = binary_params->a;
-    double e = binary_params->e;
-    double phi0 = binary_params->phi0;
-    double p = binary_params->p;
-    double m1 = ode_params->masses[0];
-    double m2 = ode_params->masses[1];
+    const double a = binary_params->a;
+    const double e = binary_params->e;
+    const double phi0 = binary_params->phi0;
+    const double p = binary_params->p;
+    const double m1 = ode_params->masses[0];
+    const double m2 = ode_params->masses[1];
+    const int use_1pn = (ode_params->pn_terms[1] == 1);
+    const int use_2pn = (ode_params->pn_terms[2] == 1);
 
-    // Compute total mass, reduced mass and angular momentum
-    double M = m1 + m2; 
-    double mu = m1 * m2 / M;
-    double L = mu * sqrt(a * M * (1 - e * e));
+    // Compute total mass, reduced mass and symmetric mass ratio
+    const double M = m1 + m2; 
+    const double mu = m1 * m2 / M;
+    const double nu = mu / M;
 
-    // Relative distance and its derivative at phi0
-    double cosphi0 = cos(phi0);
-    double sinphi0 = sin(phi0);
-    double denom_inv = 1 / (1 + e * cosphi0);
-    double r0 = p * denom_inv;
-    double dr_dphi0 = e * p * sinphi0 * denom_inv * denom_inv;
+    // Geometric quantities
+    const double cosphi0 = cos(phi0);
+    const double sinphi0 = sin(phi0);
 
-    // Positions and velocities of the individual masses in the center of mass frame
-    double r0cosphi0 = r0 * cosphi0;
-    double r0sinphi0 = r0 * sinphi0;
-    double p_factor1 = dr_dphi0 * cosphi0 - r0sinphi0;
-    double p_factor2 = dr_dphi0 * sinphi0 + r0cosphi0;
-    double p1_factor = L / (r0 * r0);
-    double p2_factor = -L / (r0 * r0);
+    const double denom = 1.0 + e * cosphi0;
+    if (denom <= 0.0)
+        errorexit("invalid phase/eccentricity combination");
 
-    // Set initial parameters
-    if (ode_params->num_dim == 2){
-        w0[0] = m2 / M * r0cosphi0;
-        w0[1] = m2 / M * r0sinphi0;
+    const double r0 = p / denom;
+    const double x0 = r0 / M;
 
-        w0[2] = -m1 / M * r0cosphi0;
-        w0[3] = -m1 / M * r0sinphi0;
+    const double rp = a * (1.0 - e);
+    const double ra = a * (1.0 + e);
+    const double xp = rp / M;
+    const double xa = ra / M;
 
-        w0[4] = p1_factor * p_factor1;
-        w0[5] = p1_factor * p_factor2;
+    if (rp <= 0.0 || ra <= 0.0 || x0 <= 0.0)
+        errorexit("non-positive PN radius");
 
-        w0[6] = p2_factor * p_factor1;
-        w0[7] = p2_factor * p_factor2;
+    double j;
+    if (e < 1e-12) 
+        j = pn_solve_circular_j(a / M, nu, use_1pn, use_2pn);
+    else
+        j = pn_solve_eccentric_j(xp, xa, nu, use_1pn, use_2pn);
+
+    const double energy = (e < 1e-12)
+        ? pn_hhat_turning_point(a / M, j, nu, use_1pn, use_2pn)
+        : pn_hhat_turning_point(xp, j, nu, use_1pn, use_2pn);
+
+    double pr_hat_abs = pn_solve_pr_hat_abs(x0, j, energy, nu, use_1pn, use_2pn);
+
+    /*
+     * Sign convention:
+     *   r = p / (1 + e cos phi)
+     *   dr/dphi has the sign of sin(phi) for e > 0.
+     *   With positive angular momentum, sign(pr) follows sign(dr/dt).
+     */
+    double pr_sign = 0.0;
+    if (sinphi0 > 1e-14)
+        pr_sign = 1.0;
+    else if (sinphi0 < -1e-14)
+        pr_sign = -1.0;
+
+    const double pr_hat = pr_sign * pr_hat_abs;
+    const double pt_hat = j / x0;
+
+    /*
+     * Unit vectors in the orbital plane.
+     * n points radially outward; lambda is the positive-phi tangential unit vector.
+     */
+    const double nx = cosphi0;
+    const double ny = sinphi0;
+    const double lx = -sinphi0;
+    const double ly = cosphi0;
+
+    const double rvec_x = r0 * nx;
+    const double rvec_y = r0 * ny;
+
+    /*
+     * Physical relative canonical momentum P_rel = mu * p_hat.
+     * Body momenta in the COM frame are p1 = +P_rel, p2 = -P_rel.
+     */
+    const double prel_x = mu * (pr_hat * nx + pt_hat * lx);
+    const double prel_y = mu * (pr_hat * ny + pt_hat * ly);
+
+    const double pos1_x =  m2 / M * rvec_x;
+    const double pos1_y =  m2 / M * rvec_y;
+    const double pos2_x = -m1 / M * rvec_x;
+    const double pos2_y = -m1 / M * rvec_y;
+
+    if (ode_params->num_dim == 2) {
+        w0[0] = pos1_x;
+        w0[1] = pos1_y;
+
+        w0[2] = pos2_x;
+        w0[3] = pos2_y;
+
+        w0[4] =  prel_x;
+        w0[5] =  prel_y;
+
+        w0[6] = -prel_x;
+        w0[7] = -prel_y;
     }
-    if (ode_params->num_dim == 3) {
-        w0[0] = m2 / M * r0cosphi0;
-        w0[1] = m2 / M * r0sinphi0;
+    else {
+        w0[0] = pos1_x;
+        w0[1] = pos1_y;
         w0[2] = 0.0;
 
-        w0[3] = -m1 / M * r0cosphi0;
-        w0[4] = -m1 / M * r0sinphi0;
+        w0[3] = pos2_x;
+        w0[4] = pos2_y;
         w0[5] = 0.0;
 
-        w0[6] = p1_factor * p_factor1;
-        w0[7] = p1_factor * p_factor2;
+        w0[6] =  prel_x;
+        w0[7] =  prel_y;
         w0[8] = 0.0;
 
-        w0[9] = p2_factor * p_factor1;
-        w0[10] = p2_factor * p_factor2;
+        w0[9]  = -prel_x;
+        w0[10] = -prel_y;
         w0[11] = 0.0;
-    } 
+    }
 }
 
 
@@ -147,6 +397,185 @@ static void position_binary(double com_pos[3], double orientation[3], double w0[
     w0[9] = p2_new[0];
     w0[10] = p2_new[1];
     w0[11] = p2_new[2];
+}
+
+
+/**
+ * @brief Computes initial positions and momenta for a hierarchical triple.
+ *
+ * The system is treated as an inner binary plus an outer binary:
+ *
+ *      inner binary:  body 1 + body 2
+ *      outer binary:  inner-COM + body 3
+ *
+ * @param[in]   ode_params                General ODE/system parameters.
+ * @param[in]   inner_binary_params       Orbital parameters of bodies 1 and 2.
+ * @param[in]   outer_binary_params       Orbital parameters of inner-COM and body 3.
+ * @param[in]   inner_binary_orientation  Orientation of inner binary angular momentum.
+ *                                        NULL -> [0, 0, 1].
+ * @param[in]   outer_binary_orientation  Orientation of outer binary angular momentum.
+ *                                        NULL -> [0, 0, 1].
+ * @param[out]  w0                        Initial positions and momenta.
+ */
+void ic_hierarchical_triple(struct ode_params* ode_params, 
+    struct binary_params* inner_binary_params, struct binary_params* outer_binary_params,
+    double* inner_binary_orientation, double* outer_binary_orientation, double* w0)
+{
+    double m1 = ode_params->masses[0];
+    double m2 = ode_params->masses[1];
+    double m3 = ode_params->masses[2];
+
+    double m_inner = m1 + m2;
+
+    double w_inner[12];
+    double w_outer[12];
+
+    if (inner_binary_orientation == NULL) {
+        inner_binary_orientation[0] = 0.0;
+        inner_binary_orientation[1] = 0.0;
+        inner_binary_orientation[2] = 1.0;
+    }
+
+    if (outer_binary_orientation == NULL) {
+        outer_binary_orientation[0] = 0.0;
+        outer_binary_orientation[1] = 0.0;
+        outer_binary_orientation[2] = 1.0;
+    }
+
+    /*
+     * Make shallow copies of ode_params, but use separate local mass arrays.
+     * This avoids corrupting ode_params->masses when setting the effective
+     * outer-binary masses.
+     */
+    struct ode_params inner_ode_params = *ode_params;
+    struct ode_params outer_ode_params = *ode_params;
+
+    double inner_masses[3];
+    double outer_masses[3];
+
+    inner_masses[0] = m1;
+    inner_masses[1] = m2;
+    inner_masses[2] = m3;
+
+    outer_masses[0] = m_inner;
+    outer_masses[1] = m3;
+    outer_masses[2] = 0.0;
+
+    inner_ode_params.masses = inner_masses;
+    outer_ode_params.masses = outer_masses;
+
+    inner_ode_params.num_dim = 3;
+    outer_ode_params.num_dim = 3;
+
+    /*
+     * 1. Initialize the inner binary in its own COM frame.
+     */
+    ic_newtonian_binary(&inner_ode_params, inner_binary_params, w_inner);
+
+    /*
+     * 2. Initialize the effective outer binary:
+     *
+     *      body 1 = inner-binary COM, mass m1 + m2
+     *      body 2 = tertiary,         mass m3
+     */
+    ic_newtonian_binary(&outer_ode_params, outer_binary_params, w_outer);
+
+    /*
+     * 3. Orient the outer binary around the total triple COM.
+     */
+    double triple_com_pos[3] = {0.0, 0.0, 0.0};
+    position_binary(triple_com_pos, outer_binary_orientation, w_outer);
+
+    /*
+     * Interpret the oriented outer binary.
+     */
+    double inner_com_pos[3] = {
+        w_outer[0],
+        w_outer[1],
+        w_outer[2]
+    };
+
+    double inner_com_mom[3] = {
+        w_outer[6],
+        w_outer[7],
+        w_outer[8]
+    };
+
+    double tertiary_pos[3] = {
+        w_outer[3],
+        w_outer[4],
+        w_outer[5]
+    };
+
+    double tertiary_mom[3] = {
+        w_outer[9],
+        w_outer[10],
+        w_outer[11]
+    };
+
+    /*
+     * 4. Orient the inner binary and place its COM on the outer orbit.
+     */
+    position_binary(inner_com_pos, inner_binary_orientation, w_inner);
+
+    /*
+     * 5. Add the outer COM momentum to the two inner bodies.
+     */
+    w_inner[6]  += (m1 / m_inner) * inner_com_mom[0];
+    w_inner[7]  += (m1 / m_inner) * inner_com_mom[1];
+    w_inner[8]  += (m1 / m_inner) * inner_com_mom[2];
+
+    w_inner[9]  += (m2 / m_inner) * inner_com_mom[0];
+    w_inner[10] += (m2 / m_inner) * inner_com_mom[1];
+    w_inner[11] += (m2 / m_inner) * inner_com_mom[2];
+
+    /*
+     * 6. Fill final state vector.
+     */
+    if (ode_params->num_dim == 2) {
+        w0[0] = w_inner[0];
+        w0[1] = w_inner[1];
+
+        w0[2] = w_inner[3];
+        w0[3] = w_inner[4];
+
+        w0[4] = tertiary_pos[0];
+        w0[5] = tertiary_pos[1];
+
+        w0[6] = w_inner[6];
+        w0[7] = w_inner[7];
+
+        w0[8] = w_inner[9];
+        w0[9] = w_inner[10];
+
+        w0[10] = tertiary_mom[0];
+        w0[11] = tertiary_mom[1];
+    }
+    else if (ode_params->num_dim == 3) {
+        w0[0] = w_inner[0];
+        w0[1] = w_inner[1];
+        w0[2] = w_inner[2];
+
+        w0[3] = w_inner[3];
+        w0[4] = w_inner[4];
+        w0[5] = w_inner[5];
+
+        w0[6] = tertiary_pos[0];
+        w0[7] = tertiary_pos[1];
+        w0[8] = tertiary_pos[2];
+
+        w0[9]  = w_inner[6];
+        w0[10] = w_inner[7];
+        w0[11] = w_inner[8];
+
+        w0[12] = w_inner[9];
+        w0[13] = w_inner[10];
+        w0[14] = w_inner[11];
+
+        w0[15] = tertiary_mom[0];
+        w0[16] = tertiary_mom[1];
+        w0[17] = tertiary_mom[2];
+    }
 }
 
 

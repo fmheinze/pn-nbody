@@ -97,6 +97,26 @@ void initialize_parameters()
         add_parameter("binary_phi0", "0.0", "initial phase");
     }
 
+    // Hierarchical triple
+    if (strcmp(get_parameter_string("ic_preset"), "hierarchical_triple") == 0) {
+        add_parameter("binary1_a", "-1", "semi-major axis of inner binary [> 0]");
+        add_parameter("binary1_b", "-1", "semi-minor axis of inner binary [> 0]");
+        add_parameter("binary1_e", "-1", "eccentricity of inner binary [>= 0]");
+        add_parameter("binary1_ra", "-1", "apoapsis of inner binary [> 0]");
+        add_parameter("binary1_rp", "-1", "periapsis of inner binary [> 0]");
+        add_parameter("binary1_p", "-1", "semi-parameter of inner binary [> 0]");
+        add_parameter("binary1_phi0", "0.0", "initial phase of inner binary");
+        add_parameter("orientation_1", "-1", "components of the orientation of inner binary");
+        add_parameter("binary2_a", "-1", "semi-major axis of outer binary [> 0]");
+        add_parameter("binary2_b", "-1", "semi-minor axis of outer binary [> 0]");
+        add_parameter("binary2_e", "-1", "eccentricity of outer binary [>= 0]");
+        add_parameter("binary2_ra", "-1", "apoapsis of outer binary [> 0]");
+        add_parameter("binary2_rp", "-1", "periapsis of outer binary [> 0]");
+        add_parameter("binary2_p", "-1", "semi-parameter of outer binary [> 0]");
+        add_parameter("binary2_phi0", "0.0", "initial phase of outer binary");
+        add_parameter("orientation_2", "-1", "components of the orientation of outer binary");
+    }
+
     // Newtonian binary-single scattering
     if (strcmp(get_parameter_string("ic_preset"), "binary_single_scattering") == 0) {
         add_parameter("binary_a", "-1", "semi-major axis [> 0]");
@@ -532,6 +552,9 @@ double* initialize_state_vector(struct ode_params* ode_params)
     if (strcmp(preset, "-1") != 0) {
         if (strcmp(preset, "newtonian_binary") == 0)
             initialize_newtonian_binary(ode_params, w0);
+        
+        else if (strcmp(preset, "hierarchical_triple") == 0)
+            initialize_hierarchical_triple(ode_params, w0);
 
         else if (strcmp(preset, "binary_single_scattering") == 0)
             initialize_binary_single_scattering(ode_params, w0);
@@ -587,6 +610,47 @@ void initialize_newtonian_binary(struct ode_params* ode_params, double* w0)
     print_divider();
     struct binary_params binary_params = initialize_binary_params(0);
     ic_newtonian_binary(ode_params, &binary_params, w0);
+}
+
+
+/**
+ * @brief Initializes the state vector for a hierarchical triple.
+ * 
+ * Initializes the state vector for a hierarchical triple and checks the consistency and validity of
+ * the involved parameters.
+ * 
+ * @param[in]   ode_params      Parameter struct containing general information about the system
+ * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
+ */
+void initialize_hierarchical_triple(struct ode_params* ode_params, double* w0)
+{
+    printf("Setting up initial parameters for a Newtonian binary...\n");
+    print_divider();
+
+    // Load specified values
+    struct binary_params inner_binary_params = initialize_binary_params(1);
+    struct binary_params outer_binary_params = initialize_binary_params(2);
+    double* inner_binary_orientation;
+    if (strcmp(get_parameter_string("orientation_1"), "-1") == 0)
+        inner_binary_orientation = NULL;
+    else {
+        allocate_vector(&inner_binary_orientation, 3);
+        for (int i = 0; i < 3; i++)
+            inner_binary_orientation[i] = get_parameter_double_array("orientation_1")[i];
+    }
+    double* outer_binary_orientation;
+    if (strcmp(get_parameter_string("orientation_2"), "-1") == 0)
+        outer_binary_orientation = NULL;
+    else {
+        allocate_vector(&outer_binary_orientation, 3);
+        for (int i = 0; i < 3; i++)
+            outer_binary_orientation[i] = get_parameter_double_array("orientation_2")[i];
+    }
+
+    printf("orient = %f", outer_binary_orientation[2]);
+
+    ic_hierarchical_triple(ode_params, &inner_binary_params, &outer_binary_params, 
+        inner_binary_orientation, outer_binary_orientation, w0);
 }
 
 

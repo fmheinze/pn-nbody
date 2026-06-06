@@ -1,0 +1,50 @@
+# Test for a hierarchical triple
+
+# -------------------------------------------------------------------------------------------------
+# General parameters
+# -------------------------------------------------------------------------------------------------
+num_dim              = 3                               # Number of dimensions
+num_bodies           = 3                               # Number of bodies
+0pn_terms            = 1                               # Whether to include 0PN (Newtonian) terms
+1pn_terms            = 0                               # Whether to include 1PN terms
+2pn_terms            = 0                               # Whether to include 2PN terms
+2.5pn_terms          = 0                               # Whether to include 2.5PN terms
+
+
+# -------------------------------------------------------------------------------------------------
+# Time parameters
+# -------------------------------------------------------------------------------------------------
+t_end                = 25000.0                          # Final time
+dt                   = 0.1                             # Timestep
+
+
+# -------------------------------------------------------------------------------------------------
+# ODE integrator
+# -------------------------------------------------------------------------------------------------
+ode_integrator       = rk4                             # ODE integration method
+
+
+# -------------------------------------------------------------------------------------------------
+# Initial conditions
+# -------------------------------------------------------------------------------------------------
+ic_preset            = hierarchical_triple       # Initial condition preset
+mass1                = 0.5                             # Mass of body 1
+mass2                = 1.5                             # Mass of body 2
+mass3                = 5.0                             # Mass of body 3
+
+binary1_a            = 30.0                            # Semi-major axis of binary 1
+binary1_b            = 25.0                            # Semi-minor axis of binary 1
+binary1_phi0         = 0.4                             # Initial phase of binary 1
+orientation_1         = 0.5 1.0 -2.0                   # Orientation of binary 1
+
+binary2_e            = 0.5                            # Eccentricity of binary 2
+binary2_a           = 300.0	                           # Pericenter distance of binary 2
+binary2_phi0         = 0.9                             # Initial phase of binary 2
+orientation_2         = 0.1 2.0 1.0                   # Orientation of binary 1
+
+
+# -------------------------------------------------------------------------------------------------
+# Output parameters
+# -------------------------------------------------------------------------------------------------
+dt_save              = 1.0                             # Output times
+

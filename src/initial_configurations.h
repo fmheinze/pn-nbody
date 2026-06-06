@@ -17,6 +17,10 @@ struct binary_params {
 void ic_newtonian_binary(struct ode_params* ode_params, struct binary_params* binary_params,
     double* w0);
 
+void ic_hierarchical_triple(struct ode_params* ode_params, 
+    struct binary_params* inner_binary_params, struct binary_params* outer_binary_params,
+    double* inner_binary_orientation, double* outer_binary_orientation, double* w0);
+
 void ic_binary_single_scattering(struct ode_params* ode_params,
     struct binary_params* binary_params, double d0, double v0_rel, double b, double* orientation,
     double* w0);

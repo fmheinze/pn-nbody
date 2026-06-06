@@ -209,6 +209,9 @@ def main():
     else:
         _set_equal_axes_2d(ax, pos_plot, pad_frac=args.pad_frac)
 
+    #ax.set_xlim([-300, 300])
+    #ax.set_ylim([-300, 300])
+    #ax.set_zlim([-300, 300])
     plt.show()
 
 
