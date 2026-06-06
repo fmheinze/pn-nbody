@@ -208,26 +208,24 @@ static double pn_solve_pr_hat_abs(double x, double j, double energy, double nu,
 
 
 /**
- * @brief Computes initial positions and momenta for a Newtonian binary.
+ * @brief Computes initial positions and momenta for a binary.
  * 
  * Returns the initial positions and the initial momenta (as w0 = [pos1, pos2, p1, p2]) of two
- * bodies with masses m1 and m2 in a Newtonian binary system with relative semi-major axis a, 
+ * bodies with masses m1 and m2 in a binary system with relative semi-major axis a, 
  * eccentricity e, and initial phase phi0 in the center of mass frame and in the xy-plane.
  * 
  * @param[in]   params          Parameter struct containing general information about the system
  * @param[in]   binary_params   Struct containing the binary parameters (initialized elsewhere)
  * @param[out]  w0              Initial positions and momenta, w0 = [pos1, pos2, p1, p2]
  */
-void ic_newtonian_binary(struct ode_params* ode_params, struct binary_params* binary_params,
-    double* w0)
+void ic_binary(struct ode_params* ode_params, struct binary_params* binary_params,
+    double m1, double m2, double* w0)
 {
     // Unpack needed parameters
     const double a = binary_params->a;
     const double e = binary_params->e;
     const double phi0 = binary_params->phi0;
     const double p = binary_params->p;
-    const double m1 = ode_params->masses[0];
-    const double m2 = ode_params->masses[1];
     const int use_1pn = (ode_params->pn_terms[1] == 1);
     const int use_2pn = (ode_params->pn_terms[2] == 1);
 
@@ -404,18 +402,17 @@ static void position_binary(double com_pos[3], double orientation[3], double w0[
  * @brief Computes initial positions and momenta for a hierarchical triple.
  *
  * The system is treated as an inner binary plus an outer binary:
- *
  *      inner binary:  body 1 + body 2
  *      outer binary:  inner-COM + body 3
  *
- * @param[in]   ode_params                General ODE/system parameters.
- * @param[in]   inner_binary_params       Orbital parameters of bodies 1 and 2.
- * @param[in]   outer_binary_params       Orbital parameters of inner-COM and body 3.
- * @param[in]   inner_binary_orientation  Orientation of inner binary angular momentum.
- *                                        NULL -> [0, 0, 1].
- * @param[in]   outer_binary_orientation  Orientation of outer binary angular momentum.
- *                                        NULL -> [0, 0, 1].
- * @param[out]  w0                        Initial positions and momenta.
+ * @param[in]   ode_params                General ODE/system parameters
+ * @param[in]   inner_binary_params       Orbital parameters of bodies 1 and 2
+ * @param[in]   outer_binary_params       Orbital parameters of inner-COM and body 3
+ * @param[in]   inner_binary_orientation  Orientation of inner binary angular momentum
+ *                                        NULL -> [0, 0, 1]
+ * @param[in]   outer_binary_orientation  Orientation of outer binary angular momentum
+ *                                        NULL -> [0, 0, 1]
+ * @param[out]  w0                        Initial positions and momenta
  */
 void ic_hierarchical_triple(struct ode_params* ode_params, 
     struct binary_params* inner_binary_params, struct binary_params* outer_binary_params,
@@ -424,7 +421,6 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
     double m1 = ode_params->masses[0];
     double m2 = ode_params->masses[1];
     double m3 = ode_params->masses[2];
-
     double m_inner = m1 + m2;
 
     double w_inner[12];
@@ -442,85 +438,25 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
         outer_binary_orientation[2] = 1.0;
     }
 
-    /*
-     * Make shallow copies of ode_params, but use separate local mass arrays.
-     * This avoids corrupting ode_params->masses when setting the effective
-     * outer-binary masses.
-     */
-    struct ode_params inner_ode_params = *ode_params;
-    struct ode_params outer_ode_params = *ode_params;
+    // Initialize the inner binary in its own COM frame
+    ic_binary(&ode_params, inner_binary_params, m1, m2, w_inner);
 
-    double inner_masses[3];
-    double outer_masses[3];
+    // Initialize the effective outer binary
+    ic_binary(&ode_params, outer_binary_params, m_inner, m3, w_outer);
 
-    inner_masses[0] = m1;
-    inner_masses[1] = m2;
-    inner_masses[2] = m3;
-
-    outer_masses[0] = m_inner;
-    outer_masses[1] = m3;
-    outer_masses[2] = 0.0;
-
-    inner_ode_params.masses = inner_masses;
-    outer_ode_params.masses = outer_masses;
-
-    inner_ode_params.num_dim = 3;
-    outer_ode_params.num_dim = 3;
-
-    /*
-     * 1. Initialize the inner binary in its own COM frame.
-     */
-    ic_newtonian_binary(&inner_ode_params, inner_binary_params, w_inner);
-
-    /*
-     * 2. Initialize the effective outer binary:
-     *
-     *      body 1 = inner-binary COM, mass m1 + m2
-     *      body 2 = tertiary,         mass m3
-     */
-    ic_newtonian_binary(&outer_ode_params, outer_binary_params, w_outer);
-
-    /*
-     * 3. Orient the outer binary around the total triple COM.
-     */
+    // Orient the outer binary around the total triple COM
     double triple_com_pos[3] = {0.0, 0.0, 0.0};
     position_binary(triple_com_pos, outer_binary_orientation, w_outer);
 
-    /*
-     * Interpret the oriented outer binary.
-     */
-    double inner_com_pos[3] = {
-        w_outer[0],
-        w_outer[1],
-        w_outer[2]
-    };
+    double inner_com_pos[3] = {w_outer[0], w_outer[1], w_outer[2]};
+    double inner_com_mom[3] = {w_outer[6], w_outer[7], w_outer[8]};
+    double tertiary_pos[3] = {w_outer[3], w_outer[4], w_outer[5]};
+    double tertiary_mom[3] = {w_outer[9], w_outer[10], w_outer[11]};
 
-    double inner_com_mom[3] = {
-        w_outer[6],
-        w_outer[7],
-        w_outer[8]
-    };
-
-    double tertiary_pos[3] = {
-        w_outer[3],
-        w_outer[4],
-        w_outer[5]
-    };
-
-    double tertiary_mom[3] = {
-        w_outer[9],
-        w_outer[10],
-        w_outer[11]
-    };
-
-    /*
-     * 4. Orient the inner binary and place its COM on the outer orbit.
-     */
+    // Orient the inner binary and place its COM on the outer orbit
     position_binary(inner_com_pos, inner_binary_orientation, w_inner);
 
-    /*
-     * 5. Add the outer COM momentum to the two inner bodies.
-     */
+    // Add the outer COM momentum to the two inner bodies
     w_inner[6]  += (m1 / m_inner) * inner_com_mom[0];
     w_inner[7]  += (m1 / m_inner) * inner_com_mom[1];
     w_inner[8]  += (m1 / m_inner) * inner_com_mom[2];
@@ -529,9 +465,7 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
     w_inner[10] += (m2 / m_inner) * inner_com_mom[1];
     w_inner[11] += (m2 / m_inner) * inner_com_mom[2];
 
-    /*
-     * 6. Fill final state vector.
-     */
+    // Fill final state vector
     if (ode_params->num_dim == 2) {
         w0[0] = w_inner[0];
         w0[1] = w_inner[1];
@@ -605,7 +539,7 @@ void ic_binary_single_scattering(struct ode_params* ode_params,
     double binary_pos[3] = {0.0, 0.0, 0.0};
 
     // Create the binary initial values
-    ic_newtonian_binary(ode_params, binary_params, w0_binary);
+    ic_binary(ode_params, binary_params, ode_params->masses[0], ode_params->masses[1], w0_binary);
 
     // Compute the absolute values of v_x and v_y
     v_x = v0_rel/2 * sqrt(1 - b*b/(d0*d0));
@@ -772,8 +706,8 @@ void ic_binary_binary_scattering(struct ode_params* ode_params,
     double binary2_pos[3] = {0.0, 0.0, 0.0};
 
     // Create the binary initial values
-    ic_newtonian_binary(ode_params, binary1_params, w0_binary1);
-    ic_newtonian_binary(ode_params, binary2_params, w0_binary2);
+    ic_binary(ode_params, binary1_params, ode_params->masses[0], ode_params->masses[1], w0_binary1);
+    ic_binary(ode_params, binary2_params, ode_params->masses[2], ode_params->masses[3], w0_binary2);
 
     // Compute the absolute values of v_x and v_y
     v_x = v0_rel/2 * sqrt(1 - pow(b/d0, 2));

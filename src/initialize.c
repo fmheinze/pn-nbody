@@ -609,7 +609,7 @@ void initialize_newtonian_binary(struct ode_params* ode_params, double* w0)
     printf("Setting up initial parameters for a Newtonian binary...\n");
     print_divider();
     struct binary_params binary_params = initialize_binary_params(0);
-    ic_newtonian_binary(ode_params, &binary_params, w0);
+    ic_binary(ode_params, &binary_params, ode_params->masses[0], ode_params->masses[1], w0);
 }
 
 
@@ -624,7 +624,7 @@ void initialize_newtonian_binary(struct ode_params* ode_params, double* w0)
  */
 void initialize_hierarchical_triple(struct ode_params* ode_params, double* w0)
 {
-    printf("Setting up initial parameters for a Newtonian binary...\n");
+    printf("Setting up initial parameters for a hierarchical triple...\n");
     print_divider();
 
     // Load specified values
