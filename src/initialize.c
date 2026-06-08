@@ -86,8 +86,8 @@ void initialize_parameters()
     // --------------------------------------------------------------------------------------------
     add_parameter("ic_preset", "-1", "specify initial condition preset");
 
-    // Newtonian binary
-    if (strcmp(get_parameter_string("ic_preset"), "newtonian_binary") == 0) {
+    // Binary
+    if (strcmp(get_parameter_string("ic_preset"), "binary") == 0) {
         add_parameter("binary_a", "-1", "semi-major axis [> 0]");
         add_parameter("binary_b", "-1", "semi-minor axis [> 0]");
         add_parameter("binary_e", "-1", "eccentricity [>= 0]");
@@ -117,7 +117,7 @@ void initialize_parameters()
         add_parameter("orientation_2", "-1", "components of the orientation of outer binary");
     }
 
-    // Newtonian binary-single scattering
+    // Binary-single scattering
     if (strcmp(get_parameter_string("ic_preset"), "binary_single_scattering") == 0) {
         add_parameter("binary_a", "-1", "semi-major axis [> 0]");
         add_parameter("binary_b", "-1", "semi-minor axis [> 0]");
@@ -144,7 +144,7 @@ void initialize_parameters()
         add_parameter("binary_phi0", "0.0", "initial phase of the binary [>= 0]");
     }
 
-    // Newtonian binary-binary scattering
+    // Binary-binary scattering
     if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("v0_rel", "-1", "initial relative approach velocity [>= 0]");
@@ -550,8 +550,8 @@ double* initialize_state_vector(struct ode_params* ode_params)
     // Check whether an initial condition preset has been selected and initialize w0 accordinly
     const char *preset = get_parameter_string("ic_preset");
     if (strcmp(preset, "-1") != 0) {
-        if (strcmp(preset, "newtonian_binary") == 0)
-            initialize_newtonian_binary(ode_params, w0);
+        if (strcmp(preset, "binary") == 0)
+            initialize_binary(ode_params, w0);
         
         else if (strcmp(preset, "hierarchical_triple") == 0)
             initialize_hierarchical_triple(ode_params, w0);
@@ -596,17 +596,17 @@ double* initialize_state_vector(struct ode_params* ode_params)
 
 
 /**
- * @brief Initializes the state vector for a Newtonian binary
+ * @brief Initializes the state vector for a binary
  * 
- * Initializes the state vector for a Newtonian binary and checks the consistency and validity of
+ * Initializes the state vector for a binary and checks the consistency and validity of
  * the involved parameters.
  * 
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
-void initialize_newtonian_binary(struct ode_params* ode_params, double* w0)
+void initialize_binary(struct ode_params* ode_params, double* w0)
 {
-    printf("Setting up initial parameters for a Newtonian binary...\n");
+    printf("Setting up initial parameters for a binary...\n");
     print_divider();
     struct binary_params binary_params = initialize_binary_params(0);
     ic_binary(ode_params, &binary_params, ode_params->masses[0], ode_params->masses[1], w0);
@@ -647,17 +647,15 @@ void initialize_hierarchical_triple(struct ode_params* ode_params, double* w0)
             outer_binary_orientation[i] = get_parameter_double_array("orientation_2")[i];
     }
 
-    printf("orient = %f", outer_binary_orientation[2]);
-
     ic_hierarchical_triple(ode_params, &inner_binary_params, &outer_binary_params, 
         inner_binary_orientation, outer_binary_orientation, w0);
 }
 
 
 /**
- * @brief Initializes the state vector for a Newtonian binary-single scattering
+ * @brief Initializes the state vector for a binary-single scattering
  * 
- * Initializes the state vector for a Newtonian binary-single scattering and checks the 
+ * Initializes the state vector for a binary-single scattering and checks the 
  * consistency and validity of the involved parameters.
  * 
  * @param[in]   ode_params      Parameter struct containing general information about the system
@@ -665,7 +663,7 @@ void initialize_hierarchical_triple(struct ode_params* ode_params, double* w0)
  */
 void initialize_binary_single_scattering(struct ode_params* ode_params, double* w0)
 {
-    printf("Setting up initial parameters for a Newtonian binary-single scattering...\n");
+    printf("Setting up initial parameters for a binary-single scattering...\n");
     print_divider();
 
     // Load specified values
@@ -742,9 +740,9 @@ void initialize_binary_single_scattering_rel(struct ode_params* ode_params, doub
 
 
 /**
- * @brief Initializes the state vector for a Newtonian binary-binary scattering
+ * @brief Initializes the state vector for a binary-binary scattering
  * 
- * Initializes the state vector for a Newtonian binary-binary scattering and checks the 
+ * Initializes the state vector for a binary-binary scattering and checks the 
  * consistency and validity of the involved parameters.
  * 
  * @param[in]   ode_params      Parameter struct containing general information about the system
@@ -752,7 +750,7 @@ void initialize_binary_single_scattering_rel(struct ode_params* ode_params, doub
  */
 void initialize_binary_binary_scattering(struct ode_params* ode_params, double* w0)
 {
-    printf("Setting up initial parameters for a Newtonian binary-binary scattering...\n");
+    printf("Setting up initial parameters for a binary-binary scattering...\n");
     print_divider();
 
     // Load specified values
@@ -862,8 +860,8 @@ void initialize_binary_binary_scattering_rel(struct ode_params* ode_params, doub
 /**
  * @brief Initializes the state vector for a figure-eight orbit
  * 
- * Initializes the state vector for a figure-eight orbit (both Newtonian and relativistic) and 
- * checks the consistency and validity of the involved parameters.
+ * Initializes the state vector for a figure-eight orbit and checks the consistency and validity
+ * of the involved parameters.
  * 
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]

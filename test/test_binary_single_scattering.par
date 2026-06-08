@@ -1,4 +1,4 @@
-# Test for a Newtonian binary-single scattering
+# Test for a binary-single scattering
 
 # -------------------------------------------------------------------------------------------------
 # General parameters
@@ -22,7 +22,7 @@ dt                   = 0.1                             # Timestep
 # ODE integrator
 # -------------------------------------------------------------------------------------------------
 ode_integrator       = cash-karp                       # ODE integration method
-rtol                 = 1e-16                           # Error tolerance for the Cash-Karp method
+rtol                 = 1e-14                           # Error tolerance for the Cash-Karp method
 
 
 # -------------------------------------------------------------------------------------------------

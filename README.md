@@ -4,12 +4,14 @@ Software for the direct integration of the Newtonian and post-Newtonian equation
 ## Features
 * Direct integration of the post-Newtonian equations of motion up to 2.5PN order, suitable for relativistic simulations of few-body systems (first code to fully include all post-Newtonian terms for N bodies at 2PN order)
 * Implemented methods: adaptive embedded 5th-order Runge-Kutta method, the symmetric and symplectic implicit midpoint method, and the 4th-order Runge-Kutta method
-* Convenient use of customizable initial condition presets (e.g. binary, binary-single scattering, binary-binary scattering, figure-eight orbit)
+* Convenient use of customizable relativistic initial condition presets (e.g. binary, binary-single scattering, binary-binary scattering, hierarchical triple, figure-eight orbit) for different post-Newtonian approximations
 
 ## Todo
-* Performance optimizations (parallelization, approximations for larger N)
+* Performance optimizations (parallelization, approximations for objects further away)
 * Regularization / handle close encounters
-* Implementation of additional ODE integration methods (e.g. higher-order symplectic methods, Hermite integrators)
+* Additional ODE integration methods (e.g. higher-order symplectic methods, Hermite integrators)
+* Spins and spin evolution
+* Mergers
 
 ## Requirements
 * C compiler (e.g. gcc/clang)

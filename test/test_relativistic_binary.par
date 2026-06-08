@@ -1,4 +1,4 @@
-# Test for a Newtonian binary
+# Test for a relativistic binary
 
 
 # -------------------------------------------------------------------------------------------------
@@ -15,7 +15,7 @@ num_bodies           = 2                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 12000.0                          # Final time
+t_end                = 2500.0                          # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -28,11 +28,11 @@ ode_integrator       = rk4                             # ODE integration method
 # -------------------------------------------------------------------------------------------------
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
-ic_preset            = newtonian_binary                # Initial condition preset
-mass1                = 1.5                             # Mass of body 1
-mass2                = 1.5                             # Mass of body 2
-binary_a             = 150.0                            # Semi-major axis of binary
-binary_b             = 80.0                            # Semi-minor axis of binary
+ic_preset            = binary                          # Initial condition preset
+mass1                = 0.5                             # Mass of body 1
+mass2                = 0.5                             # Mass of body 2
+binary_a             = 15.0                            # Semi-major axis of binary
+binary_b             = 15.0                            # Semi-minor axis of binary
 binary_phi0          = 0.4                             # Initial phase of binary
 
 

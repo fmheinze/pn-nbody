@@ -14,6 +14,11 @@
 #include "eom.h"
 
 
+// ------------------------------------------------------------------------------------------------
+// PN initial configuration helper functions
+// ------------------------------------------------------------------------------------------------
+
+
 static double pn_hhat_rel(double x, double pr_hat, double j, double nu, int use_1pn, int use_2pn)
 {
     const double inv_x = 1.0 / x;
@@ -161,18 +166,12 @@ static double pn_solve_pr_hat_abs(double x, double j, double energy, double nu,
     double qlo = 0.0;
     double flo = pn_hhat_rel(x, 0.0, j, nu, use_1pn, use_2pn) - energy;
 
-    if (fabs(flo) < 1e-13) {
+    if (fabs(flo) < 1e-13)
         return 0.0;
-    }
 
     if (flo > 0.0) {
-        /*
-         * This can happen if phi0 puts r slightly outside the PN-compatible
-         * radial interval because of roundoff or inconsistent a/e/p.
-         */
-        if (flo < 1e-10) {
+        if (flo < 1e-10)
             return 0.0;
-        }
         errorexit("requested phase gives no real radial momentum");
     }
 
@@ -205,6 +204,68 @@ static double pn_solve_pr_hat_abs(double x, double j, double energy, double nu,
 
     return sqrt(0.5 * (qlo + qhi));
 }
+
+
+static double pn_dh_dpr_coeff_at_zero(double x, double j, double nu, int use_1pn, int use_2pn)
+{
+    const double inv_x = 1.0 / x;
+    const double inv_x2 = inv_x * inv_x;
+
+    const double j2 = j * j;
+    const double u = j2 * inv_x2;  // tangential p^2 at pr = 0
+
+    /*
+     * We compute A such that, near pr = 0,
+     *
+     *      dH/dpr = A * pr + O(pr^3).
+     *
+     * Newtonian:
+     *      A_N = 1.
+     */
+    double A = 1.0;
+
+    if (use_1pn) {
+        /*
+         * 1PN contribution:
+         *
+         * H_1PN =
+         *      1/8 (3 nu - 1) p^4
+         *    - 1/2 /x [ (3 + nu) p^2 + nu pr^2 ]
+         *    + 1/2 /x^2
+         *
+         * with p^2 = pr^2 + j^2/x^2.
+         */
+        A += 0.5 * (3.0 * nu - 1.0) * u
+           - (3.0 + 2.0 * nu) * inv_x;
+    }
+
+    if (use_2pn) {
+        /*
+         * 2PN contribution to the linear-in-pr coefficient.
+         *
+         * H_2PN =
+         *      c6 p^6
+         *    + 1/x/8 [ a p^4 - 2 nu^2 pr^2 p^2 - 3 nu^2 pr^4 ]
+         *    + 1/2/x^2 [ (5 + 8nu) p^2 + 3nu pr^2 ]
+         *    - 1/4(1+3nu)/x^3
+         *
+         * At pr = 0, only terms linear in pr in dH/dpr contribute.
+         */
+        const double c6 = (1.0 - 5.0 * nu + 5.0 * nu * nu) / 16.0;
+        const double a4 = 5.0 - 20.0 * nu - 3.0 * nu * nu;
+
+        A += 6.0 * c6 * u * u
+           + inv_x / 8.0 * (4.0 * a4 * u - 4.0 * nu * nu * u)
+           + inv_x2 * (5.0 + 11.0 * nu);
+    }
+
+    return A;
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// Initial configurations
+// ------------------------------------------------------------------------------------------------
 
 
 /**
@@ -264,20 +325,53 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
         : pn_hhat_turning_point(xp, j, nu, use_1pn, use_2pn);
 
     double pr_hat_abs = pn_solve_pr_hat_abs(x0, j, energy, nu, use_1pn, use_2pn);
+    double pr_hat;
 
-    /*
-     * Sign convention:
-     *   r = p / (1 + e cos phi)
-     *   dr/dphi has the sign of sin(phi) for e > 0.
-     *   With positive angular momentum, sign(pr) follows sign(dr/dt).
-     */
-    double pr_sign = 0.0;
-    if (sinphi0 > 1e-14)
-        pr_sign = 1.0;
-    else if (sinphi0 < -1e-14)
-        pr_sign = -1.0;
+    if (e < 1e-12 && ode_params->pn_terms[3] == 1) {
+        /*
+        * Quasi-circular inspiral radial momentum.
+        *
+        * Leading quadrupole circular inspiral:
+        *
+        *      dx/d(t/M) = -64/5 * nu / x^3
+        *
+        * Hamilton equation:
+        *
+        *      dx/d(t/M) = dHhat/dpr_hat
+        *                = A * pr_hat
+        *
+        * so
+        *
+        *      pr_hat = xdot / A.
+        */
+        const double xdot = -(64.0 / 5.0) * nu / pow(x0, 3);
 
-    const double pr_hat = pr_sign * pr_hat_abs;
+        const double A = pn_dh_dpr_coeff_at_zero(
+            x0,
+            j,
+            nu,
+            use_1pn,
+            use_2pn
+        );
+
+        if (fabs(A) < 1e-14)
+            errorexit("could not compute circular 2.5PN radial momentum");
+
+        pr_hat = xdot / A;
+    }
+    else {
+        /*
+        * Conservative eccentric-orbit radial momentum.
+        */
+        double pr_sign = 0.0;
+
+        if (sinphi0 > 1e-14)
+            pr_sign = 1.0;
+        else if (sinphi0 < -1e-14)
+            pr_sign = -1.0;
+
+        pr_hat = pr_sign * pr_hat_abs;
+    }
     const double pt_hat = j / x0;
 
     /*
@@ -439,10 +533,10 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
     }
 
     // Initialize the inner binary in its own COM frame
-    ic_binary(&ode_params, inner_binary_params, m1, m2, w_inner);
+    ic_binary(ode_params, inner_binary_params, m1, m2, w_inner);
 
     // Initialize the effective outer binary
-    ic_binary(&ode_params, outer_binary_params, m_inner, m3, w_outer);
+    ic_binary(ode_params, outer_binary_params, m_inner, m3, w_outer);
 
     // Orient the outer binary around the total triple COM
     double triple_com_pos[3] = {0.0, 0.0, 0.0};
@@ -514,10 +608,10 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
 
 
 /**
- * @brief Computes initial positions and momenta for a Newtonian binary-single scattering.
+ * @brief Computes initial positions and momenta for a binary-single scattering.
  * 
  * Returns the initial positions and the initial momenta (as w0 = [pos1, pos2, pos3, p1, p2, p3])
- * of a Newtonian binary-single scattering with specified binary and scattering parameters. The
+ * of a binary-single scattering with specified binary and scattering parameters. The
  * scattering takes place in the xy-plane.
  * 
  * @param[in]   ode_params      Parameter struct containing general information about the system
@@ -676,10 +770,10 @@ void ic_binary_single_scattering_rel(double d0, double p0_rel, double b, double 
 
 
 /**
- * @brief Computes initial positions and momenta for a Newtonian binary-binary scattering.
+ * @brief Computes initial positions and momenta for a binary-binary scattering.
  * 
  * Returns the initial positions and momenta (as w0 = [pos1, pos2, pos3, pos4, p1, p2, p3, p4])
- * of a Newtonian binary-binary scattering with specified binary and scattering parameters. The
+ * of a binary-binary scattering with specified binary and scattering parameters. The
  * scattering takes place in the xy-plane.
  * 
  * @param[in]   ode_params      Parameter struct containing general information about the system

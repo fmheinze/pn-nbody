@@ -4,7 +4,7 @@
 # General parameters
 # -------------------------------------------------------------------------------------------------
 num_dim              = 3                               # Number of dimensions
-num_bodies           = 2                               # Number of bodies
+num_bodies           = 3                               # Number of bodies
 0pn_terms            = 1                               # Whether to include 0PN (Newtonian) terms
 1pn_terms            = 1                               # Whether to include 1PN terms
 2pn_terms            = 1                               # Whether to include 2PN terms
@@ -14,7 +14,7 @@ num_bodies           = 2                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 1900.0                          # Final time
+t_end                = 900.0                           # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -22,7 +22,7 @@ dt                   = 0.1                             # Timestep
 # ODE integrator
 # -------------------------------------------------------------------------------------------------
 ode_integrator       = cash-karp                       # ODE integration method
-rtol                 = 1e-16                           # Error tolerance for the Cash-Karp method
+rtol                 = 1e-14                           # Error tolerance for the Cash-Karp method
 
 # -------------------------------------------------------------------------------------------------
 # Initial conditions
