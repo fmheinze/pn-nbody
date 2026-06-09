@@ -29,6 +29,7 @@ double* get_parameter_double_array(const char* name);
 double* get_parameter_double_array_i(const char* name, const int i);
 int get_parameter_array_count(const char* name);
 double get_parameter_double_array_entry(const char* name, int index);
-double get_binary_parameter_double_i(const char *par, int i);
+double get_binary_parameter_double_i(const char *name, int i);
+double* get_binary_parameter_double_array_i(const char* name, const int i);
 
 #endif

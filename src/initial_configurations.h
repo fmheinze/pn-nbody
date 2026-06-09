@@ -5,13 +5,19 @@ struct ode_params;
 
 // Binary struct
 struct binary_params {
-    double a;       // Semi-major axis
-    double b;       // Semi-minor axis
-    double e;       // Eccentricity
-    double r_a;     // Apoapsis distance
-    double r_p;     // Periapsis distance
-    double p;       // Semi-latus rectum
-    double phi0;    // Initial phase
+    double a;           // Semi-major axis
+    double b;           // Semi-minor axis
+    double e;           // Eccentricity
+    double r_a;         // Apoapsis distance
+    double r_p;         // Periapsis distance
+    double p;           // Semi-latus rectum
+    double f0;          // True anomaly
+    double i;           // Inclination
+    double Omega;       // Longitude of the ascending node
+    double omega;       // Argument of periapsis
+
+    double h_hat[3];    // Orbital angular momentum direction
+    double e_hat[3];    // Periapsis / eccentricity-vector direction
 };
 
 void ic_binary(struct ode_params* ode_params, struct binary_params* binary_params,

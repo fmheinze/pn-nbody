@@ -263,6 +263,66 @@ static double pn_dh_dpr_coeff_at_zero(double x, double j, double nu, int use_1pn
 }
 
 
+/**
+ * @brief Changes the position and full 3D orientation of a binary.
+ *
+ * The binary is initially generated in the canonical orbital frame:
+ *
+ *     x-axis: periapsis/reference direction
+ *     y-axis: positive true-anomaly direction
+ *     z-axis: angular-momentum direction
+ *
+ * This function maps that basis to:
+ *
+ *     e_hat: periapsis/reference direction
+ *     q_hat = h_hat x e_hat
+ *     h_hat: orbital angular-momentum direction
+ *
+ * For circular binaries, e_hat is simply a phase-reference direction.
+ */
+static void position_binary(double com_pos[3], double h_input[3], double e_input[3], double w0[12])
+{
+    double h_hat[3] = {h_input[0], h_input[1], h_input[2]};
+    double e_hat[3] = {e_input[0], e_input[1], e_input[2]};
+    double q_hat[3];
+
+    double pos1[3] = {w0[0], w0[1], w0[2]};
+    double pos2[3] = {w0[3], w0[4], w0[5]};
+    double p1[3]   = {w0[6], w0[7], w0[8]};
+    double p2[3]   = {w0[9], w0[10], w0[11]};
+
+    double pos1_new[3], pos2_new[3], p1_new[3], p2_new[3];
+
+    // q_hat completes a right-handed orbital basis
+    cross_product(h_hat, e_hat, q_hat);
+    normalize(q_hat, q_hat);
+
+    // Rotate positions and momenta from canonical frame to target frame
+    map_from_orbital_basis(pos1, e_hat, q_hat, h_hat, pos1_new);
+    map_from_orbital_basis(pos2, e_hat, q_hat, h_hat, pos2_new);
+    map_from_orbital_basis(p1,   e_hat, q_hat, h_hat, p1_new);
+    map_from_orbital_basis(p2,   e_hat, q_hat, h_hat, p2_new);
+
+    //Shift positions to target COM
+    w0[0] = pos1_new[0] + com_pos[0];
+    w0[1] = pos1_new[1] + com_pos[1];
+    w0[2] = pos1_new[2] + com_pos[2];
+
+    w0[3] = pos2_new[0] + com_pos[0];
+    w0[4] = pos2_new[1] + com_pos[1];
+    w0[5] = pos2_new[2] + com_pos[2];
+
+    //Momenta are rotated but not shifted
+    w0[6] = p1_new[0];
+    w0[7] = p1_new[1];
+    w0[8] = p1_new[2];
+
+    w0[9]  = p2_new[0];
+    w0[10] = p2_new[1];
+    w0[11] = p2_new[2];
+}
+
+
 // ------------------------------------------------------------------------------------------------
 // Initial configurations
 // ------------------------------------------------------------------------------------------------
@@ -273,7 +333,7 @@ static double pn_dh_dpr_coeff_at_zero(double x, double j, double nu, int use_1pn
  * 
  * Returns the initial positions and the initial momenta (as w0 = [pos1, pos2, p1, p2]) of two
  * bodies with masses m1 and m2 in a binary system with relative semi-major axis a, 
- * eccentricity e, and initial phase phi0 in the center of mass frame and in the xy-plane.
+ * eccentricity e, and true anomaly f0 in the center of mass frame and in the xy-plane.
  * 
  * @param[in]   params          Parameter struct containing general information about the system
  * @param[in]   binary_params   Struct containing the binary parameters (initialized elsewhere)
@@ -285,7 +345,7 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
     // Unpack needed parameters
     const double a = binary_params->a;
     const double e = binary_params->e;
-    const double phi0 = binary_params->phi0;
+    const double f0 = binary_params->f0;
     const double p = binary_params->p;
     const int use_1pn = (ode_params->pn_terms[1] == 1);
     const int use_2pn = (ode_params->pn_terms[2] == 1);
@@ -296,10 +356,10 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
     const double nu = mu / M;
 
     // Geometric quantities
-    const double cosphi0 = cos(phi0);
-    const double sinphi0 = sin(phi0);
+    const double cosf0 = cos(f0);
+    const double sinf0 = sin(f0);
 
-    const double denom = 1.0 + e * cosphi0;
+    const double denom = 1.0 + e * cosf0;
     if (denom <= 0.0)
         errorexit("invalid phase/eccentricity combination");
 
@@ -365,9 +425,9 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
         */
         double pr_sign = 0.0;
 
-        if (sinphi0 > 1e-14)
+        if (sinf0 > 1e-14)
             pr_sign = 1.0;
-        else if (sinphi0 < -1e-14)
+        else if (sinf0 < -1e-14)
             pr_sign = -1.0;
 
         pr_hat = pr_sign * pr_hat_abs;
@@ -378,10 +438,10 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
      * Unit vectors in the orbital plane.
      * n points radially outward; lambda is the positive-phi tangential unit vector.
      */
-    const double nx = cosphi0;
-    const double ny = sinphi0;
-    const double lx = -sinphi0;
-    const double ly = cosphi0;
+    const double nx = cosf0;
+    const double ny = sinf0;
+    const double lx = -sinf0;
+    const double ly = cosf0;
 
     const double rvec_x = r0 * nx;
     const double rvec_y = r0 * ny;
@@ -427,68 +487,10 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
         w0[9]  = -prel_x;
         w0[10] = -prel_y;
         w0[11] = 0.0;
+
+        double com_pos[3] = {0.0, 0.0, 0.0};
+        position_binary(com_pos, binary_params->h_hat, binary_params->e_hat, w0);
     }
-}
-
-
-/**
- * @brief Changes the position and orientation of a binary.
- * 
- * Changes the center-of-mass position and orientation of a binary, assuming the initial
- * orientation is in the z-direction (i.e. given by the vector [0, 0, 1]).
- * 
- * @param[in]       com_pos     Target center-of-mass position
- * @param[in]       orientation Target orientation vector (does not have to be normalized)
- * @param[in,out]   w0          Initial and target positions and momenta, w = [pos1, pos2, p1, p2]
- */
-static void position_binary(double com_pos[3], double orientation[3], double w0[12]) 
-{
-    double initial_orientation[3] = {0, 0, 1};
-    double pos1[3] = {w0[0], w0[1], w0[2]};
-    double pos2[3] = {w0[3], w0[4], w0[5]};
-    double p1[3] = {w0[6], w0[7], w0[8]};
-    double p2[3] = {w0[9], w0[10], w0[11]};
-    double pos1_new[3], pos2_new[3], p1_new[3], p2_new[3];
-    double axis[3];
-    double angle;
-    double rotation_matrix[3][3];
-
-    normalize(orientation, orientation);
-
-    // Special case if the specified orientation equals the initial orientation
-    if(orientation[0] == 0 && orientation[1] == 0 && orientation[2] == 1) {
-        axis[0] = 0;
-        axis[1] = 0;
-        axis[2] = 1;
-    }
-    else {
-        // Compute axis of rotation (cross product of initial and target orientation)
-        cross_product(initial_orientation, orientation, axis);
-    }
-    
-    // Compute angle of rotation (dot product) and create the rotation matrix
-    angle = acos(dot_product(initial_orientation, orientation, 3));
-    create_rotation_matrix(axis, angle, rotation_matrix);
-
-    // Rotate positions and momenta of both masses
-    rotate_vector(pos1, rotation_matrix, pos1_new);
-    rotate_vector(pos2, rotation_matrix, pos2_new);
-    rotate_vector(p1, rotation_matrix, p1_new);
-    rotate_vector(p2, rotation_matrix, p2_new);
-
-    // Update w0 with rotated and shifted positions and momenta
-    w0[0] = pos1_new[0] + com_pos[0];
-    w0[1] = pos1_new[1] + com_pos[1];
-    w0[2] = pos1_new[2] + com_pos[2];
-    w0[3] = pos2_new[0] + com_pos[0];
-    w0[4] = pos2_new[1] + com_pos[1];
-    w0[5] = pos2_new[2] + com_pos[2];
-    w0[6] = p1_new[0];
-    w0[7] = p1_new[1];
-    w0[8] = p1_new[2];
-    w0[9] = p2_new[0];
-    w0[10] = p2_new[1];
-    w0[11] = p2_new[2];
 }
 
 
@@ -540,7 +542,7 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
 
     // Orient the outer binary around the total triple COM
     double triple_com_pos[3] = {0.0, 0.0, 0.0};
-    position_binary(triple_com_pos, outer_binary_orientation, w_outer);
+    position_binary(triple_com_pos, outer_binary_params->h_hat, outer_binary_params->e_hat, w_outer);
 
     double inner_com_pos[3] = {w_outer[0], w_outer[1], w_outer[2]};
     double inner_com_mom[3] = {w_outer[6], w_outer[7], w_outer[8]};
@@ -548,7 +550,7 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
     double tertiary_mom[3] = {w_outer[9], w_outer[10], w_outer[11]};
 
     // Orient the inner binary and place its COM on the outer orbit
-    position_binary(inner_com_pos, inner_binary_orientation, w_inner);
+    position_binary(inner_com_pos, inner_binary_params->h_hat, inner_binary_params->e_hat, w_inner);
 
     // Add the outer COM momentum to the two inner bodies
     w_inner[6]  += (m1 / m_inner) * inner_com_mom[0];
@@ -651,7 +653,7 @@ void ic_binary_single_scattering(struct ode_params* ode_params,
         binary_orientation[1] = orientation[1];
         binary_orientation[2] = orientation[2];
     }
-    position_binary(binary_pos, binary_orientation, w0_binary);
+    position_binary(binary_pos, binary_params->h_hat, binary_params->e_hat, w0_binary);
 
     // Add p_x and p_y momentum to the binary
     w0_binary[6] += ode_params->masses[0] * v_x;
@@ -830,8 +832,8 @@ void ic_binary_binary_scattering(struct ode_params* ode_params,
         binary2_orientation[1] = orientation_2[1];
         binary2_orientation[2] = orientation_2[2];
     }
-    position_binary(binary1_pos, binary1_orientation, w0_binary1);
-    position_binary(binary2_pos, binary2_orientation, w0_binary2);
+    position_binary(binary1_pos, binary1_params->h_hat, binary1_params->e_hat, w0_binary1);
+    position_binary(binary2_pos, binary2_params->h_hat, binary2_params->e_hat, w0_binary2);
 
     // Add p_x and p_y momentum to the binaries
     w0_binary1[6] += ode_params->masses[0] * v_x;

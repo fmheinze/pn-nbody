@@ -94,7 +94,12 @@ void initialize_parameters()
         add_parameter("binary_ra", "-1", "apoapsis [> 0]");
         add_parameter("binary_rp", "-1", "periapsis [> 0]");
         add_parameter("binary_p", "-1", "semi-parameter [> 0]");
-        add_parameter("binary_phi0", "0.0", "initial phase");
+        add_parameter("binary_f0", "0.0", "true anomaly");
+        add_parameter("binary_h_hat", "0.0 0.0 1.0", "orbital angular momentum direction");
+        add_parameter("binary_e_hat", "1.0 0.0 0.0", "periapsis / eccentricity-vector direction");
+        add_parameter("binary_i", "-1", "inclination; if >= 0, use i, Omega, omega, not vectors");
+        add_parameter("binary_Omega", "0.0", "Longitude of the ascending node [radians]");
+        add_parameter("binary_omega", "0.0", "Argument of periapsis [radians]");
     }
 
     // Hierarchical triple
@@ -309,7 +314,7 @@ struct ode_params initialize_ode_params()
  * fully-initialized binary_params struct. Unspecified values must be set to -1 in the database.
  * The function loads all supported orbital parameters, validates any user-specified values,
  * infers missing parameters from the specified ones, and verifies that the resulting set is 
- * self-consistent. At least two orbital parameters (in addition to phi0) must be specified to 
+ * self-consistent. At least two orbital parameters (in addition to f0) must be specified to 
  * determine a unique orbit, otherwise the function aborts with an error.
  * 
  * @param[in]   i   Binary index (use 0 for the default/unindexed "binary_*" parameter set)
@@ -320,13 +325,25 @@ struct binary_params initialize_binary_params(int i)
     struct binary_params params;
 
     // Load specified parameters from the parameter database (-1 if not specified)
-    params.a    = get_binary_parameter_double_i("a", i);
-    params.b    = get_binary_parameter_double_i("b", i);
-    params.e    = get_binary_parameter_double_i("e", i);
-    params.r_a  = get_binary_parameter_double_i("ra", i);
-    params.r_p  = get_binary_parameter_double_i("rp", i);
-    params.p    = get_binary_parameter_double_i("p", i);
-    params.phi0 = get_binary_parameter_double_i("phi0", i);
+    params.a     = get_binary_parameter_double_i("a", i);
+    params.b     = get_binary_parameter_double_i("b", i);
+    params.e     = get_binary_parameter_double_i("e", i);
+    params.r_a   = get_binary_parameter_double_i("ra", i);
+    params.r_p   = get_binary_parameter_double_i("rp", i);
+    params.p     = get_binary_parameter_double_i("p", i);
+    params.f0    = get_binary_parameter_double_i("f0", i);
+    params.i     = get_binary_parameter_double_i("i", i);
+    params.Omega = get_binary_parameter_double_i("Omega", i);
+    params.omega = get_binary_parameter_double_i("omega", i);
+
+    for (int j = 0; j < 3; j++) {
+        params.h_hat[j] = get_binary_parameter_double_array_i("h_hat", i)[j];
+        params.e_hat[j] = get_binary_parameter_double_array_i("e_hat", i)[j];
+    }
+
+    // --------------------------------------------------------------------------------------------
+    // Initialization of non-orientation parameters
+    // --------------------------------------------------------------------------------------------
 
     // Check the user-specified values
     if (is_set_double(params.a) && params.a <= 0.0) 
@@ -500,7 +517,53 @@ struct binary_params initialize_binary_params(int i)
             errorexit("Inconsistent parameters (p doesn't match a,e)");
     }
 
+    // --------------------------------------------------------------------------------------------
+    // Initialization of orientation parameters
+    // --------------------------------------------------------------------------------------------
+
+    if (params.i < 0.0) {
+        // Vector mode
+        normalize_and_project_orientation_vectors(params.h_hat, params.e_hat, params.e);
+
+        angles_from_orientation_vectors(params.h_hat, params.e_hat,
+            &params.i, &params.Omega, &params.omega);
+    }
+    else {
+        // Angle mode
+        if (!isfinite(params.i) || params.i < 0.0 || params.i > M_PI)
+            errorexit("Invalid inclination i: expected 0 <= i <= pi, or i < 0 to use h_hat/e_hat");
+
+        if (!isfinite(params.Omega))
+            errorexit("Invalid Omega: must be finite");
+
+        if (!isfinite(params.omega))
+            errorexit("Invalid omega: must be finite");
+
+        params.Omega = wrap_to_2pi(params.Omega);
+        params.omega = wrap_to_2pi(params.omega);
+
+        orientation_vectors_from_angles(params.i, params.Omega, params.omega,
+            params.h_hat, params.e_hat);
+    }
+
+    // Sanity checks
+    const double h_norm = norm(params.h_hat, 3);
+    const double e_norm = norm(params.e_hat, 3);
+    const double he_dot = dot_product(params.h_hat, params.e_hat, 3);
+
+    if (fabs(h_norm - 1.0) > 1e-10)
+        errorexit("Internal orientation error: h_hat is not normalized");
+
+    if (fabs(e_norm - 1.0) > 1e-10)
+        errorexit("Internal orientation error: e_hat is not normalized");
+
+    if (fabs(he_dot) > 1e-10)
+        errorexit("Internal orientation error: h_hat and e_hat are not perpendicular");
+
+    // --------------------------------------------------------------------------------------------
     // Print the final binary parameters
+    // --------------------------------------------------------------------------------------------
+
     if (i == 0) {
         printf("Full list of binary parameters:\n");
         printf("binary_a\t= %10.16e\n", params.a);
@@ -509,8 +572,18 @@ struct binary_params initialize_binary_params(int i)
         printf("binary_ra\t= %10.16e\n", params.r_a);
         printf("binary_rp\t= %10.16e\n", params.r_p);
         printf("binary_p\t= %10.16e\n", params.p);
-        printf("binary_phi0\t= %10.16e\n", params.phi0);
-    } else {
+        printf("binary_f0\t= %10.16e\n", params.f0);
+
+        printf("binary_i\t= %10.16e\n", params.i);
+        printf("binary_Omega\t= %10.16e\n", params.Omega);
+        printf("binary_omega\t= %10.16e\n", params.omega);
+
+        printf("binary_h_hat\t= [%10.16e, %10.16e, %10.16e]\n",
+               params.h_hat[0], params.h_hat[1], params.h_hat[2]);
+        printf("binary_e_hat\t= [%10.16e, %10.16e, %10.16e]\n",
+               params.e_hat[0], params.e_hat[1], params.e_hat[2]);
+    }
+    else {
         printf("Full list of parameters for binary %d:\n", i);
         printf("binary%d_a\t= %10.16e\n", i, params.a);
         printf("binary%d_b\t= %10.16e\n", i, params.b);
@@ -518,10 +591,19 @@ struct binary_params initialize_binary_params(int i)
         printf("binary%d_ra\t= %10.16e\n", i, params.r_a);
         printf("binary%d_rp\t= %10.16e\n", i, params.r_p);
         printf("binary%d_p\t= %10.16e\n", i, params.p);
-        printf("binary%d_phi0\t= %10.16e\n", i, params.phi0);
-    }
-    print_divider();
+        printf("binary%d_f0\t= %10.16e\n", i, params.f0);
 
+        printf("binary%d_i\t= %10.16e\n", i, params.i);
+        printf("binary%d_Omega\t= %10.16e\n", i, params.Omega);
+        printf("binary%d_omega\t= %10.16e\n", i, params.omega);
+
+        printf("binary%d_h_hat\t= [%10.16e, %10.16e, %10.16e]\n",
+               i, params.h_hat[0], params.h_hat[1], params.h_hat[2]);
+        printf("binary%d_e_hat\t= [%10.16e, %10.16e, %10.16e]\n",
+               i, params.e_hat[0], params.e_hat[1], params.e_hat[2]);
+    }
+
+    print_divider();
     return params;
 }
 

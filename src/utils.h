@@ -10,7 +10,8 @@ struct ode_params;
 void allocate_vector(double** ptr, int num_elements);
 void allocate_2d_array(double*** ptr, int num_vectors, int num_elements);
 void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_elements);
-void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors, int num_elements);
+void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors,
+    int num_elements);
 void free_vector(double* ptr);
 void free_2d_array(double** ptr, int num_vectors);
 void free_3d_array(double*** ptr, int num_arrays, int num_vectors);
@@ -28,7 +29,18 @@ void rotate_vector(double v[3], double R[3][3], double result[3]);
 void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3]);
 int delta(int i, int j);
 double clamp0(double x);
+double clamp_unit(double x);
 int almost_equal(double a, double b, double rel_eps);
+double wrap_to_2pi(double x);
+double angle_difference_abs(double a, double b);
+void map_from_orbital_basis(const double v_old[3], 
+    const double e_hat[3], const double q_hat[3], const double h_hat[3], double v_new[3]);
+void orientation_vectors_from_angles(double inc, double Omega, double omega, 
+    double h_hat[3], double e_hat[3]);   
+void angles_from_orientation_vectors(double h_input[3], double e_input[3],
+    double *inc_out, double *Omega_out, double *omega_out);
+void normalize_and_project_orientation_vectors(double h_hat[3], double e_hat[3], 
+    double eccentricity);
 
 void print_divider(void);
 void print_state_vector(const double *w0, int num_bodies, int num_dim);

@@ -392,7 +392,8 @@ int get_parameter_array_count(const char* name) {
     return count;
 }
 
-double get_parameter_double_array_entry(const char* name, int index) {
+double get_parameter_double_array_entry(const char* name, int index) 
+{
     int count = get_parameter_array_count(name);
     double *array = get_parameter_double_array(name);
     if (!array)
@@ -410,11 +411,23 @@ double get_parameter_double_array_entry(const char* name, int index) {
 }
 
 
-double get_binary_parameter_double_i(const char *par, int i) {
+double get_binary_parameter_double_i(const char *name, int i) 
+{
     char key[64];
     if (i == 0)
-        snprintf(key, sizeof(key), "binary_%s", par);
+        snprintf(key, sizeof(key), "binary_%s", name);
     else
-        snprintf(key, sizeof(key), "binary%d_%s", i, par);
+        snprintf(key, sizeof(key), "binary%d_%s", i, name);
     return get_parameter_double(key);
+}
+
+
+double* get_binary_parameter_double_array_i(const char* name, const int i) 
+{
+    char key[64];
+    if (i == 0)
+        snprintf(key, sizeof(key), "binary_%s", name);
+    else
+        snprintf(key, sizeof(key), "binary%d_%s", i, name);
+    return get_parameter_double_array(key);
 }
