@@ -36,12 +36,13 @@ mass4                = 1.0                             # Mass of body 4
 
 binary_a             = 40.0                            # Semi-major axis of binary
 binary_e             = 0.3                             # Eccentricity of binary
-binary_phi0          = 1.7                             # Initial phase of binary
-orientation          = 1.0 -1.0 0.0                    # Orientation of binary
+binary_f0            = 1.7                             # True anomaly of binary
+binary_h_hat         = 1.0 -1.0 0.0                    # Angular momentum direction of binary
+binary_e_hat         = 1.0 1.0 0.0                     # Periapsis direction of binary
 
 d0                   = 500.0                           # Initial distance for the scattering
-v0_rel               = 0.15                            # Initial velocity for the scattering
-b                    = -100.0                          # Scattering impact parameter
+p0_rel               = 0.15                            # Initial momentum for the scattering
+b                    = 100.0                           # Scattering impact parameter
 
 
 # -------------------------------------------------------------------------------------------------

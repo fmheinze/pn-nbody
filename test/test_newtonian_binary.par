@@ -34,9 +34,13 @@ mass2                = 0.75                            # Mass of body 2
 binary_a             = 40.0                            # Semi-major axis of binary
 binary_b             = 30.0                            # Semi-minor axis of binary
 binary_f0            = 0.0                             # True anomaly
-binary_i             = 1.0                             # Inclination
-binary_Omega         = 0.8                             # Longitude of the ascending node
-binary_omega         = 3.1                             # Argument of periapsis
+
+binary_h_hat        = 1.0 0.0 0.0
+binary_e_hat        = 0.0 0.0 1.0
+
+#binary_i             = 1.0                             # Inclination
+#binary_Omega         = 0.8                             # Longitude of the ascending node
+#binary_omega         = 3.1                             # Argument of periapsis
 
 
 # -------------------------------------------------------------------------------------------------

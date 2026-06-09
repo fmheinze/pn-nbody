@@ -280,7 +280,7 @@ static double pn_dh_dpr_coeff_at_zero(double x, double j, double nu, int use_1pn
  *
  * For circular binaries, e_hat is simply a phase-reference direction.
  */
-static void position_binary(double com_pos[3], double h_input[3], double e_input[3], double w0[12])
+void position_binary(double com_pos[3], double h_input[3], double e_input[3], double w0[12])
 {
     double h_hat[3] = {h_input[0], h_input[1], h_input[2]};
     double e_hat[3] = {e_input[0], e_input[1], e_input[2]};
@@ -303,7 +303,7 @@ static void position_binary(double com_pos[3], double h_input[3], double e_input
     map_from_orbital_basis(p1,   e_hat, q_hat, h_hat, p1_new);
     map_from_orbital_basis(p2,   e_hat, q_hat, h_hat, p2_new);
 
-    //Shift positions to target COM
+    // Shift positions to target COM
     w0[0] = pos1_new[0] + com_pos[0];
     w0[1] = pos1_new[1] + com_pos[1];
     w0[2] = pos1_new[2] + com_pos[2];
@@ -312,7 +312,7 @@ static void position_binary(double com_pos[3], double h_input[3], double e_input
     w0[4] = pos2_new[1] + com_pos[1];
     w0[5] = pos2_new[2] + com_pos[2];
 
-    //Momenta are rotated but not shifted
+    // Momenta are rotated but not shifted
     w0[6] = p1_new[0];
     w0[7] = p1_new[1];
     w0[8] = p1_new[2];
@@ -487,9 +487,6 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
         w0[9]  = -prel_x;
         w0[10] = -prel_y;
         w0[11] = 0.0;
-
-        double com_pos[3] = {0.0, 0.0, 0.0};
-        position_binary(com_pos, binary_params->h_hat, binary_params->e_hat, w0);
     }
 }
 
@@ -504,15 +501,11 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
  * @param[in]   ode_params                General ODE/system parameters
  * @param[in]   inner_binary_params       Orbital parameters of bodies 1 and 2
  * @param[in]   outer_binary_params       Orbital parameters of inner-COM and body 3
- * @param[in]   inner_binary_orientation  Orientation of inner binary angular momentum
- *                                        NULL -> [0, 0, 1]
- * @param[in]   outer_binary_orientation  Orientation of outer binary angular momentum
- *                                        NULL -> [0, 0, 1]
  * @param[out]  w0                        Initial positions and momenta
  */
 void ic_hierarchical_triple(struct ode_params* ode_params, 
     struct binary_params* inner_binary_params, struct binary_params* outer_binary_params,
-    double* inner_binary_orientation, double* outer_binary_orientation, double* w0)
+    double* w0)
 {
     double m1 = ode_params->masses[0];
     double m2 = ode_params->masses[1];
@@ -521,18 +514,6 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
 
     double w_inner[12];
     double w_outer[12];
-
-    if (inner_binary_orientation == NULL) {
-        inner_binary_orientation[0] = 0.0;
-        inner_binary_orientation[1] = 0.0;
-        inner_binary_orientation[2] = 1.0;
-    }
-
-    if (outer_binary_orientation == NULL) {
-        outer_binary_orientation[0] = 0.0;
-        outer_binary_orientation[1] = 0.0;
-        outer_binary_orientation[2] = 1.0;
-    }
 
     // Initialize the inner binary in its own COM frame
     ic_binary(ode_params, inner_binary_params, m1, m2, w_inner);
@@ -621,45 +602,31 @@ void ic_hierarchical_triple(struct ode_params* ode_params,
  * @param[in]   d0              Initial distance of the binary's center of mass and the single
  * @param[in]   v0_rel          Initial relative approach velocity of the binary and the single 
  * @param[in]   b               Scattering impact parameter
- * @param[in]   orientation     Binary orientation vector (NULL -> oriented in direction of motion)
  * @param[out]  w0              Initial positions and momenta, 
  *                              w0 = [pos_b1, pos_b2, pos_s, p_b1, p_b2, p_s]
  */
 void ic_binary_single_scattering(struct ode_params* ode_params, 
-    struct binary_params* binary_params, double d0, double v0_rel, double b, double* orientation, 
-    double* w0)
+    struct binary_params* binary_params, double d0, double p0_rel, double b, double* w0)
 {
-    double v_x, v_y;
+    double p_x, p_y;
     double w0_binary[12];
-    double binary_orientation[3];
-    double binary_pos[3] = {0.0, 0.0, 0.0};
 
     // Create the binary initial values
     ic_binary(ode_params, binary_params, ode_params->masses[0], ode_params->masses[1], w0_binary);
 
     // Compute the absolute values of v_x and v_y
-    v_x = v0_rel/2 * sqrt(1 - b*b/(d0*d0));
-    v_y = v0_rel/2 * b/d0;
+    p_x = p0_rel/2 * sqrt(1 - b*b/(d0*d0));
+    p_y = p0_rel/2 * b/d0;
 
     // Position the binary at its right place with the specified orientation
-    binary_pos[0] = -d0/2;
-    if(orientation == NULL){
-        binary_orientation[0] = v_x;
-        binary_orientation[1] = -v_y;
-        binary_orientation[2] = 0.0;
-    }
-    else{
-        binary_orientation[0] = orientation[0];
-        binary_orientation[1] = orientation[1];
-        binary_orientation[2] = orientation[2];
-    }
+    double binary_pos[3] = {-d0/2, 0.0, 0.0};
     position_binary(binary_pos, binary_params->h_hat, binary_params->e_hat, w0_binary);
 
     // Add p_x and p_y momentum to the binary
-    w0_binary[6] += ode_params->masses[0] * v_x;
-    w0_binary[7] -= ode_params->masses[0] * v_y;
-    w0_binary[9] += ode_params->masses[1] * v_x;
-    w0_binary[10] -= ode_params->masses[1] * v_y;
+    w0_binary[6] += p_x;
+    w0_binary[7] -= p_y;
+    w0_binary[9] += p_x;
+    w0_binary[10] -= p_y;
 
     // Setting up the binary
     for(int i = 0; i < 6; i++)
@@ -671,20 +638,21 @@ void ic_binary_single_scattering(struct ode_params* ode_params,
     w0[6] = d0/2;
     w0[7] = 0.0;
     w0[8] = 0.0;
-    w0[15] = -ode_params->masses[2] * v_x;
-    w0[16] = ode_params->masses[2] * v_y;
+    w0[15] = -p_x;
+    w0[16] = p_y;
     w0[17] = 0.0;
 }
 
 
 /**
- * @brief Computes initial positions and momenta for a relativistic binary-single scattering.
+ * @brief Computes initial positions and momenta for a circular binary-single scattering with
+ * low-eccentricity tangential and radial momenta.
  * 
  * Returns the initial positions and the initial momenta (as w0 = [pos1, pos2, pos3, p1, p2, p3])
- * of a relativistic binary-single scattering with specified binary and scattering parameters. The
- * scattering takes place in the xy-plane. The function currently only supports equal-mass binaries
- * for which it is common to report the radial and tangential component of the binary members that
- * for example produce a quasi-circular orbit.
+ * of a circular relativistic binary-single scattering with specified binary and scattering 
+ * parameters. The scattering takes place in the xy-plane. The function uses r0, pt0 and pr0
+ * (the initial separation, tangential and radial momentum), which are commonly quoted as 
+ * relativistic low-eccentricity binary initial parameters.
  * 
  * @param[in]   d0              Initial distance of the binary's center of mass and the single
  * @param[in]   p0_rel          Initial relative approach momentum of the binary and the single
@@ -697,7 +665,7 @@ void ic_binary_single_scattering(struct ode_params* ode_params,
  * @param[out]  w0              Initial positions and momenta,
  *                              w0 = [pos_b1, pos_b2, pos_s, p_b1, p_b2, p_s]
  */
-void ic_binary_single_scattering_rel(double d0, double p0_rel, double b, double binary_phi0, 
+void ic_binary_single_scattering_circ(double d0, double p0_rel, double b, double binary_phi0, 
     double binary_r0, double binary_pt0, double binary_pr0, double* orientation, double* w0)
 {
     double px0_rel, py0_rel;
@@ -782,7 +750,7 @@ void ic_binary_single_scattering_rel(double d0, double p0_rel, double b, double 
  * @param[in]   binary1_params  Struct with the parameters of binary 1 (initialized elsewhere)
  * @param[in]   binary2_params  Struct with the parameters of binary 2 (initialized elsewhere)
  * @param[in]   d0              Initial distance of the centers of mass of the binaries
- * @param[in]   v0_rel          Initial relative approach velocity of the binaries
+ * @param[in]   p0_rel          Initial relative approach momentum of the binaries
  * @param[in]   b               Scattering impact parameter
  * @param[in]   orientation_1   Orientation of binary 1 (NULL -> oriented in direction of motion)
  * @param[in]   orientation_2   Orientation of binary 2 (NULL -> oriented in direction of motion)
@@ -791,59 +759,35 @@ void ic_binary_single_scattering_rel(double d0, double p0_rel, double b, double 
  */
 void ic_binary_binary_scattering(struct ode_params* ode_params, 
     struct binary_params* binary1_params, struct binary_params* binary2_params, double d0, 
-    double v0_rel, double b, double* orientation_1, double* orientation_2, double* w0)
+    double p0_rel, double b, double* w0)
 {
-    double v_x, v_y;
+    double p_x, p_y;
     double w0_binary1[12];
     double w0_binary2[12];
-    double binary1_orientation[3];
-    double binary2_orientation[3];
-    double binary1_pos[3] = {0.0, 0.0, 0.0};
-    double binary2_pos[3] = {0.0, 0.0, 0.0};
 
     // Create the binary initial values
     ic_binary(ode_params, binary1_params, ode_params->masses[0], ode_params->masses[1], w0_binary1);
     ic_binary(ode_params, binary2_params, ode_params->masses[2], ode_params->masses[3], w0_binary2);
 
     // Compute the absolute values of v_x and v_y
-    v_x = v0_rel/2 * sqrt(1 - pow(b/d0, 2));
-    v_y = v0_rel/2 * b/d0;
+    p_x = p0_rel/2 * sqrt(1 - pow(b/d0, 2));
+    p_y = p0_rel/2 * b/d0;
 
     // Position the binaries at their right place with the specified orientations
-    binary1_pos[0] = -d0/2;
-    binary2_pos[0] = d0/2;
-    if(orientation_1 == NULL){
-        binary1_orientation[0] = v_x;
-        binary1_orientation[1] = -v_y;
-        binary1_orientation[2] = 0.0;
-    }
-    else{
-        binary1_orientation[0] = orientation_1[0];
-        binary1_orientation[1] = orientation_1[1];
-        binary1_orientation[2] = orientation_1[2];
-    }
-    if(orientation_2 == NULL){
-        binary2_orientation[0] = -v_x;
-        binary2_orientation[1] = v_y;
-        binary2_orientation[2] = 0.0;
-    }
-    else{
-        binary2_orientation[0] = orientation_2[0];
-        binary2_orientation[1] = orientation_2[1];
-        binary2_orientation[2] = orientation_2[2];
-    }
+    double binary1_pos[3] = {-d0/2, 0.0, 0.0};
+    double binary2_pos[3] = {d0/2, 0.0, 0.0};
     position_binary(binary1_pos, binary1_params->h_hat, binary1_params->e_hat, w0_binary1);
     position_binary(binary2_pos, binary2_params->h_hat, binary2_params->e_hat, w0_binary2);
 
     // Add p_x and p_y momentum to the binaries
-    w0_binary1[6] += ode_params->masses[0] * v_x;
-    w0_binary1[7] -= ode_params->masses[0] * v_y;
-    w0_binary1[9] += ode_params->masses[1] * v_x;
-    w0_binary1[10] -= ode_params->masses[1] * v_y;
-    w0_binary2[6] -= ode_params->masses[2] * v_x;
-    w0_binary2[7] += ode_params->masses[2] * v_y;
-    w0_binary2[9] -= ode_params->masses[3] * v_x;
-    w0_binary2[10] += ode_params->masses[3] * v_y;
+    w0_binary1[6] += p_x;
+    w0_binary1[7] -= p_y;
+    w0_binary1[9] += p_x;
+    w0_binary1[10] -= p_y;
+    w0_binary2[6] -= p_x;
+    w0_binary2[7] += p_y;
+    w0_binary2[9] -= p_x;
+    w0_binary2[10] += p_y;
 
     // Setting up the binaries
     for(int i = 0; i < 6; i++)
@@ -877,7 +821,7 @@ void ic_binary_binary_scattering(struct ode_params* ode_params,
  * @param[out]  w0              Initial positions and momenta,
  *                              w0 = [pos1_1, pos2_1, pos1_2, pos2_2, p1_1, p2_1, p1_2, p2_2]
  */
-void ic_binary_binary_scattering_rel(double d0, double p0_rel, double b, double binary1_phi0, 
+void ic_binary_binary_scattering_circ(double d0, double p0_rel, double b, double binary1_phi0, 
     double binary1_r0, double binary1_pt0, double binary1_pr0, double* orientation_1, 
     double binary_phi0_2, double binary2_r0, double binary2_pt0, double binary2_pr0, 
     double* orientation_2, double* w0)

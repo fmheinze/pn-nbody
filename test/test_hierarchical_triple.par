@@ -32,15 +32,17 @@ mass1                = 0.5                             # Mass of body 1
 mass2                = 1.5                             # Mass of body 2
 mass3                = 5.0                             # Mass of body 3
 
-binary1_a            = 30.0                            # Semi-major axis of binary 1
-binary1_b            = 25.0                            # Semi-minor axis of binary 1
-binary1_phi0         = 0.4                             # Initial phase of binary 1
-orientation_1        = 0.5 1.0 -2.0                    # Orientation of binary 1
+binary1_a            = 30.0                            # Semi-major axis of inner binary
+binary1_b            = 25.0                            # Semi-minor axis of inner binary
+binary1_f0           = 0.4                             # True anomaly of inner binary
+binary1_h_hat        = 1.0 0.0 0.0                     # Angular momentum direction of inner binary
+binary1_e_hat        = 0.0 0.0 1.0                     # Periapsis direction of inner binary
 
-binary2_e            = 0.5                             # Eccentricity of binary 2
-binary2_a            = 300.0	                       # Pericenter distance of binary 2
-binary2_phi0         = 0.9                             # Initial phase of binary 2
-orientation_2        = 0.0 0.0 1.0                     # Orientation of binary 1
+binary2_e            = 0.5                             # Eccentricity of outer binary
+binary2_a            = 300.0	                       # Pericenter distance of outer binary
+binary2_f0           = 0.9                             # True anomaly of outer binary
+binary2_h_hat        = 0.0 0.0 1.0                     # Angular momentum direction of outer binary
+binary2_e_hat        = 1.0 0.0 0.0                     # Periapsis direction of outer binary
 
 
 # -------------------------------------------------------------------------------------------------

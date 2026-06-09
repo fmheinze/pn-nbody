@@ -1,4 +1,4 @@
-# Test for a relativistic binary-single scattering with all terms up to 2.5 PN order
+# Test for a circular relativistic binary-single scattering with all terms up to 2.5 PN order
 
 # -------------------------------------------------------------------------------------------------
 # General parameters
@@ -27,19 +27,19 @@ rtol                 = 1e-14                           # Error tolerance for the
 # -------------------------------------------------------------------------------------------------
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
-ic_preset            = binary_single_scattering_rel    # Initial condition preset
+ic_preset            = binary_single_scattering_circ   # Initial condition preset
 mass1                = 0.5                             # Mass of body 1
 mass2                = 0.5                             # Mass of body 2
 mass3                = 0.5                             # Mass of body 3
 
-d0                   = 150.0                           # Initial distance for the scattering
+d0                   = 100.0                           # Initial distance for the scattering
 p0_rel               = 0.05                            # Initial momentum for the scattering
 b                    = 34.0                            # Scattering impact parameter
 orientation          = -0.2 -0.5 1.0                   # Orientation of binary	
 
-binary_r0            = 5.5                          # Initial radius of the binary
+binary_r0            = 5.5                             # Initial radius of the binary
 binary_pt0           = 0.087364                        # Initial tangential momentum of the binary
-binary_pr0           = 0.00060110	                       # Initial radial momentum of the binary
+binary_pr0           = 0.00060110	               # Initial radial momentum of the binary
 binary_phi0          = 0.4                             # Initial phase of binary
 
 

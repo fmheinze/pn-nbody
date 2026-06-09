@@ -1,0 +1,58 @@
+# Test for a circular relativistic binary-binary scattering with all terms up to 2.5 PN order
+
+# -------------------------------------------------------------------------------------------------
+# General parameters
+# -------------------------------------------------------------------------------------------------
+num_dim              = 3                               # Number of dimensions
+num_bodies           = 4                               # Number of bodies
+0pn_terms            = 1                               # Whether to include 0PN (Newtonian) terms
+1pn_terms            = 1                               # Whether to include 1PN terms
+2pn_terms            = 1                               # Whether to include 2PN terms
+2.5pn_terms          = 1                               # Whether to include 2.5PN terms
+
+
+# -------------------------------------------------------------------------------------------------
+# Time parameters
+# -------------------------------------------------------------------------------------------------
+t_end                = 700.0                           # Final time
+dt                   = 0.1                             # Timestep
+
+
+# -------------------------------------------------------------------------------------------------
+# ODE integrator
+# -------------------------------------------------------------------------------------------------
+ode_integrator       = cash-karp                       # ODE integration method
+rtol                 = 1e-14                           # Error tolerance for the Cash-Karp method
+include_utt4         = 0
+
+
+# -------------------------------------------------------------------------------------------------
+# Initial conditions
+# -------------------------------------------------------------------------------------------------
+ic_preset            = binary_binary_scattering_circ   # Initial condition preset
+mass1                = 0.5                             # Mass of body 1
+mass2                = 0.5                             # Mass of body 2
+mass3                = 0.5                             # Mass of body 3
+mass4                = 0.5                             # Mass of body 4
+
+d0                   = 100.0                           # Initial distance for the scattering
+p0_rel               = 0.05                            # Initial momentum for the scattering
+b                    = 34.0                            # Scattering impact parameter
+
+binary1_r0            = 5.5                            # Initial radius of the binary 1
+binary1_pt0           = 0.087364                       # Initial tangential momentum of the binary 1
+binary1_pr0           = 0.00060110	               # Initial radial momentum of the binary 1
+binary1_phi0          = 0.4                            # Initial phase of binary 1
+
+binary2_r0            = 5.5                            # Initial radius of the binary 2
+binary2_pt0           = 0.087364                       # Initial tangential momentum of the binary 2
+binary2_pr0           = 0.00060110	               # Initial radial momentum of the binary 2
+binary2_phi0          = 1.8                            # Initial phase of binary 2
+
+
+
+# -------------------------------------------------------------------------------------------------
+# Output parameters
+# -------------------------------------------------------------------------------------------------
+dt_save              = 1.0                             # Output times
+

@@ -14,7 +14,7 @@ num_bodies           = 4                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 5000.0                          # Final time
+t_end                = 6000.0                          # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -35,16 +35,16 @@ mass4                = 1.0                             # Mass of body 4
 
 binary1_a            = 30.0                            # Semi-major axis of binary 1
 binary1_b            = 20.0                            # Semi-minor axis of binary 1
-binary1_phi0         = 0.4                             # Initial phase of binary 1
-orientation1         = 1.2 -3.4 -2.1                   # Orientation of binary 1
+binary1_f0           = 0.4                             # Initial phase of binary 1
 
-binary2_e            = 0.7                             # Eccentricity of binary 2
-binary2_rp           = 20.0	                           # Pericenter distance of binary 2
-binary2_phi0         = 0.9                             # Initial phase of binary 2
+binary2_e            = 0.5                             # Eccentricity of binary 2
+binary2_rp           = 10.0	                       # Pericenter distance of binary 2
+binary2_f0           = 0.9                             # Initial phase of binary 2
+binary2_h_hat        = 0.0 1.0 0.0
 
 d0                   = 700.0                           # Initial distance for the scattering
-v0_rel               = 0.2                             # Initial velocity for the scattering
-b                    = 60.0                            # Scattering impact parameter
+p0_rel               = 0.2                             # Initial velocity for the scattering
+b                    = 150.0                            # Scattering impact parameter
 
 
 # -------------------------------------------------------------------------------------------------

@@ -98,8 +98,8 @@ void initialize_parameters()
         add_parameter("binary_h_hat", "0.0 0.0 1.0", "orbital angular momentum direction");
         add_parameter("binary_e_hat", "1.0 0.0 0.0", "periapsis / eccentricity-vector direction");
         add_parameter("binary_i", "-1", "inclination; if >= 0, use i, Omega, omega, not vectors");
-        add_parameter("binary_Omega", "0.0", "Longitude of the ascending node [radians]");
-        add_parameter("binary_omega", "0.0", "Argument of periapsis [radians]");
+        add_parameter("binary_Omega", "0.0", "longitude of the ascending node [radians]");
+        add_parameter("binary_omega", "0.0", "argument of periapsis [radians]");
     }
 
     // Hierarchical triple
@@ -110,16 +110,24 @@ void initialize_parameters()
         add_parameter("binary1_ra", "-1", "apoapsis of inner binary [> 0]");
         add_parameter("binary1_rp", "-1", "periapsis of inner binary [> 0]");
         add_parameter("binary1_p", "-1", "semi-parameter of inner binary [> 0]");
-        add_parameter("binary1_phi0", "0.0", "initial phase of inner binary");
-        add_parameter("orientation_1", "-1", "components of the orientation of inner binary");
+        add_parameter("binary1_f0", "0.0", "true anomaly of inner binary");
+        add_parameter("binary1_h_hat", "0.0 0.0 1.0", "angular mom. direction of inner binary");
+        add_parameter("binary1_e_hat", "1.0 0.0 0.0", "periapsis direction of inner binary");
+        add_parameter("binary1_i", "-1", "inclination of inner binary");
+        add_parameter("binary1_Omega", "0.0", "longitude of the ascending node of inner binary");
+        add_parameter("binary1_omega", "0.0", "argument of periapsis of inner binary");
         add_parameter("binary2_a", "-1", "semi-major axis of outer binary [> 0]");
         add_parameter("binary2_b", "-1", "semi-minor axis of outer binary [> 0]");
         add_parameter("binary2_e", "-1", "eccentricity of outer binary [>= 0]");
         add_parameter("binary2_ra", "-1", "apoapsis of outer binary [> 0]");
         add_parameter("binary2_rp", "-1", "periapsis of outer binary [> 0]");
         add_parameter("binary2_p", "-1", "semi-parameter of outer binary [> 0]");
-        add_parameter("binary2_phi0", "0.0", "initial phase of outer binary");
-        add_parameter("orientation_2", "-1", "components of the orientation of outer binary");
+        add_parameter("binary2_f0", "0.0", "true anomaly of outer binary");
+        add_parameter("binary2_h_hat", "0.0 0.0 1.0", "angular mom. direction of outer binary");
+        add_parameter("binary2_e_hat", "1.0 0.0 0.0", "periapsis direction of outer binary");
+        add_parameter("binary2_i", "-1", "inclination of outer binary");
+        add_parameter("binary2_Omega", "0.0", "longitude of the ascending node of outer binary");
+        add_parameter("binary2_omega", "0.0", "argument of periapsis of outer binary");
     }
 
     // Binary-single scattering
@@ -130,15 +138,19 @@ void initialize_parameters()
         add_parameter("binary_ra", "-1", "apoapsis [> 0]");
         add_parameter("binary_rp", "-1", "periapsis [> 0]");
         add_parameter("binary_p", "-1", "semi-parameter [> 0]");
-        add_parameter("binary_phi0", "0.0", "initial phase");
+        add_parameter("binary_f0", "0.0", "true anomaly");
+        add_parameter("binary_h_hat", "0.0 0.0 1.0", "orbital angular momentum direction");
+        add_parameter("binary_e_hat", "1.0 0.0 0.0", "periapsis / eccentricity-vector direction");
+        add_parameter("binary_i", "-1", "inclination; if >= 0, use i, Omega, omega, not vectors");
+        add_parameter("binary_Omega", "0.0", "longitude of the ascending node [radians]");
+        add_parameter("binary_omega", "0.0", "argument of periapsis [radians]");
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
-        add_parameter("v0_rel", "-1", "initial relative approach velocity [>= 0]");
+        add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
-        add_parameter("orientation", "-1", "components of the orientation of the binary");
     }
 
-    // Relativistic binary-single scattering
-    if (strcmp(get_parameter_string("ic_preset"), "binary_single_scattering_rel") == 0) {
+    // Circular binary-single scattering
+    if (strcmp(get_parameter_string("ic_preset"), "binary_single_scattering_circ") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
@@ -152,7 +164,7 @@ void initialize_parameters()
     // Binary-binary scattering
     if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
-        add_parameter("v0_rel", "-1", "initial relative approach velocity [>= 0]");
+        add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
         add_parameter("binary1_a", "-1", "semi-major axis of binary 1 [> 0]");
         add_parameter("binary1_b", "-1", "semi-minor axis of binary 1 [> 0]");
@@ -160,20 +172,28 @@ void initialize_parameters()
         add_parameter("binary1_ra", "-1", "apoapsis of binary 1 [> 0]");
         add_parameter("binary1_rp", "-1", "periapsis of binary 1 [> 0]");
         add_parameter("binary1_p", "-1", "semi-parameter of binary 1 [> 0]");
-        add_parameter("binary1_phi0", "0.0", "initial phase of binary 1");
-        add_parameter("orientation_1", "-1", "components of the orientation of binary 1");
+        add_parameter("binary1_f0", "0.0", "true anomaly of binary 1");
+        add_parameter("binary1_h_hat", "0.0 0.0 1.0", "angular mom. direction of binary 1");
+        add_parameter("binary1_e_hat", "1.0 0.0 0.0", "periapsis direction of binary 1");
+        add_parameter("binary1_i", "-1", "inclination of binary 1");
+        add_parameter("binary1_Omega", "0.0", "longitude of the ascending node of binary 1");
+        add_parameter("binary1_omega", "0.0", "argument of periapsis of binary 1");
         add_parameter("binary2_a", "-1", "semi-major axis of binary 2 [> 0]");
         add_parameter("binary2_b", "-1", "semi-minor axis of binary 2 [> 0]");
         add_parameter("binary2_e", "-1", "eccentricity of binary 2 [>= 0]");
         add_parameter("binary2_ra", "-1", "apoapsis of binary 2 [> 0]");
         add_parameter("binary2_rp", "-1", "periapsis of binary 2 [> 0]");
         add_parameter("binary2_p", "-1", "semi-parameter of binary 2 [> 0]");
-        add_parameter("binary2_phi0", "0.0", "initial phase of binary 2");
-        add_parameter("orientation_2", "-1", "components of the orientation of binary 2");
+        add_parameter("binary2_f0", "0.0", "true anomaly of inner binary");
+        add_parameter("binary2_h_hat", "0.0 0.0 1.0", "angular mom. direction of inner binary");
+        add_parameter("binary2_e_hat", "1.0 0.0 0.0", "periapsis direction of inner binary");
+        add_parameter("binary2_i", "-1", "inclination of inner binary");
+        add_parameter("binary2_Omega", "0.0", "longitude of the ascending node of inner binary");
+        add_parameter("binary2_omega", "0.0", "argument of periapsis of inner binary");
     }
 
-    // Relativistic binary-binary scattering
-    if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering_rel") == 0) {
+    // Circular binary-binary scattering
+    if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering_circ") == 0) {
         add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
@@ -641,14 +661,14 @@ double* initialize_state_vector(struct ode_params* ode_params)
         else if (strcmp(preset, "binary_single_scattering") == 0)
             initialize_binary_single_scattering(ode_params, w0);
 
-        else if (strcmp(preset, "binary_single_scattering_rel") == 0)
-            initialize_binary_single_scattering_rel(ode_params, w0);
+        else if (strcmp(preset, "binary_single_scattering_circ") == 0)
+            initialize_binary_single_scattering_circ(ode_params, w0);
 
         else if (strcmp(preset, "binary_binary_scattering") == 0)
             initialize_binary_binary_scattering(ode_params, w0);
         
-        else if (strcmp(preset, "binary_binary_scattering_rel") == 0)
-            initialize_binary_binary_scattering_rel(ode_params, w0);
+        else if (strcmp(preset, "binary_binary_scattering_circ") == 0)
+            initialize_binary_binary_scattering_circ(ode_params, w0);
 
         else if (strcmp(preset, "figure_eight") == 0)
             initialize_figure_eight(ode_params, w0);
@@ -678,7 +698,7 @@ double* initialize_state_vector(struct ode_params* ode_params)
 
 
 /**
- * @brief Initializes the state vector for a binary
+ * @brief Initializes the state vector for a binary.
  * 
  * Initializes the state vector for a binary and checks the consistency and validity of
  * the involved parameters.
@@ -692,6 +712,12 @@ void initialize_binary(struct ode_params* ode_params, double* w0)
     print_divider();
     struct binary_params binary_params = initialize_binary_params(0);
     ic_binary(ode_params, &binary_params, ode_params->masses[0], ode_params->masses[1], w0);
+
+    // ic_binary puts the binary in the xy-plane so we orient it here accordingly
+    if (ode_params->num_dim == 3) {
+        double com_pos[3] = {0.0, 0.0, 0.0};
+        position_binary(com_pos, binary_params.h_hat, binary_params.e_hat, w0);
+    }
 }
 
 
@@ -712,30 +738,13 @@ void initialize_hierarchical_triple(struct ode_params* ode_params, double* w0)
     // Load specified values
     struct binary_params inner_binary_params = initialize_binary_params(1);
     struct binary_params outer_binary_params = initialize_binary_params(2);
-    double* inner_binary_orientation;
-    if (strcmp(get_parameter_string("orientation_1"), "-1") == 0)
-        inner_binary_orientation = NULL;
-    else {
-        allocate_vector(&inner_binary_orientation, 3);
-        for (int i = 0; i < 3; i++)
-            inner_binary_orientation[i] = get_parameter_double_array("orientation_1")[i];
-    }
-    double* outer_binary_orientation;
-    if (strcmp(get_parameter_string("orientation_2"), "-1") == 0)
-        outer_binary_orientation = NULL;
-    else {
-        allocate_vector(&outer_binary_orientation, 3);
-        for (int i = 0; i < 3; i++)
-            outer_binary_orientation[i] = get_parameter_double_array("orientation_2")[i];
-    }
 
-    ic_hierarchical_triple(ode_params, &inner_binary_params, &outer_binary_params, 
-        inner_binary_orientation, outer_binary_orientation, w0);
+    ic_hierarchical_triple(ode_params, &inner_binary_params, &outer_binary_params, w0);
 }
 
 
 /**
- * @brief Initializes the state vector for a binary-single scattering
+ * @brief Initializes the state vector for a binary-single scattering.
  * 
  * Initializes the state vector for a binary-single scattering and checks the 
  * consistency and validity of the involved parameters.
@@ -751,37 +760,31 @@ void initialize_binary_single_scattering(struct ode_params* ode_params, double* 
     // Load specified values
     struct binary_params binary_params = initialize_binary_params(0);
     double d0 = get_parameter_double("d0");
-    double v0_rel = get_parameter_double("v0_rel");
+    double p0_rel = get_parameter_double("p0_rel");
     double b = get_parameter_double("b");
-    double* orientation;
-    if (strcmp(get_parameter_string("orientation"), "-1") == 0)
-        orientation = NULL;
-    else {
-        allocate_vector(&orientation, 3);
-        for (int i = 0; i < 3; i++)
-            orientation[i] = get_parameter_double_array("orientation")[i];
-    }
 
     // Check specified values for validity
     if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
-    if (v0_rel < 0) errorexit("Please specify a valid v0_rel (must be v0_rel >= 0)");
+    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
 
-    ic_binary_single_scattering(ode_params, &binary_params, d0, v0_rel, b, orientation, w0);
-    free_vector(orientation);
+    ic_binary_single_scattering(ode_params, &binary_params, d0, p0_rel, b, w0);
 }
 
 
 /**
- * @brief Initializes the state vector for a relativistic binary-single scattering
+ * @brief Initializes the state vector for a circular binary-single scattering with
+ * low-eccentricity tangential and radial momenta.
  * 
- * Initializes the state vector for a relativistic binary-single scattering and checks the 
- * consistency and validity of the involved parameters.
+ * Initializes the state vector for a circular binary-single scattering using r0, pt0 and pr0
+ * (the initial separation, tangential and radial momentum), which are commonly quoted as 
+ * relativistic low-eccentricity binary initial parameters, and checks the consistency and validity
+ * of all the involved parameters.
  * 
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
-void initialize_binary_single_scattering_rel(struct ode_params* ode_params, double* w0)
+void initialize_binary_single_scattering_circ(struct ode_params* ode_params, double* w0)
 {
     printf("Setting up initial parameters for a relativistic binary-single scattering...\n");
     print_divider();
@@ -805,7 +808,7 @@ void initialize_binary_single_scattering_rel(struct ode_params* ode_params, doub
 
     // Check specified values for validity
     if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
-    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be v0_rel >= 0)");
+    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
     if (binary_r0 <= 0) errorexit("Please specify a valid binary_r0 (must be binary_r0 > 0)");
     if (binary_pt0 < 0) errorexit("Please specify a valid binary_pt0 (must be binary_pt0 >= 0)");
@@ -814,7 +817,7 @@ void initialize_binary_single_scattering_rel(struct ode_params* ode_params, doub
     if (ode_params->masses[0] != ode_params->masses[1])
         errorexit("Currently only equal-mass binaries supported in rel. binary-single scattering");
 
-    ic_binary_single_scattering_rel(d0, p0_rel, b, binary_phi0, binary_r0, binary_pt0, 
+    ic_binary_single_scattering_circ(d0, p0_rel, b, binary_phi0, binary_r0, binary_pt0, 
         binary_pr0, orientation, w0);
 
     free_vector(orientation);
@@ -822,7 +825,7 @@ void initialize_binary_single_scattering_rel(struct ode_params* ode_params, doub
 
 
 /**
- * @brief Initializes the state vector for a binary-binary scattering
+ * @brief Initializes the state vector for a binary-binary scattering.
  * 
  * Initializes the state vector for a binary-binary scattering and checks the 
  * consistency and validity of the involved parameters.
@@ -839,35 +842,15 @@ void initialize_binary_binary_scattering(struct ode_params* ode_params, double* 
     struct binary_params binary1_params = initialize_binary_params(1);
     struct binary_params binary2_params = initialize_binary_params(2);
     double d0 = get_parameter_double("d0");
-    double v0_rel = get_parameter_double("v0_rel");
+    double p0_rel = get_parameter_double("p0_rel");
     double b = get_parameter_double("b");
-    double* orientation_1;
-    if (strcmp(get_parameter_string("orientation_1"), "-1") == 0)
-        orientation_1 = NULL;
-    else {
-        allocate_vector(&orientation_1, 3);
-        for (int i = 0; i < 3; i++)
-            orientation_1[i] = get_parameter_double_array("orientation_1")[i];
-    }
-    double* orientation_2;
-    if (strcmp(get_parameter_string("orientation_2"), "-1") == 0)
-        orientation_2 = NULL;
-    else {
-        allocate_vector(&orientation_2, 3);
-        for (int i = 0; i < 3; i++)
-            orientation_2[i] = get_parameter_double_array("orientation_2")[i];
-    }
 
     // Check specified values for validity
     if (d0 < 0) errorexit("Please specify a valid d0 (d0 >= 0)");
-    if (v0_rel < 0) errorexit("Please specify a valid v0_rel (v0_rel >= 0)");
+    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (|b| <= d0)");
 
-    ic_binary_binary_scattering(ode_params, &binary1_params, &binary2_params, d0, v0_rel, b,
-        orientation_1, orientation_2, w0);
-
-    free_vector(orientation_1);
-    free_vector(orientation_2);
+    ic_binary_binary_scattering(ode_params, &binary1_params, &binary2_params, d0, p0_rel, b, w0);
 }
 
 
@@ -880,7 +863,7 @@ void initialize_binary_binary_scattering(struct ode_params* ode_params, double* 
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
-void initialize_binary_binary_scattering_rel(struct ode_params* ode_params, double* w0)
+void initialize_binary_binary_scattering_circ(struct ode_params* ode_params, double* w0)
 {
     printf("Setting up initial parameters for a relativistic binary-binary scattering...\n");
     print_divider();
@@ -916,7 +899,7 @@ void initialize_binary_binary_scattering_rel(struct ode_params* ode_params, doub
 
     // Check specified values for validity
     if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
-    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be v0_rel >= 0)");
+    if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
     if (binary1_r0 <= 0) errorexit("Please specify a valid binary1_r0 (must be binary1_r0 > 0)");
     if (binary1_pt0 < 0) errorexit("Please specify a valid binary1_pt0 (must be binary1_pt0 >= 0)");
@@ -930,7 +913,7 @@ void initialize_binary_binary_scattering_rel(struct ode_params* ode_params, doub
         ode_params->masses[2] != ode_params->masses[3])
         errorexit("Currently only equal-mass binaries supported in rel. binary-binary scattering");
 
-    ic_binary_binary_scattering_rel(d0, p0_rel, b, binary1_phi0, binary1_r0, binary1_pt0,
+    ic_binary_binary_scattering_circ(d0, p0_rel, b, binary1_phi0, binary1_r0, binary1_pt0,
         binary1_pr0, orientation_1, binary2_phi0, binary2_r0, binary2_pt0, binary2_pr0, 
         orientation_2, w0);
 
