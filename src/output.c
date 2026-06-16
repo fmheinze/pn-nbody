@@ -29,25 +29,28 @@
  * @param[in]   file_merger    Pointer to the file containing the merger information
  * @param[in]   ode_params     Parameter struct containing general information about the system
  */
-void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_energy, 
-    FILE** file_merger, struct ode_params* ode_params) 
+void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_spin, 
+    FILE** file_energy, FILE** file_merger, struct ode_params* ode_params) 
 {
     // Create and open files
     char* outdir = get_parameter_string("outdir");
     char* path_masses  = make_filepath(outdir, "output_mass.dat");
     char* path_pos     = make_filepath(outdir, "output_pos.dat");
     char* path_mom     = make_filepath(outdir, "output_mom.dat");
+    char* path_spin    = make_filepath(outdir, "output_spin.dat");
     char* path_energy  = make_filepath(outdir, "output_energy.dat");
     char* path_merger  = make_filepath(outdir, "output_merger.dat");
 
     *file_mass   = fopen(path_masses, "w");
     *file_pos    = fopen(path_pos, "w");
     *file_mom    = fopen(path_mom, "w");
+    *file_spin   = fopen(path_spin, "w");
     *file_energy = fopen(path_energy, "w");
     *file_merger = fopen(path_merger, "w");
 
-    if (!*file_mass || !*file_pos || !*file_mom || !*file_energy || !*file_merger) {
-        free(path_masses); free(path_pos); free(path_mom); free(path_energy); free(path_merger);
+    if (!*file_mass || !*file_pos || !*file_mom || !*file_spin || !*file_energy || !*file_merger) {
+        free(path_masses); free(path_pos); free(path_mom); free(path_spin); 
+        free(path_energy); free(path_merger);
         errorexit("One or more of the output files could not be created");
     }
 
@@ -67,6 +70,12 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
     for (int i = 0; i < ode_params->num_bodies_initial; i++) {
         fprintf(*file_mom, "px%d\tpy%d\t", i, i);
         if (ode_params->num_dim == 3) fprintf(*file_mom, "pz%d\t", i);
+    }
+
+    // Write spin column names into the corresponding file
+    fprintf(*file_spin, "t\t");
+    for (int i = 0; i < ode_params->num_bodies_initial; i++) {
+        fprintf(*file_spin, "sx%d\tsy%d\tsz%d\t", i, i, i);
     }
 
     // Write energy column names into the corresponding file
@@ -132,19 +141,22 @@ static int component_is_active(int idx, struct ode_params *ode_params)
  * 
  * @param[in]   file_pos       Pointer to the file containing the particle positions
  * @param[in]   file_mom       Pointer to the file containing the particle momenta
+ * @param[in]   file_spin      Pointer to the file containing the particle spins
  * @param[in]   file_energy    Pointer to the file containing the particle energies
  * @param[in]   ode_params     Parameter struct containing general information about the system
  * @param[in]   w              Current state of the full system, w = [positions, momenta]
  * @param[in]   t              Current time
  */
-void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_energy, 
+void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE* file_energy, 
     struct ode_params* ode_params, double* w, double t) 
 {
     int array_half = ode_params->num_dim * ode_params->num_bodies_initial;
+    int spin_offset = 2 * array_half;
 
     // Write time
     fprintf(file_pos, "\n%.20e\t", t);
     fprintf(file_mom, "\n%.20e\t", t);
+    fprintf(file_spin, "\n%.20e\t", t);
     fprintf(file_energy, "\n%.20e\t", t);
 
     // Write positions
@@ -161,6 +173,14 @@ void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_energy,
             fprintf(file_mom, "%.20e\t", w[array_half + i]);
         else
             fprintf(file_mom, "nan\t");
+    }
+
+    // Write spins
+    for (int i = 0; i < array_half; i++) {
+        if (component_is_active(i, ode_params))
+            fprintf(file_spin, "%.20e\t", w[spin_offset + i]);
+        else
+            fprintf(file_spin, "nan\t");
     }
 
     // Write energy

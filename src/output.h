@@ -5,10 +5,10 @@
 
 struct ode_params;
 
-void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_energy, 
-    FILE** file_merger, struct ode_params* ode_params);
-void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_energy,
-    struct ode_params* ode_params, double* w, double t);
+void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_spin, 
+    FILE** file_energy, FILE** file_merger, struct ode_params* ode_params) ;
+void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE* file_energy, 
+    struct ode_params* ode_params, double* w, double t) ;
 void output_write_merger_event(
     FILE *file_merger,
     double t,

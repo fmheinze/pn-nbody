@@ -426,9 +426,9 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_energy, *file_merger;
-    output_init(&file_mass, &file_pos, &file_mom, &file_energy, &file_merger, ode_params);
-    output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
+    FILE *file_mass, *file_pos, *file_mom, *file_spin, *file_energy, *file_merger;
+    output_init(&file_mass, &file_pos, &file_mom, &file_spin, &file_energy, &file_merger, ode_params);
+    output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
 
     // Iterate until the final time
     while (t_current < t_end) {
@@ -485,7 +485,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
-            output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
+            output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
             print_progress_bar((int)(100.0 * t_current / t_end));
 
             // Advance output schedule robustly
@@ -683,9 +683,9 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_energy, *file_merger;
-    output_init(&file_mass, &file_pos, &file_mom, &file_energy, &file_merger, ode_params);
-    output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
+    FILE *file_mass, *file_pos, *file_mom, *file_spin, *file_energy, *file_merger;
+    output_init(&file_mass, &file_pos, &file_mom, &file_spin, &file_energy, &file_merger, ode_params);
+    output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
 
     // Cache gradient to reuse between steps:
     // After finishing a step, positions do not change before the next step's first half-kick,
@@ -723,7 +723,7 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
 
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
-            output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
+            output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
             print_progress_bar((int)(100.0 * t_current / t_end));
 
             // Advance output schedule robustly

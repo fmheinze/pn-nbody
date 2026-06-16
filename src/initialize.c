@@ -222,6 +222,7 @@ void initialize_parameters()
         add_parameter_i("mass", i, "0.0", "mass of body i [>= 0]");
         add_parameter_i("pos", i, "0.0 0.0 0.0", "coordinates of the initial position of body i");
         add_parameter_i("p", i, "0.0 0.0 0.0", "components of the initial momentum of body i");
+        add_parameter_i("spin", i, "0.0 0.0 0.0", "components of the initial spin of body i");
     }
 }
 
@@ -660,7 +661,7 @@ double* initialize_state_vector(struct ode_params* ode_params)
 
     // Allocate state vector
     double* w0;
-    allocate_vector(&w0, 2 * num_dim * num_bodies);
+    allocate_vector(&w0, 2 * num_dim * num_bodies + 3 * num_bodies);
 
     // Check whether an initial condition preset has been selected and initialize w0 accordinly
     const char *preset = get_parameter_string("ic_preset");
@@ -693,6 +694,7 @@ double* initialize_state_vector(struct ode_params* ode_params)
         print_state_vector(w0, num_bodies, num_dim);
         print_divider();
     }
+
     // If no initial condition preset has been selected, use specified positions and momenta
     else {
         for (int i = 0; i < num_bodies; i++) {
@@ -706,6 +708,25 @@ double* initialize_state_vector(struct ode_params* ode_params)
             free_vector(p);
         }  
     }
+
+    // Set spin
+    int spin_offset = 2 * num_dim * num_bodies;
+
+    for (int i = 0; i < num_bodies; i++) {
+        double *spin = get_parameter_double_array_i("spin", i + 1);
+        double chi2 = 0.0;
+
+        for (int j = 0; j < 3; j++) {
+            w0[spin_offset + 3 * i + j] = spin[j];
+            chi2 += spin[j] * spin[j];
+        }
+
+        if (chi2 > 1.0 + 1e-12)
+            errorexit("Dimensionless black-hole spin must satisfy |chi| <= 1");
+
+        free_vector(spin);
+    }
+
     return w0;
 }
 
