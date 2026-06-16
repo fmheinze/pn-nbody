@@ -20,10 +20,11 @@
 void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dwdt)
 {
     (void)t;    // Unused
+
     // --------------------------------------------------------------------------------------------
     // Initialize the arrays
     // --------------------------------------------------------------------------------------------
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     int array_half = num_bodies * num_dim; 
     double result, temp;
@@ -32,15 +33,18 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     double m[num_bodies];
     double inv_m[num_bodies];
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         m[a] = ode_params->masses[a];
         inv_m[a] = 1.0 / m[a];
     }
     
     // Momenta
     double p[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++)
+    for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int i = 0; i < num_dim; i++)
             p[a][i] = w[array_half + a * num_dim + i];
+    }
     
     // Relative positions and distances
     double x_rel[num_bodies][num_bodies][num_dim]; 
@@ -48,7 +52,9 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     double r[num_bodies][num_bodies];
     double inv_r[num_bodies][num_bodies];
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int b = a; b < num_bodies; b++) {
+            if (!ode_params->active[b]) continue;
             for (int i = 0; i < num_dim; i++){
                 x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
                 x_rel[b][a][i] = -x_rel[a][b][i];
@@ -78,6 +84,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     double p_dot[num_bodies][num_dim];
     double x_dot[num_bodies][num_dim];
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int i = 0; i < num_dim; i++) {
             p_dot[a][i] = 0.0;
             x_dot[a][i] = 0.0;
@@ -93,6 +100,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     // --------------------------------------------------------------------------------------------
     if (ode_params->pn_terms[0]) {
         for (int a = 0; a < num_bodies; a++) {
+            if (!ode_params->active[a]) continue;
             // Velocities
             for (int i = 0; i < num_dim; i++) {
                 result = w[array_half + a * num_dim + i] * inv_m[a];;
@@ -102,6 +110,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
 
             // Accelerations
             for (int b = a + 1; b < num_bodies; b++) {
+                if (!ode_params->active[b]) continue;
                 for (int i = 0; i < num_dim; i++) {
                     result = - m[a] * m[b] * inv_r[a][b] * inv_r[a][b] * n[a][b][i];
                     dwdt[array_half + a * num_dim + i] += result;
@@ -118,6 +127,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     // --------------------------------------------------------------------------------------------
     if (ode_params->pn_terms[1]) {
         for (int a = 0; a < num_bodies; a++) {
+            if (!ode_params->active[a]) continue;
             double pa_dot_pa = dot_product(p[a], p[a], num_dim);
             for (int i = 0; i < num_dim; i++) {
 
@@ -126,6 +136,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
                 x_dot[a][i] += result;
                 dwdt[a * num_dim + i] += result;
                 for (int b = 0; b < num_bodies; b++) {
+                    if (!ode_params->active[b]) continue;
                     double pa_dot_pb = dot_product(p[a], p[b], num_dim);
                     double pb_dot_pb = dot_product(p[b], p[b], num_dim);
                     double nab_dot_pa = dot_product(n[a][b], p[a], num_dim);
@@ -151,6 +162,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
                         dwdt[array_half + a * num_dim + i] += result;
                     }
                     for (int c = 0; c < num_bodies; c++) {
+                        if (!ode_params->active[c]) continue;
                         temp = m[a] * m[b] * m[c] * inv_r[a][b] * inv_r[a][b] * n[a][b][i];
                         if (b != a && c != a) {
                             result = temp * inv_r[a][c];
@@ -195,10 +207,14 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         // Initialize arrays
         double x_rel_dot[num_bodies][num_bodies][num_dim];
 
-        for (int a = 0; a < num_bodies; a++)
-            for (int b = 0; b < num_bodies; b++)
+        for (int a = 0; a < num_bodies; a++) {
+            if (!ode_params->active[a]) continue;
+            for (int b = 0; b < num_bodies; b++) {
+                if (!ode_params->active[b]) continue;
                 for (int i = 0; i < num_dim; i++)
                     x_rel_dot[a][b][i] = x_dot[a][i] - x_dot[b][i];
+            }
+        }
 
         double chi_dot[num_dim][num_dim];
         double dp_chi[num_bodies][num_dim][num_dim][num_dim];
@@ -209,6 +225,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
                 chi_dot[i][j] = 0.0;
 
         for (int a = 0; a < num_bodies; a++) { 
+            if (!ode_params->active[a]) continue;
             for (int i = 0; i < num_dim; i++) {
                 for (int j = 0; j < num_dim; j++) {
                     for (int k = 0; k < num_dim; k++) {
@@ -223,12 +240,13 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         for (int i = 0; i < num_dim; i++) {
             for (int j = 0; j < num_dim; j++) {
                 for (int a = 0; a < num_bodies; a++) {
+                    if (!ode_params->active[a]) continue;
                     chi_dot[i][j] += 2.0 * inv_m[a] * (
                         2 * dot_product(p_dot[a], p[a], num_dim) * delta(i, j) 
                         - 3 * (p_dot[a][i] * p[a][j] + p[a][i] * p_dot[a][j]) );
                     
                     for (int b = 0; b < num_bodies; b++) {
-                        if (b != a) {
+                        if (b != a && ode_params->active[b]) {
                             chi_dot[i][j] += m[a] * m[b] * inv_r[a][b] * inv_r[a][b] * (3 * 
                                 (x_rel_dot[a][b][i] * n[a][b][j] + n[a][b][i] * x_rel_dot[a][b][j])
                                 + dot_product(n[a][b], x_rel_dot[a][b], num_dim) * (delta(i, j) 
@@ -240,6 +258,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         }
 
         for (int c = 0; c < num_bodies; c++) {
+            if (!ode_params->active[c]) continue;
             for (int i = 0; i < num_dim; i++) {
                 for (int j = 0; j < num_dim; j++) {
                     for (int k = 0; k < num_dim; k++) {
@@ -247,8 +266,9 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
                             - 3 * (p[c][j] * delta(i, k) + p[c][i] * delta(j, k)));
                         
                         for (int a = 0; a < num_bodies; a++) {
+                            if (!ode_params->active[a]) continue;
                             for (int b = 0; b < num_bodies; b++) {
-                                if (b != a) {
+                                if (b != a && ode_params->active[b]) {
                                     dx_chi[c][i][j][k] += m[a] * m[b] * inv_r[a][b] * inv_r[a][b] *
                                         (delta(a, c) - delta(b, c)) * 
                                         (3 * (delta(i, k) * n[a][b][j] 
@@ -265,6 +285,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
 
         // Add contribution to the ODE right-hand side
         for (int a = 0; a < num_bodies; a++) {
+            if (!ode_params->active[a]) continue;
             for (int k = 0; k < num_dim; k++) {
                 for (int i = 0; i < num_dim; i++) {
                     for (int j = 0; j < num_dim; j++) {
@@ -276,6 +297,36 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
             }
         }
     }
+
+    // --------------------------------------------------------------------------------------------
+    // Make sure inactive bodies are not evolved
+    // --------------------------------------------------------------------------------------------
+
+    for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) {
+            for (int i = 0; i < num_dim; i++) {
+                dwdt[a * num_dim + i] = 0.0;
+                dwdt[array_half + a * num_dim + i] = 0.0;
+            }
+        }
+    }
+}
+
+
+static int component_is_active(int idx, struct ode_params *ode_params)
+{
+    int num_dim = ode_params->num_dim;
+    int num_bodies = ode_params->num_bodies_initial;
+    int array_half = num_dim * num_bodies;
+
+    int body;
+
+    if (idx < array_half)
+        body = idx / num_dim;
+    else
+        body = (idx - array_half) / num_dim;
+
+    return ode_params->active[body];
 }
 
 
@@ -297,18 +348,24 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
 void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_params* ode_params,
     double *dwdt)
 {
-    int array_half = ode_params->num_dim * ode_params->num_bodies;
+    int array_half = ode_params->num_dim * ode_params->num_bodies_initial;
     int total_dim = 2 * array_half;
     complex double w_c[total_dim];
     complex double H_cs_val;
     double dHdw[total_dim];
     int p_flag;
 
-    // Copy original array to w_copy
-    for (int i = 0; i < total_dim; ++i)
+    // Copy original array to w_c and initialize dHdw
+    for (int i = 0; i < total_dim; ++i) {
         w_c[i] = (complex double)w[i];
+        dHdw[i] = 0.0;
+    }
 
     for (int i = 0; i < total_dim; ++i) {
+        if (!component_is_active(i, ode_params)) {
+            dHdw[i] = 0.0;
+            continue;
+        }
         p_flag = (i < array_half) ? 0 : 1;
 
         // Add tiny imaginary step in coordinate i
@@ -323,10 +380,9 @@ void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_
     }
 
     // Compute dwdt
-    for (int i = 0; i < 2 * array_half; i++) {
-        if (i < array_half)
-            dwdt[i] += dHdw[i + array_half];
-        else
-            dwdt[i] += -dHdw[i - array_half];
+    for (int i = 0; i < array_half; i++) {
+        if (!component_is_active(i, ode_params)) continue;
+        dwdt[i] += dHdw[i + array_half];
+        dwdt[i + array_half] += -dHdw[i];
     }
 }

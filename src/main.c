@@ -118,13 +118,11 @@ int main(int argc, char** argv)
     // Run simulation
     printf("Running simulation...\n"); 
     #if HAVE_CUBA
-    if (ode_params.use_impulse_method) {
+    if (ode_params.use_impulse_method)
         ode_integrator_impulse(w, rhs_pn_nbody, compute_dUTT4_dx, &ode_params);
-    }
     #endif
-    if (!ode_params.use_impulse_method) {
+    if (!ode_params.use_impulse_method)
         ode_integrator(w, rhs_pn_nbody, &ode_params);
-    }
     printf("\n"); 
     print_divider();
 

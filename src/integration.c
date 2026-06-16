@@ -15,6 +15,7 @@
 #include "eom.h"
 #include "output.h"
 #include "parameters.h"
+#include "merger.h"
 
 
 // ODE workspace functions to avoid allocating and freeing memory at each ODE integration step
@@ -412,7 +413,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
         max_iter = get_parameter_int("max_iter"); 
     }
 
-    int w_size = 2 * ode_params->num_dim * ode_params->num_bodies;
+    int w_size = 2 * ode_params->num_dim * ode_params->num_bodies_initial;
     int failure = 0;
 
     double t_current = 0.0;
@@ -425,8 +426,8 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_energy;
-    output_init(&file_mass, &file_pos, &file_mom, &file_energy, ode_params);
+    FILE *file_mass, *file_pos, *file_mom, *file_energy, *file_merger;
+    output_init(&file_mass, &file_pos, &file_mom, &file_energy, &file_merger, ode_params);
     output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
 
     // Iterate until the final time
@@ -479,6 +480,9 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
                 break;
         }
 
+        // Test for merger and merge bodies
+        test_and_merge_bodies(ode_params, w, t_current, file_merger);
+
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
             output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
@@ -498,6 +502,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     fclose(file_pos);
     fclose(file_mom);
     fclose(file_energy);
+    fclose(file_merger);
 }
 
 
@@ -663,7 +668,7 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
         max_iter = get_parameter_int("max_iter"); 
     }
 
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim    = ode_params->num_dim;
     int array_half = num_bodies * num_dim;
     int w_size     = 2 * array_half;
@@ -678,8 +683,8 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_energy;
-    output_init(&file_mass, &file_pos, &file_mom, &file_energy, ode_params);
+    FILE *file_mass, *file_pos, *file_mom, *file_energy, *file_merger;
+    output_init(&file_mass, &file_pos, &file_mom, &file_energy, &file_merger, ode_params);
     output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
 
     // Cache gradient to reuse between steps:
@@ -712,6 +717,10 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
         impulse_apply_kick(w, num_bodies, num_dim, 0.5 * h, dUdx);
         grad_valid = 1;
 
+        // Test for merger and merge bodies
+        if (test_and_merge_bodies(ode_params, w, t_current, file_merger))
+            grad_valid = 0;
+
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
             output_write_timestep(file_pos, file_mom, file_energy, ode_params, w, t_current);
@@ -730,6 +739,7 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     fclose(file_pos);
     fclose(file_mom);
     fclose(file_energy);
+    fclose(file_merger);
     free_vector(dUdx);
     ode_ws_free(&ws);
 }

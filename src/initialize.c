@@ -242,11 +242,11 @@ struct ode_params initialize_ode_params()
 
     // General parameters
     params.num_dim = get_parameter_int("num_dim");
-    params.num_bodies = get_parameter_int("num_bodies");
+    params.num_bodies_initial = get_parameter_int("num_bodies");
 
     // Masses
-    allocate_vector(&params.masses, params.num_bodies);
-    for (int i = 0; i < params.num_bodies; i++)
+    allocate_vector(&params.masses, params.num_bodies_initial);
+    for (int i = 0; i < params.num_bodies_initial; i++)
         params.masses[i] = get_parameter_double_i("mass", i+1);
 
     // PN terms
@@ -261,7 +261,7 @@ struct ode_params initialize_ode_params()
     params.pn_terms[3] = get_parameter_int("2.5pn_terms");
 
     // UTT4 Integration
-    if (params.pn_terms[2] == 1 && params.num_bodies >= 4) {
+    if (params.pn_terms[2] == 1 && params.num_bodies_initial >= 4) {
         params.use_impulse_method = get_parameter_int("impulse_method");
         params.include_utt4 = get_parameter_int("include_utt4");
     } else {
@@ -280,12 +280,25 @@ struct ode_params initialize_ode_params()
         params.utt4_epsabs = -1;
     }
 
+    // Merger history
+    params.num_active = params.num_bodies_initial;
+    params.next_body_id = params.num_bodies_initial;
+    params.active = malloc(params.num_bodies_initial * sizeof(int));
+    params.body_id = malloc(params.num_bodies_initial * sizeof(long long));
+    params.generation = malloc(params.num_bodies_initial * sizeof(int));
+
+    for (int i = 0; i < params.num_bodies_initial; i++) {
+        params.active[i] = 1;
+        params.body_id[i] = i;
+        params.generation[i] = 0;
+    }
+
     // Check validity
     if (params.num_dim != 2 && params.num_dim != 3) 
         errorexit("Please specify a valid num_dim (must be 2 or 3)");
-    if (params.num_bodies <= 0) 
+    if (params.num_bodies_initial <= 0) 
         errorexit("Please specify a valid num_bodies (must be num_bodies > 0)");
-    for (int i = 0; i < params.num_bodies; i++) {
+    for (int i = 0; i < params.num_bodies_initial; i++) {
         if (params.masses[i] < 0) 
             errorexit("Please specify valid masses (must be mass >= 0)");
     }
@@ -643,7 +656,7 @@ struct binary_params initialize_binary_params(int i)
 double* initialize_state_vector(struct ode_params* ode_params)
 {
     int num_dim = ode_params->num_dim;
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
 
     // Allocate state vector
     double* w0;

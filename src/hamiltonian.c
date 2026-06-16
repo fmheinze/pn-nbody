@@ -281,7 +281,7 @@ static double ln_integral_sum(double* w, struct ode_params* ode_params)
 {
     IntegralParams integral_params;
     cubareal integral[6], error[6], prob[6];
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     double integral_sum_value = 0.0;
     int neval, fail, nregions;
@@ -291,9 +291,13 @@ static double ln_integral_sum(double* w, struct ode_params* ode_params)
 
     // Loop over unordered quadruples a<b<c<d
     for (int a = 0; a < num_bodies; ++a) {
+        if (!ode_params->active[a]) continue;
         for (int b = a+1; b < num_bodies; ++b) {
+            if (!ode_params->active[b]) continue;
             for (int c = b+1; c < num_bodies; ++c) {
+                if (!ode_params->active[c]) continue;
                 for (int d = c+1; d < num_bodies; ++d) {
+                    if (!ode_params->active[d]) continue;
 
                     // Prepare local positions for this quadruple
                     for (int j = 0; j < 3; ++j) {
@@ -329,21 +333,25 @@ static double ln_integral_sum(double* w, struct ode_params* ode_params)
 static complex double UTT4_without_ln_integral_complex(complex double* w, 
     struct ode_params* ode_params) 
 {
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     complex double temp0, temp1, temp2, temp3;
 
     // Masses
     double m[num_bodies];
-    for (int a = 0; a < num_bodies; a++)
+    for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         m[a] = ode_params->masses[a];
+    }
     
     // Relative positions and distances
     complex double x_rel[num_bodies][num_bodies][num_dim]; 
     complex double n[num_bodies][num_bodies][num_dim];
     complex double r[num_bodies][num_bodies];
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int b = a; b < num_bodies; b++) {
+            if (!ode_params->active[b]) continue;
             for (int i = 0; i < num_dim; i++){
                 x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
                 x_rel[b][a][i] = -x_rel[a][b][i];
@@ -365,9 +373,13 @@ static complex double UTT4_without_ln_integral_complex(complex double* w,
     // Compute UTT4 without the ln-integral
     complex double UTT4 = 0.0;
     for (int a = 0; a < num_bodies; ++a) {
+        if (!ode_params->active[a]) continue;
         for (int b = 0; b < num_bodies; ++b) {
+            if (!ode_params->active[b]) continue;
             for (int c = 0; c < num_bodies; ++c) {
+                if (!ode_params->active[c]) continue;
                 for (int d = 0; d < num_bodies; ++d) {
+                    if (!ode_params->active[d]) continue;
                     if (b != a && c != a && c != b && d != a && d != b && d != c) {
                         temp0 = r[a][b] * r[a][b];
                         temp1 = r[b][c] * r[b][c];
@@ -394,7 +406,7 @@ static complex double UTT4_without_ln_integral_complex(complex double* w,
 void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx) 
 {
     IntegralParams integral_params;
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     int array_half = num_dim * num_bodies;
     complex double w_c[array_half];
@@ -431,9 +443,13 @@ void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx)
 
     // Loop over unordered quadruples a<b<c<d
     for (int a = 0; a < num_bodies; ++a) {
+        if (!ode_params->active[a]) continue;
         for (int b = a+1; b < num_bodies; ++b) {
+            if (!ode_params->active[b]) continue;
             for (int c = b+1; c < num_bodies; ++c) {
+                if (!ode_params->active[c]) continue;
                 for (int d = c+1; d < num_bodies; ++d) {
+                    if (!ode_params->active[d]) continue;
 
                     double mass_fac = ode_params->masses[a] * ode_params->masses[b] 
                         * ode_params->masses[c] * ode_params->masses[d];
@@ -496,13 +512,14 @@ void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx)
 // Computes the 0PN (Newtonian) part of the N-body Hamiltonian
 double H0PN(double* w, struct ode_params* ode_params)
 {
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     int array_half = num_dim * num_bodies;
     double rel_dist2, p2;
     double H = 0;
 
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         // Kinetic energy
         p2 = 0.0;
         for (int i = 0; i < num_dim; i++)
@@ -511,6 +528,7 @@ double H0PN(double* w, struct ode_params* ode_params)
 
         // Potential energy
         for (int b = a+1; b < num_bodies; b++) {
+            if (!ode_params->active[b]) continue;
             rel_dist2 = 0.0;
             for (int i = 0; i < num_dim; i++)
                 rel_dist2 += (w[num_dim * a + i] - w[num_dim * b + i]) * 
@@ -525,7 +543,7 @@ double H0PN(double* w, struct ode_params* ode_params)
 // Computes the 1PN part of the N-body Hamiltonian
 double H1PN(double* w, struct ode_params* ode_params) 
 {
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     int array_half = num_dim * num_bodies;
     int a, b, c, i;
@@ -537,6 +555,7 @@ double H1PN(double* w, struct ode_params* ode_params)
 
     // Compute kinetic and potential energy
     for (a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         m_a = ode_params->masses[a];
         pa_dot_pa = 0.0;
 
@@ -548,7 +567,7 @@ double H1PN(double* w, struct ode_params* ode_params)
         H += -0.125 * m_a * pa_dot_pa * pa_dot_pa / (m_a * m_a * m_a * m_a);
 
         for (b = 0; b < num_bodies; b++) {
-            if (b == a) continue;
+            if (b == a || !ode_params->active[b]) continue;
 
             m_b = ode_params->masses[b];
             r_ab = 0.0;
@@ -579,7 +598,7 @@ double H1PN(double* w, struct ode_params* ode_params)
                 - 7 * pa_dot_pb / (m_a * m_b) - (na_dot_pa * na_dot_pb) / (m_a * m_b));
 
             for (c = 0; c < num_bodies; c++) {
-                if (c == a) continue;
+                if (c == a || !ode_params->active[c]) continue;
 
                 m_c = ode_params->masses[c];
                 r_ac = 0.0;
@@ -601,7 +620,7 @@ double H1PN(double* w, struct ode_params* ode_params)
 // Computes the 2PN part of the N-body Hamiltonian
 double H2PN(double* w, struct ode_params* ode_params, int utt4_flag) 
 {
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     int array_half = num_bodies * num_dim; 
     double temp, temp0, temp1, temp2, temp3, temp4, temp5, temp6, 
@@ -610,14 +629,18 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
 
     // Masses
     double m[num_bodies];
-    for (int a = 0; a < num_bodies; a++)
+    for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         m[a] = ode_params->masses[a];
+    }
     
     // Momenta
     double p[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++)
+    for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int i = 0; i < num_dim; i++)
             p[a][i] = w[array_half + a * num_dim + i];
+    }
     
     // Relative positions and distances
     double x_rel[num_bodies][num_bodies][num_dim]; 
@@ -626,7 +649,9 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
     double n_ab_ac[num_dim];
     double n_ab_cb[num_dim];
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int b = a; b < num_bodies; b++) {
+            if (!ode_params->active[b]) continue;
             for (int i = 0; i < num_dim; i++){
                 x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
                 x_rel[b][a][i] = -x_rel[a][b][i];
@@ -648,6 +673,7 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
     // Compute H
     double H = 0.0;
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         ma_inv = 1/m[a];
         temp = dot_product(p[a], p[a], num_dim);
         temp2 = temp * ma_inv * ma_inv;
@@ -655,6 +681,7 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
         H += 0.0625 * m[a] * temp2 * temp2 * temp2;
 
         for (int b = 0; b < num_bodies; b++) {
+            if (!ode_params->active[b]) continue;
             mb_inv = 1/m[b];
             temp0 = r[a][b] * r[a][b];
             temp1 = m[a] * m[b];
@@ -677,6 +704,7 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
                 H += -0.25 * temp1 * temp1 / (temp0 * r[a][b]);
             }
             for (int c = 0; c < num_bodies; c++) {
+                if (!ode_params->active[c]) continue;
                 mc_inv = 1/m[c];
                 temp8 = dot_product(n[a][c], p[c], num_dim);
                 temp9 = dot_product(n[a][b], n[a][c], num_dim);
@@ -722,6 +750,7 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
                 }
                 // G^3 quadruple sum terms
                 for (int d = 0; d < num_bodies; d++) {
+                    if (!ode_params->active[d]) continue;
                     temp12 = r[c][d]*r[c][d];
                     temp13 = r[a][d]*r[a][d];
 
@@ -759,7 +788,7 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
 // (used for obtaining the derivatives via complex-step differentiation for the equations of motion)
 complex double H2PN_base_complex(complex double* w, struct ode_params* ode_params, int p_flag) 
 {
-    int num_bodies = ode_params->num_bodies;
+    int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
     int array_half = num_bodies * num_dim; 
     complex double temp, temp0, temp1, temp2, temp3, temp4, temp5, temp6,
@@ -768,14 +797,18 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
 
     // Masses
     double m[num_bodies];
-    for (int a = 0; a < num_bodies; a++)
+    for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         m[a] = ode_params->masses[a];
+    }
     
     // Momenta
     complex double p[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++)
+    for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int i = 0; i < num_dim; i++)
             p[a][i] = w[array_half + a * num_dim + i];
+    }
     
     // Relative positions and distances
     complex double x_rel[num_bodies][num_bodies][num_dim]; 
@@ -784,7 +817,9 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
     complex double n_ab_ac[num_dim];
     complex double n_ab_cb[num_dim];
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         for (int b = a; b < num_bodies; b++) {
+            if (!ode_params->active[b]) continue;
             for (int i = 0; i < num_dim; i++){
                 x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
                 x_rel[b][a][i] = -x_rel[a][b][i];
@@ -806,6 +841,7 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
     // Compute H
     complex double H = 0.0;
     for (int a = 0; a < num_bodies; a++) {
+        if (!ode_params->active[a]) continue;
         ma_inv = 1/m[a];
         temp = dot_product_c(p[a], p[a], num_dim);
         temp2 = temp * ma_inv * ma_inv;
@@ -813,6 +849,7 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
         H += 0.0625 * m[a] * temp2 * temp2 * temp2;
 
         for (int b = 0; b < num_bodies; b++) {
+            if (!ode_params->active[b]) continue;
             mb_inv = 1/m[b];
             temp0 = r[a][b] * r[a][b];
             temp1 = m[a] * m[b];
@@ -836,6 +873,7 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
                     H += -0.25 * temp1 * temp1 / (temp0 * r[a][b]);
             }
             for (int c = 0; c < num_bodies; c++) {
+                if (!ode_params->active[c]) continue;
                 mc_inv = 1/m[c];
                 temp8 = dot_product_c(n[a][c], p[c], num_dim);
                 temp9 = dot_product_c(n[a][b], n[a][c], num_dim);
@@ -883,6 +921,7 @@ complex double H2PN_base_complex(complex double* w, struct ode_params* ode_param
                 // G^3 quadruple sum terms
                 if (!p_flag) {
                     for (int d = 0; d < num_bodies; d++) {
+                        if (!ode_params->active[d]) continue;
                         if (b != a && c != b && d != c)
                             H += - 0.375 * temp1 * m[c] * m[d] / (r[a][b] * r[b][c] * r[c][d]);
                         if (b != a && c != a && d != a)
