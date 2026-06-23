@@ -83,7 +83,7 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
 
     // Write merger column names into the corresponding file
     fprintf(*file_merger,
-        "# t "
+        "t "
         "slot_i slot_j slot_remnant "
         "id_i id_j id_remnant "
         "gen_i gen_j gen_remnant "
@@ -107,6 +107,19 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
 
     for (int n = 0; n < ode_params->num_dim; n++)
         fprintf(*file_merger, "p_rem_%d ", n);
+    
+    for (int n = 0; n < 3; n++)
+        fprintf(*file_merger, "s_i_%d ", n);
+
+    for (int n = 0; n < 3; n++)
+        fprintf(*file_merger, "s_j_%d ", n);
+
+    for (int n = 0; n < 3; n++)
+        fprintf(*file_merger, "s_rem_%d ", n);
+    
+    for (int n = 0; n < ode_params->num_dim; n++)
+        fprintf(*file_merger, "v_kick_%d ", n);
+
 
     fprintf(*file_merger, "r_ij\n");
 
@@ -188,25 +201,6 @@ void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE
 }
 
 
-void write_merger_header(FILE *file)
-{
-    fprintf(file,
-        "t "
-        "slot_i slot_j slot_remnant "
-        "id_i id_j id_remnant "
-        "gen_i gen_j gen_remnant "
-        "m_i m_j m_remnant "
-        "x_i y_i z_i "
-        "x_j y_j z_j "
-        "x_rem y_rem z_rem "
-        "px_i py_i pz_i "
-        "px_j py_j pz_j "
-        "px_rem py_rem pz_rem "
-        "r_ij\n"
-    );
-}
-
-
 void output_write_merger_event(
     FILE *file_merger,
     double t,
@@ -229,6 +223,10 @@ void output_write_merger_event(
     const double *p_i_old,
     const double *p_j_old,
     const double *p_rem,
+    const double *s_i_old,
+    const double *s_j_old,
+    const double *s_rem,
+    const double *v_kick_kms,
     double r_ij
 ) {
     const int num_dim = params->num_dim;
@@ -263,6 +261,18 @@ void output_write_merger_event(
 
     for (int n = 0; n < num_dim; n++)
         fprintf(file_merger, "%.16e ", p_rem[n]);
+
+    for (int n = 0; n < 3; n++)
+        fprintf(file_merger, "%.16e ", s_i_old[n]);
+
+    for (int n = 0; n < 3; n++)
+        fprintf(file_merger, "%.16e ", s_j_old[n]);
+
+    for (int n = 0; n < 3; n++)
+        fprintf(file_merger, "%.16e ", s_rem[n]);
+    
+    for (int n = 0; n < num_dim; n++)
+        fprintf(file_merger, "%.16e ", v_kick_kms[n]);
 
     fprintf(file_merger, "%.16e\n", r_ij);
 }

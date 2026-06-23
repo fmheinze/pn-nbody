@@ -49,6 +49,11 @@ binary2_pt0           = 0.087364                       # Initial tangential mome
 binary2_pr0           = 0.00060110	               # Initial radial momentum of the binary 2
 binary2_phi0          = 1.8                            # Initial phase of binary 2
 
+spin1 = 0.0 0.0 0.8
+spin2 = 0.0 0.0 0.8
+spin3 = 0.0 0.8 0.0
+spin4 = 0.8 0.0 0.0
+
 
 
 # -------------------------------------------------------------------------------------------------

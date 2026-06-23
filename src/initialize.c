@@ -49,6 +49,11 @@ void initialize_parameters()
     add_parameter("dt", "0.1", "time step / initial time step for adaptive ODE integrators [> 0]");
     add_parameter("ode_integrator", "rk4", "which ODE integrator to use [rk4, cash-karp, ...]");
 
+    // Merger parameters
+    add_parameter("merge_activate", "1", "whether to merge bodies or not [0, 1]");
+    add_parameter("merge_factor", "2.0", "Threshold for merging [> 0]");
+    add_parameter("remnant_prescription", "lz", "[simple, lz, barausse]");
+
     // Cash-Karp method
     if (strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
         add_parameter("rtol", "-1", "target relative error tolerance [> 0]");
@@ -294,6 +299,12 @@ struct ode_params initialize_ode_params()
         params.generation[i] = 0;
     }
 
+    // Merger remnant
+    params.merge_activate = get_parameter_int("merge_activate");
+    params.merge_factor = get_parameter_double("merge_factor");
+    params.remnant_prescription = malloc(256 * sizeof(char));
+    params.remnant_prescription = get_parameter_string("remnant_prescription");
+
     // Check validity
     if (params.num_dim != 2 && params.num_dim != 3) 
         errorexit("Please specify a valid num_dim (must be 2 or 3)");
@@ -323,6 +334,16 @@ struct ode_params initialize_ode_params()
         errorexit("Please specify a valid utt4_epsrel (must be utt4_epsrel > 0)");
     if (params.include_utt4 == 1 && params.utt4_epsabs <= 0) 
         errorexit("Please specify a valid utt4_epsabs (must be utt4_epsabs > 0)");
+    
+    if (params.merge_activate != 1 && params.merge_activate != 0) 
+        errorexit("Please set merge_activate to 0 (off) or 1 (on)");
+    if (params.merge_factor <= 0) 
+        errorexit("Please specify a valid merge_factor (must be > 0)");
+    if (strcmp(params.remnant_prescription, "simple") != 0 
+        && strcmp(params.remnant_prescription, "lz") != 0
+        && strcmp(params.remnant_prescription, "barausse") != 0) {
+        errorexit("Please specify a valid remnant_prescription (simple, lz, barausse)");
+        }
 
     #if !HAVE_CUBA
     if (params.include_utt4) {

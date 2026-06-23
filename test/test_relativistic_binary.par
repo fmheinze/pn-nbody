@@ -15,7 +15,7 @@ num_bodies           = 2                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 3000.0                          # Final time
+t_end                = 2500.0                          # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -29,12 +29,14 @@ ode_integrator       = rk4                             # ODE integration method
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
 ic_preset            = binary                          # Initial condition preset
-mass1                = 0.5                             # Mass of body 1
-mass2                = 0.5                             # Mass of body 2
-binary_a             = 15.0                            # Semi-major axis of binary
-binary_b             = 15.0                            # Semi-minor axis of binary
+mass1                = 0.9                             # Mass of body 1
+mass2                = 0.1                             # Mass of body 2
+binary_a             = 10.0                            # Semi-major axis of binary
+binary_b             = 10.0                            # Semi-minor axis of binary
 binary_phi0          = 0.4                             # Initial phase of binary
 
+spin1                = 0.3 0.6 0.0
+spin2                = -0.1 0.1 0.7
 
 # -------------------------------------------------------------------------------------------------
 # Output parameters

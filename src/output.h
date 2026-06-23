@@ -31,6 +31,10 @@ void output_write_merger_event(
     const double *p_i_old,
     const double *p_j_old,
     const double *p_rem,
+    const double *s_i_old,
+    const double *s_j_old,
+    const double *s_rem,
+    const double *v_kick_kms,
     double r_ij
 );
 

@@ -18,6 +18,11 @@ struct ode_params {
     double utt4_epsrel;
     double utt4_epsabs;
 
+    // Merger parameters
+    int merge_activate;
+    char* remnant_prescription;
+    double merge_factor;
+
     // Merger history
     int num_active;
     int *active;

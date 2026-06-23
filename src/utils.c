@@ -171,12 +171,33 @@ void normalize(double v[3], double result[3])
     }
 }
 
+int safe_normalize(double v[3], double result[3])
+{
+    double mag = norm(v, 3);
+
+    if (!isfinite(mag) || mag < 1e-12)
+        return 0;
+
+    for (int k = 0; k < 3; k++)
+        result[k] = v[k] / mag;
+
+    return 1;
+}
+
 
 void cross_product(double a[3], double b[3], double result[3])
 {
     result[0] = a[1] * b[2] - a[2] * b[1];
     result[1] = a[2] * b[0] - a[0] * b[2];
     result[2] = a[0] * b[1] - a[1] * b[0];
+}
+
+
+void vec_project_perp(double v[3], double n[3], double v_perp[3], int num_dim)
+{
+    double v_dot_n = dot_product(v, n, num_dim);
+    for (int k = 0; k < num_dim; k++)
+        v_perp[k] = v[k] - v_dot_n * n[k];
 }
 
 
@@ -260,6 +281,11 @@ int delta(int i, int j)
 }
 
 
+double sign_double(double x) {
+    return (x > 0) ? 1 : ((x < 0) ? -1 : 0);
+}
+
+
 double clamp0(double x)
 { 
     return (x < 0.0) ? 0.0 : x; 
@@ -270,6 +296,14 @@ double clamp_unit(double x)
 {
     if (x > 1.0) return 1.0;
     if (x < -1.0) return -1.0;
+    return x;
+}
+
+
+double clamp_double(double x, double xmin, double xmax)
+{
+    if (x < xmin) return xmin;
+    if (x > xmax) return xmax;
     return x;
 }
 

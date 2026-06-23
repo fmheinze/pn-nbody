@@ -481,7 +481,8 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
         }
 
         // Test for merger and merge bodies
-        test_and_merge_bodies(ode_params, w, t_current, file_merger);
+        if (ode_params->merge_activate)
+            test_and_merge_bodies(ode_params, w, t_current, file_merger);
 
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
@@ -718,8 +719,9 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
         grad_valid = 1;
 
         // Test for merger and merge bodies
-        if (test_and_merge_bodies(ode_params, w, t_current, file_merger))
-            grad_valid = 0;
+        if (ode_params->merge_activate)
+            if (test_and_merge_bodies(ode_params, w, t_current, file_merger))
+                grad_valid = 0;
 
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
