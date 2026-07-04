@@ -18,6 +18,12 @@
 #include "merger.h"
 
 
+static inline int time_reached(double t, double target, double direction)
+{
+    return (direction > 0.0) ? (t >= target) : (t <= target);
+}
+
+
 // ODE workspace functions to avoid allocating and freeing memory at each ODE integration step
 
 static void ode_ws_init(struct ode_ws* ws, int y_size) {
@@ -48,18 +54,18 @@ static void check_integration_parameter_validity()
 {
     double t_end = get_parameter_double("t_end");
     double dt = get_parameter_double("dt");
-    if(t_end < 0.0) errorexit("Please specify a valid t_end (must be t_end >= 0)");
-    if(dt <= 0.0) errorexit("Please specify a valid dt (must be dt > 0)");
+    if (t_end == 0.0) errorexit("Please specify a nonzero t_end");
+    if (dt <= 0.0) errorexit("Please specify a valid dt (must be dt > 0)");
 
     // Cash-Karp method
-    if(strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
+    if (strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
         double rtol = get_parameter_double("rtol");
         if(rtol <= 0.0) 
             errorexit("Please specify a valid rtol of the Cash-Karp method (must be rtol > 0)");
     }
 
     // Implicit-midpoint method
-    if(strcmp(get_parameter_string("ode_integrator"), "implicit-midpoint") == 0) {
+    if (strcmp(get_parameter_string("ode_integrator"), "implicit-midpoint") == 0) {
         double tol = get_parameter_double("tol");
         int max_iter = get_parameter_int("max_iter");
         if(tol <= 0.0)
@@ -403,6 +409,13 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     double dt = get_parameter_double("dt");
     double dt_save = get_parameter_double("dt_save");
     if (!is_set_double(dt_save)) dt_save = dt;
+
+    const double direction = (t_end >= 0.0) ? 1.0 : -1.0;
+    double dt_abs = fabs(dt);
+    double dt_signed = direction * dt_abs;
+    double dt_save_abs = fabs(dt_save);
+    if (!is_set_double(dt_save)) dt_save_abs = dt_abs;
+
     if (m == M_CASH_KARP) {
         rtol = get_parameter_double("rtol");
         dt_max = get_parameter_double("dt_max");
@@ -416,10 +429,11 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     int w_size = 2 * ode_params->num_dim * ode_params->num_bodies_initial;
     int failure = 0;
 
+    int should_save;
     double t_current = 0.0;
     long long save_idx = 1;
-    double next_save = dt_save;
-    const double eps_time = 1e-12 * fmax(1.0, fabs(dt_save));
+    double next_save = direction * save_idx * dt_save_abs;
+    const double eps_time = 1e-12 * fmax(1.0, dt_save_abs);
 
     // ODE workspace setup
     struct ode_ws ws = {0};
@@ -431,10 +445,11 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
 
     // Iterate until the final time
-    while (t_current < t_end) {
+    while (!time_reached(t_current, t_end, direction)) {
     
-        // Set step size (so we don't step past t_end)
-        if (t_current + dt > t_end) dt = t_end - t_current;
+        double remaining = t_end - t_current;
+        if (fabs(dt_signed) > fabs(remaining))
+            dt_signed = remaining;
 
         // Use specified ODE integration method
         switch (m) {
@@ -456,27 +471,25 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
                 break;
 
             case M_RK4:
-                rk4_update(w, w_size, t_current, dt, rhs, ode_params, &ws);
-                t_current += dt;
+                rk4_update(w, w_size, t_current, dt_signed, rhs, ode_params, &ws);
+                t_current += dt_signed;
                 break;
 
             case M_IMPLICIT_MIDPOINT:
-                failure = implicit_midpoint_update(w, w_size, t_current, dt, rhs,
+                failure = implicit_midpoint_update(w, w_size, t_current, dt_signed, rhs,
                     ode_params, tol, max_iter, &ws);
-            
-                // Use RK4 if the fixed-point iteration did not converge
                 if (failure) {
                     progress_bar_break_line();
-                    fprintf(stderr, "Warning: The implicit midpoint method did not converge at "
-                        "t = %.7g, using RK4 for this timestep instead.\n", t_current);
-                    rk4_update(w, w_size, t_current, dt, rhs, ode_params, &ws);
+                    fprintf(stderr, "Warning: implicit midpoint failed at t = %.7g, using RK4.\n",
+                        t_current);
+                    rk4_update(w, w_size, t_current, dt_signed, rhs, ode_params, &ws);
                 }
-                t_current += dt;
+                t_current += dt_signed;
                 break;
 
             default:
-                rk4_update(w, w_size, t_current, dt, rhs, ode_params, &ws);
-                t_current += dt;
+                rk4_update(w, w_size, t_current, dt_signed, rhs, ode_params, &ws);
+                t_current += dt_signed;
                 break;
         }
 
@@ -485,14 +498,21 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
             test_and_merge_bodies(ode_params, w, t_current, file_merger);
 
         // Write output if the current time is an output time
-        if (t_current + eps_time >= next_save) {
-            output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
-            print_progress_bar((int)(100.0 * t_current / t_end));
+        if (direction > 0.0)
+            should_save = (t_current + eps_time >= next_save);
+        else
+            should_save = (t_current - eps_time <= next_save);
 
-            // Advance output schedule robustly
-            while (t_current + eps_time >= next_save) {
+        if (should_save) {
+            output_write_timestep(file_pos, file_mom, file_spin, file_energy,
+                ode_params, w, t_current);
+
+            print_progress_bar((int)(100.0 * fabs(t_current) / fabs(t_end)));
+
+            while ((direction > 0.0 && t_current + eps_time >= next_save) ||
+                (direction < 0.0 && t_current - eps_time <= next_save)) {
                 save_idx++;
-                next_save = save_idx * dt_save;
+                next_save = direction * save_idx * dt_save_abs;
             }
         }
     }
