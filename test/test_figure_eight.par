@@ -32,7 +32,7 @@ ic_preset            = figure_eight                    # Initial condition prese
 mass1                = 1.0                             # Mass of body 1
 mass2                = 1.0                             # Mass of body 2
 mass3                = 1.0                             # Mass of body 3
-figure_eight_width   = 150.0                           # Figure-eight width
+figure_eight_width   = 100.0                           # Figure-eight width
 
 
 # -------------------------------------------------------------------------------------------------
