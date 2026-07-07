@@ -1,0 +1,48 @@
+num_dim = 3
+num_bodies = 8
+
+0pn_terms = 1
+1pn_terms = 1
+2pn_terms = 1
+2.5pn_terms = 1
+
+# For N >= 4, full 2PN UTT4 can be expensive.
+# For a fast pilot, you may want:
+include_utt4 = 0
+
+ic_preset = virialized_cluster
+
+cluster_compactness = 50.0
+cluster_virial_ratio = 0.5
+cluster_rmax_factor = 5.0
+cluster_min_separation_factor = 4.0
+cluster_seed = 1
+
+mass1 = 0.125
+mass2 = 0.125
+mass3 = 0.125
+mass4 = 0.125
+mass5 = 0.125
+mass6 = 0.125
+mass7 = 0.125
+mass8 = 0.125
+
+spin1 = 0.0 0.0 0.0
+spin2 = 0.0 0.0 0.0
+spin3 = 0.0 0.0 0.0
+spin4 = 0.0 0.0 0.0
+spin5 = 0.0 0.0 0.0
+spin6 = 0.0 0.0 0.0
+spin7 = 0.0 0.0 0.0
+spin8 = 0.0 0.0 0.0
+
+merge_activate = 1
+merge_factor = 2.0
+remnant_prescription = lz
+
+ode_integrator = cash-karp
+rtol = 1e-9
+dt = 1e-2
+dt_max = 1.0
+t_end = 100000.0
+dt_save = 1.0

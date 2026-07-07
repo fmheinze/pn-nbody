@@ -219,6 +219,36 @@ void initialize_parameters()
         add_parameter("figure_eight_width", "1000.0", "width of the figure-eight orbit [> 0]");
     }
 
+    // Virialized compact cluster
+    if (strcmp(get_parameter_string("ic_preset"), "virialized_cluster") == 0) {
+        add_parameter("cluster_compactness", "100.0",
+            "cluster virial compactness R_v/M_tot [> 0]");
+        add_parameter("cluster_virial_ratio", "0.5",
+            "virial ratio K/|U|; equilibrium is 0.5 [> 0]");
+        add_parameter("cluster_rmax_factor", "10.0",
+            "Plummer truncation radius in units of R_v [> 0]");
+        add_parameter("cluster_min_separation_factor", "4.0",
+            "minimum initial pair separation in units of m_i + m_j [>= 0]");
+        add_parameter("cluster_seed", "1",
+            "deterministic random seed for cluster generation [integer > 0]");
+    }
+
+    // Relativistic monoenergetic cluster
+    if (strcmp(get_parameter_string("ic_preset"), "relativistic_monoenergetic_cluster") == 0) {
+        add_parameter("cluster_compactness", "100.0",
+            "target smooth areal compactness R/M [> 0]");
+        add_parameter("cluster_central_z", "-1",
+            "central z = E0 exp(-nu_c)/m; if < 0, solve from cluster_compactness");
+        add_parameter("cluster_ngrid", "20000",
+            "radial grid size for smooth equilibrium [>= 2000]");
+        add_parameter("cluster_seed", "1",
+            "deterministic random seed [integer > 0]");
+        add_parameter("cluster_min_separation_factor", "0.0",
+            "optional finite-N rejection: min isotropic separation / (m_i+m_j) [>= 0]");
+        add_parameter("cluster_remove_com", "1",
+            "remove finite-N COM position and total momentum [0, 1]");
+    }
+
     // --------------------------------------------------------------------------------------------
     // Parameters associated with individual bodies
     // --------------------------------------------------------------------------------------------
@@ -707,6 +737,12 @@ double* initialize_state_vector(struct ode_params* ode_params)
 
         else if (strcmp(preset, "figure_eight") == 0)
             initialize_figure_eight(ode_params, w0);
+        
+        else if (strcmp(preset, "virialized_cluster") == 0)
+            initialize_virialized_cluster(ode_params, w0);
+        
+        else if (strcmp(preset, "relativistic_monoenergetic_cluster") == 0)
+            initialize_relativistic_monoenergetic_cluster(ode_params, w0);
 
         else errorexit("Unknown ic_preset");
 
@@ -1004,4 +1040,106 @@ void initialize_figure_eight(struct ode_params* ode_params, double* w0)
             "only accurate for 100 < width < 100000!\n", width);
 
     ic_figure_eight_orbit(ode_params, width, w0);
+}
+
+
+/**
+ * @brief Initializes the state vector for a compact virialized BH cluster.
+ *
+ * This preset is intended for PN pilot studies of compact few-body/subcluster dynamics.
+ * It samples a finite-N Plummer cluster and rescales velocities to the requested virial ratio.
+ *
+ * @param[in]   ode_params      Parameter struct containing general information about the system
+ * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
+ */
+void initialize_virialized_cluster(struct ode_params* ode_params, double* w0)
+{
+    printf("Setting up initial parameters for a compact virialized cluster...\n");
+    print_divider();
+
+    double compactness = get_parameter_double("cluster_compactness");
+    double virial_ratio = get_parameter_double("cluster_virial_ratio");
+    double rmax_factor = get_parameter_double("cluster_rmax_factor");
+    double min_sep_factor = get_parameter_double("cluster_min_separation_factor");
+    int seed_int = get_parameter_int("cluster_seed");
+
+    if (ode_params->num_dim != 3)
+        errorexit("virialized_cluster requires num_dim = 3");
+
+    if (ode_params->num_bodies_initial < 3)
+        errorexit("virialized_cluster requires num_bodies >= 3");
+
+    if (compactness <= 0.0)
+        errorexit("Please specify cluster_compactness > 0");
+
+    if (virial_ratio <= 0.0)
+        errorexit("Please specify cluster_virial_ratio > 0");
+
+    if (rmax_factor <= 0.0)
+        errorexit("Please specify cluster_rmax_factor > 0");
+
+    if (min_sep_factor < 0.0)
+        errorexit("Please specify cluster_min_separation_factor >= 0");
+
+    if (seed_int <= 0)
+        errorexit("Please specify cluster_seed > 0");
+
+    if (compactness < 20.0) {
+        printf("Warning: cluster_compactness = %g is very compact for a PN pilot run. "
+               "Close encounters may be dominated by the merger prescription or strong-field "
+               "effects. Consider starting with R_v/M = 50, 100, 200.\n", compactness);
+    }
+
+    ic_virialized_cluster(ode_params, compactness, virial_ratio, rmax_factor,
+        min_sep_factor, (unsigned long long) seed_int, w0);
+}
+
+
+void initialize_relativistic_monoenergetic_cluster(struct ode_params* ode_params, double* w0)
+{
+    printf("Setting up Bamber-style relativistic monoenergetic cluster...\n");
+    print_divider();
+
+    double compactness = get_parameter_double("cluster_compactness");
+    double central_z = get_parameter_double("cluster_central_z");
+    int ngrid = get_parameter_int("cluster_ngrid");
+    int seed_int = get_parameter_int("cluster_seed");
+    double min_sep_factor = get_parameter_double("cluster_min_separation_factor");
+    int remove_com = get_parameter_int("cluster_remove_com");
+
+    if (ode_params->num_dim != 3)
+        errorexit("relativistic_monoenergetic_cluster requires num_dim = 3");
+
+    if (ode_params->num_bodies_initial < 3)
+        errorexit("relativistic_monoenergetic_cluster requires num_bodies >= 3");
+
+    if (compactness <= 0.0)
+        errorexit("cluster_compactness must be > 0");
+
+    if (ngrid < 2000)
+        errorexit("cluster_ngrid should be >= 2000");
+
+    if (seed_int <= 0)
+        errorexit("cluster_seed must be > 0");
+
+    if (min_sep_factor < 0.0)
+        errorexit("cluster_min_separation_factor must be >= 0");
+
+    if (remove_com != 0 && remove_com != 1)
+        errorexit("cluster_remove_com must be 0 or 1");
+
+    const int solve_central_z = (central_z < 0.0);
+
+    if (!solve_central_z && central_z <= 1.0)
+        errorexit("cluster_central_z must be > 1, or < 0 to solve from compactness");
+
+    ic_relativistic_monoenergetic_cluster(ode_params,
+        compactness,
+        central_z,
+        solve_central_z,
+        ngrid,
+        (unsigned long long) seed_int,
+        min_sep_factor,
+        remove_com,
+        w0);
 }

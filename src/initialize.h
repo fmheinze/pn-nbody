@@ -16,6 +16,8 @@ void initialize_binary_single_scattering_circ(struct ode_params* ode_params, dou
 void initialize_binary_binary_scattering(struct ode_params* ode_params, double* w0);
 void initialize_binary_binary_scattering_circ(struct ode_params* ode_params, double* w0);
 void initialize_figure_eight(struct ode_params* ode_params, double* w0);
+void initialize_virialized_cluster(struct ode_params* ode_params, double* w0);
+void initialize_relativistic_monoenergetic_cluster(struct ode_params* ode_params, double* w0);
 
 
 #endif

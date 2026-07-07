@@ -46,4 +46,13 @@ void ic_binary_binary_scattering_circ(double d0, double p0_rel, double b, double
     
 void ic_figure_eight_orbit(struct ode_params* params, double width, double* w0);
 
+void ic_virialized_cluster(struct ode_params* params, double compactness,
+    double virial_ratio, double rmax_factor, double min_sep_factor,
+    unsigned long long seed, double* w0);
+
+void ic_relativistic_monoenergetic_cluster(struct ode_params* params,
+    double target_compactness, double central_z, int solve_central_z,
+    int ngrid, unsigned long long seed, double min_sep_factor,
+    int remove_com, double* w0);
+
 #endif

@@ -1027,3 +1027,1040 @@ void ic_figure_eight_orbit(struct ode_params* params, double width, double* w0)
         w0[17] = 0.0;
     }
 }
+
+
+// ------------------------------------------------------------------------------------------------
+// Virialized compact cluster
+// ------------------------------------------------------------------------------------------------
+
+static double ic_rng_uniform(unsigned long long *state)
+{
+    /*
+     * Deterministic 64-bit LCG.
+     * Returns a double in [0, 1).
+     */
+    *state = 6364136223846793005ULL * (*state) + 1442695040888963407ULL;
+    return (double)(*state >> 11) * (1.0 / 9007199254740992.0);
+}
+
+
+static void ic_random_unit_vector(unsigned long long *rng, double n[3])
+{
+    const double z = 2.0 * ic_rng_uniform(rng) - 1.0;
+    const double phi = 2.0 * M_PI * ic_rng_uniform(rng);
+    const double s = sqrt(fmax(0.0, 1.0 - z*z));
+
+    n[0] = s * cos(phi);
+    n[1] = s * sin(phi);
+    n[2] = z;
+}
+
+
+static double ic_sample_truncated_plummer_radius(double a, double rmax,
+    unsigned long long *rng)
+{
+    /*
+     * Plummer cumulative mass:
+     *
+     *      M(<r)/M = r^3 / (r^2 + a^2)^(3/2)
+     *
+     * Inversion:
+     *
+     *      r = a / sqrt(u^(-2/3) - 1)
+     *
+     * We reject the long tail at r > rmax to keep the cluster compact.
+     */
+    for (int attempt = 0; attempt < 100000; attempt++) {
+        double u = ic_rng_uniform(rng);
+
+        if (u < 1e-14)
+            u = 1e-14;
+        if (u > 1.0 - 1e-14)
+            u = 1.0 - 1e-14;
+
+        const double denom = pow(u, -2.0 / 3.0) - 1.0;
+        if (denom <= 0.0)
+            continue;
+
+        const double r = a / sqrt(denom);
+
+        if (r <= rmax)
+            return r;
+    }
+
+    errorexit("Could not sample truncated Plummer radius");
+}
+
+
+static double ic_sample_plummer_speed_fraction(unsigned long long *rng)
+{
+    /*
+     * Aarseth-style rejection sampling for the Plummer distribution function:
+     *
+     *      g(q) ∝ q^2 (1 - q^2)^(7/2),  0 <= q <= 1,
+     *
+     * where q = v / v_escape.
+     */
+    while (1) {
+        const double q = ic_rng_uniform(rng);
+        const double y = 0.1 * ic_rng_uniform(rng);
+        const double g = q*q * pow(1.0 - q*q, 3.5);
+
+        if (y <= g)
+            return q;
+    }
+}
+
+
+static double ic_cluster_potential_energy(struct ode_params* params, double* x)
+{
+    const int N = params->num_bodies_initial;
+    const int D = params->num_dim;
+
+    double U = 0.0;
+
+    for (int i = 0; i < N; i++) {
+        for (int j = i + 1; j < N; j++) {
+            double rij2 = 0.0;
+
+            for (int k = 0; k < D; k++) {
+                const double dx = x[i * D + k] - x[j * D + k];
+                rij2 += dx * dx;
+            }
+
+            const double rij = sqrt(rij2);
+
+            if (rij <= 0.0)
+                errorexit("Zero pair separation in virialized cluster");
+
+            U -= params->masses[i] * params->masses[j] / rij;
+        }
+    }
+
+    return U;
+}
+
+
+static int ic_cluster_min_sep_ok(struct ode_params* params, double* x, double min_sep_factor)
+{
+    const int N = params->num_bodies_initial;
+    const int D = params->num_dim;
+
+    if (min_sep_factor <= 0.0)
+        return 1;
+
+    for (int i = 0; i < N; i++) {
+        for (int j = i + 1; j < N; j++) {
+            double rij2 = 0.0;
+
+            for (int k = 0; k < D; k++) {
+                const double dx = x[i * D + k] - x[j * D + k];
+                rij2 += dx * dx;
+            }
+
+            const double rij = sqrt(rij2);
+            const double min_sep = min_sep_factor * (params->masses[i] + params->masses[j]);
+
+            if (rij < min_sep)
+                return 0;
+        }
+    }
+
+    return 1;
+}
+
+
+/**
+ * @brief Compute initial positions and momenta for a compact virialized BH cluster.
+ *
+ * This is a Bamber-et-al.-inspired PN pilot preset, not an exact GR equilibrium initial
+ * data solver. It samples a finite-N Plummer cluster, truncates the long tail, recenters
+ * the center of mass, removes net momentum, and rescales velocities to the requested
+ * virial ratio K/|U|.
+ *
+ * Geometrized units G = c = 1 are assumed. The compactness parameter is interpreted as
+ *
+ *      compactness = R_v / M_tot,
+ *
+ * where R_v is the Newtonian virial radius:
+ *
+ *      R_v = - M_tot^2 / (2 U).
+ *
+ * For a Plummer model, U = -3 pi M^2 / (32 a), so
+ *
+ *      a = 3 pi R_v / 16.
+ *
+ * @param[in]   params           ODE/system parameters
+ * @param[in]   compactness      R_v / M_tot
+ * @param[in]   virial_ratio     K / |U|; virial equilibrium is 0.5
+ * @param[in]   rmax_factor      Truncation radius in units of R_v
+ * @param[in]   min_sep_factor   Minimum pair separation in units of m_i + m_j
+ * @param[in]   seed             RNG seed
+ * @param[out]  w0               Initial state vector [positions, momenta, spins]
+ */
+void ic_virialized_cluster(struct ode_params* params, double compactness,
+    double virial_ratio, double rmax_factor, double min_sep_factor,
+    unsigned long long seed, double* w0)
+{
+    const int N = params->num_bodies_initial;
+    const int D = params->num_dim;
+
+    if (D != 3)
+        errorexit("virialized_cluster currently requires num_dim = 3");
+
+    if (N < 3)
+        errorexit("virialized_cluster requires num_bodies >= 3");
+
+    double Mtot = 0.0;
+    for (int i = 0; i < N; i++) {
+        if (params->masses[i] <= 0.0)
+            errorexit("virialized_cluster requires all masses to be > 0");
+
+        Mtot += params->masses[i];
+    }
+
+    if (compactness <= 0.0)
+        errorexit("cluster_compactness must be > 0");
+
+    if (virial_ratio <= 0.0)
+        errorexit("cluster_virial_ratio must be > 0");
+
+    if (rmax_factor <= 0.0)
+        errorexit("cluster_rmax_factor must be > 0");
+
+    if (min_sep_factor < 0.0)
+        errorexit("cluster_min_separation_factor must be >= 0");
+
+    if (seed == 0ULL)
+        seed = 1ULL;
+
+    /*
+     * Interpret compactness as virial radius / total mass.
+     */
+    const double Rv = compactness * Mtot;
+    const double a = (3.0 * M_PI / 16.0) * Rv;
+    const double rmax = rmax_factor * Rv;
+
+    double *x;
+    double *v;
+    allocate_vector(&x, N * D);
+    allocate_vector(&v, N * D);
+
+    unsigned long long rng = seed;
+
+    /*
+     * Sample positions. If the initial finite-N realization contains very close
+     * pairs, resample the entire cluster. This avoids immediate artificial mergers.
+     */
+    int accepted = 0;
+
+    for (int cluster_attempt = 0; cluster_attempt < 10000; cluster_attempt++) {
+        for (int i = 0; i < N; i++) {
+            double n[3];
+            ic_random_unit_vector(&rng, n);
+
+            const double r = ic_sample_truncated_plummer_radius(a, rmax, &rng);
+
+            for (int k = 0; k < D; k++)
+                x[i * D + k] = r * n[k];
+        }
+
+        /*
+         * Shift mass-weighted center of mass to the origin.
+         */
+        double xcom[3] = {0.0, 0.0, 0.0};
+
+        for (int i = 0; i < N; i++) {
+            for (int k = 0; k < D; k++)
+                xcom[k] += params->masses[i] * x[i * D + k];
+        }
+
+        for (int k = 0; k < D; k++)
+            xcom[k] /= Mtot;
+
+        for (int i = 0; i < N; i++) {
+            for (int k = 0; k < D; k++)
+                x[i * D + k] -= xcom[k];
+        }
+
+        if (ic_cluster_min_sep_ok(params, x, min_sep_factor)) {
+            accepted = 1;
+            break;
+        }
+    }
+
+    if (!accepted)
+        errorexit("Could not sample virialized cluster satisfying min-separation criterion");
+
+    /*
+     * Sample velocities from the isotropic Plummer distribution function.
+     */
+    for (int i = 0; i < N; i++) {
+        double r2 = 0.0;
+        for (int k = 0; k < D; k++)
+            r2 += x[i * D + k] * x[i * D + k];
+
+        const double r = sqrt(r2);
+        const double vesc = sqrt(2.0 * Mtot / sqrt(r*r + a*a));
+        const double q = ic_sample_plummer_speed_fraction(&rng);
+        const double speed = q * vesc;
+
+        double n[3];
+        ic_random_unit_vector(&rng, n);
+
+        for (int k = 0; k < D; k++)
+            v[i * D + k] = speed * n[k];
+    }
+
+    /*
+     * Remove center-of-mass velocity.
+     */
+    double pcom[3] = {0.0, 0.0, 0.0};
+
+    for (int i = 0; i < N; i++) {
+        for (int k = 0; k < D; k++)
+            pcom[k] += params->masses[i] * v[i * D + k];
+    }
+
+    for (int k = 0; k < D; k++)
+        pcom[k] /= Mtot;
+
+    for (int i = 0; i < N; i++) {
+        for (int k = 0; k < D; k++)
+            v[i * D + k] -= pcom[k];
+    }
+
+    /*
+     * Rescale velocities to exact requested virial ratio K/|U|.
+     */
+    double K = 0.0;
+    for (int i = 0; i < N; i++) {
+        double v2 = 0.0;
+
+        for (int k = 0; k < D; k++)
+            v2 += v[i * D + k] * v[i * D + k];
+
+        K += 0.5 * params->masses[i] * v2;
+    }
+
+    const double U = ic_cluster_potential_energy(params, x);
+
+    if (K <= 0.0)
+        errorexit("Initial kinetic energy is zero in virialized cluster");
+
+    if (U >= 0.0)
+        errorexit("Initial potential energy is non-negative in virialized cluster");
+
+    const double velocity_scale = sqrt(virial_ratio * fabs(U) / K);
+
+    for (int i = 0; i < N; i++) {
+        for (int k = 0; k < D; k++)
+            v[i * D + k] *= velocity_scale;
+    }
+
+    /*
+     * Fill the state vector: positions first, canonical momenta second.
+     */
+    for (int i = 0; i < N; i++) {
+        for (int k = 0; k < D; k++) {
+            w0[i * D + k] = x[i * D + k];
+            w0[N * D + i * D + k] = params->masses[i] * v[i * D + k];
+        }
+    }
+
+    printf("Virialized cluster diagnostics:\n");
+    printf("Mtot                    = % .16e\n", Mtot);
+    printf("cluster_compactness Rv/M = % .16e\n", compactness);
+    printf("Plummer scale a          = % .16e\n", a);
+    printf("Truncation radius rmax   = % .16e\n", rmax);
+    printf("Initial potential U      = % .16e\n", U);
+    printf("Requested K/|U|          = % .16e\n", virial_ratio);
+    print_divider();
+
+    free_vector(x);
+    free_vector(v);
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// Relativistic monoenergetic cluster, close to Bamber et al. Appendix A
+// ------------------------------------------------------------------------------------------------
+
+struct rel_mono_model {
+    int n;
+    int cap;
+
+    double *x;       // dimensionless areal radius x = r sqrt(4 pi rho_c)
+    double *mu;      // dimensionless mass mu = m sqrt(4 pi rho_c)
+    double *z;       // z = E0 exp(-nu) / m0 = local Lorentz factor
+    double *xiso;    // dimensionless isotropic radius
+    double *cdf;     // proper rest-mass CDF
+
+    double zc;
+    double x_surf;
+    double mu_surf;
+    double mu0_surf;
+    double compactness;   // R / M = x_surf / mu_surf
+};
+
+
+static double rc_rng_uniform(unsigned long long *state)
+{
+    *state = 6364136223846793005ULL * (*state) + 1442695040888963407ULL;
+    return (double)(*state >> 11) * (1.0 / 9007199254740992.0);
+}
+
+
+static void rc_random_unit_vector(unsigned long long *rng, double n[3])
+{
+    const double z = 2.0 * rc_rng_uniform(rng) - 1.0;
+    const double phi = 2.0 * M_PI * rc_rng_uniform(rng);
+    const double s = sqrt(fmax(0.0, 1.0 - z*z));
+
+    n[0] = s * cos(phi);
+    n[1] = s * sin(phi);
+    n[2] = z;
+}
+
+
+static double rc_rho_bar(double z, double zc)
+{
+    if (z <= 1.0)
+        return 0.0;
+
+    const double denom = pow(zc, 3.0) * sqrt(zc*zc - 1.0);
+    return pow(z, 3.0) * sqrt(z*z - 1.0) / denom;
+}
+
+
+static double rc_p_bar(double z, double zc)
+{
+    if (z <= 1.0)
+        return 0.0;
+
+    const double denom = pow(zc, 3.0) * sqrt(zc*zc - 1.0);
+    return (1.0 / 3.0) * z * pow(z*z - 1.0, 1.5) / denom;
+}
+
+
+static double rc_rho0_over_rhoc(double z, double zc)
+{
+    /*
+     * Rest-mass density divided by central mass-energy density rho_c.
+     * At the center rho0_c / rho_c = 1 / zc.
+     */
+    if (z <= 1.0)
+        return 0.0;
+
+    const double denom = pow(zc, 3.0) * sqrt(zc*zc - 1.0);
+    return z*z * sqrt(z*z - 1.0) / denom;
+}
+
+
+static int rc_append_model_point(struct rel_mono_model *m,
+    double x, double mu, double z)
+{
+    if (m->n >= m->cap)
+        return 0;
+
+    m->x[m->n] = x;
+    m->mu[m->n] = mu;
+    m->z[m->n] = z;
+    m->n++;
+
+    return 1;
+}
+
+
+static void rc_rhs(double x, double mu, double z, double zc,
+    double *dmu_dx, double *dz_dx, double *dmu0_dx)
+{
+    const double rho = rc_rho_bar(z, zc);
+    const double P = rc_p_bar(z, zc);
+    const double rho0 = rc_rho0_over_rhoc(z, zc);
+
+    *dmu_dx = x*x * rho;
+
+    if (x <= 0.0) {
+        *dz_dx = 0.0;
+        *dmu0_dx = 0.0;
+        return;
+    }
+
+    const double A = 1.0 - 2.0 * mu / x;
+
+    if (A <= 0.0)
+        errorexit("relativistic monoenergetic model crossed x = 2 mu");
+
+    *dz_dx = -z * (mu + x*x*x * P) / (x * (x - 2.0 * mu));
+
+    /*
+     * Proper rest-mass integral:
+     *
+     *      dmu0/dx = x^2 (rho0/rho_c) / sqrt(1 - 2mu/x)
+     */
+    *dmu0_dx = x*x * rho0 / sqrt(A);
+}
+
+
+static void rc_rk4_step(double x, double h,
+    double *mu, double *z, double *mu0, double zc)
+{
+    double k1m, k1z, k1m0;
+    double k2m, k2z, k2m0;
+    double k3m, k3z, k3m0;
+    double k4m, k4z, k4m0;
+
+    rc_rhs(x, *mu, *z, zc, &k1m, &k1z, &k1m0);
+    rc_rhs(x + 0.5*h, *mu + 0.5*h*k1m, *z + 0.5*h*k1z, zc,
+        &k2m, &k2z, &k2m0);
+    rc_rhs(x + 0.5*h, *mu + 0.5*h*k2m, *z + 0.5*h*k2z, zc,
+        &k3m, &k3z, &k3m0);
+    rc_rhs(x + h, *mu + h*k3m, *z + h*k3z, zc,
+        &k4m, &k4z, &k4m0);
+
+    *mu  += h * (k1m  + 2.0*k2m  + 2.0*k3m  + k4m)  / 6.0;
+    *z   += h * (k1z  + 2.0*k2z  + 2.0*k3z  + k4z)  / 6.0;
+    *mu0 += h * (k1m0 + 2.0*k2m0 + 2.0*k3m0 + k4m0) / 6.0;
+}
+
+
+static void rc_free_model(struct rel_mono_model *m)
+{
+    free_vector(m->x);
+    free_vector(m->mu);
+    free_vector(m->z);
+    free_vector(m->xiso);
+    free_vector(m->cdf);
+
+    m->x = NULL;
+    m->mu = NULL;
+    m->z = NULL;
+    m->xiso = NULL;
+    m->cdf = NULL;
+}
+
+
+static int rc_integrate_model(double zc, int ngrid, struct rel_mono_model *m)
+{
+    /*
+     * Dimensionless integration of the Shapiro-Teukolsky/Bamber monoenergetic
+     * spherical equilibrium sequence.
+     *
+     * Surface condition: z = 1.
+     */
+    if (zc <= 1.0)
+        return 0;
+
+    m->n = 0;
+    m->cap = ngrid;
+
+    allocate_vector(&m->x, ngrid);
+    allocate_vector(&m->mu, ngrid);
+    allocate_vector(&m->z, ngrid);
+    allocate_vector(&m->xiso, ngrid);
+    allocate_vector(&m->cdf, ngrid);
+
+    m->zc = zc;
+
+    /*
+     * Start close to the origin. Since rho_bar(zc)=1 by construction,
+     *
+     *      mu ~ x^3 / 3.
+     */
+    double x = 1e-6;
+    double mu = x*x*x / 3.0;
+    double z = zc;
+    double mu0 = x*x*x * rc_rho0_over_rhoc(zc, zc) / 3.0;
+
+    if (!rc_append_model_point(m, x, mu, z)) {
+        rc_free_model(m);
+        return 0;
+    }
+
+    /*
+     * Adaptive-ish step. We want enough resolution near the center and not too
+     * many points for diffuse models. ngrid controls the maximum number of
+     * stored points.
+     */
+    while (z > 1.0 && m->n < ngrid) {
+        const double x_old = x;
+        const double mu_old = mu;
+        const double z_old = z;
+        const double mu0_old = mu0;
+
+        double h = 2e-3 * fmax(1.0, x);
+
+        /*
+         * Limit fractional change in z per step.
+         */
+        double dm_tmp, dz_tmp, dm0_tmp;
+        rc_rhs(x, mu, z, zc, &dm_tmp, &dz_tmp, &dm0_tmp);
+
+        if (fabs(dz_tmp) > 0.0) {
+            const double h_z = 0.01 * fabs(z - 1.0) / fabs(dz_tmp);
+            if (h_z > 0.0 && h_z < h)
+                h = h_z;
+        }
+
+        if (h < 1e-7)
+            h = 1e-7;
+
+        rc_rk4_step(x, h, &mu, &z, &mu0, zc);
+        x += h;
+
+        if (!isfinite(x) || !isfinite(mu) || !isfinite(z) || !isfinite(mu0)) {
+            rc_free_model(m);
+            return 0;
+        }
+
+        if (x <= 2.0 * mu) {
+            rc_free_model(m);
+            return 0;
+        }
+
+        if (z <= 1.0) {
+            /*
+             * Interpolate last step to surface z = 1.
+             */
+            const double a = (z_old - 1.0) / (z_old - z);
+
+            const double x_s = x_old + a * (x - x_old);
+            const double mu_s = mu_old + a * (mu - mu_old);
+            const double mu0_s = mu0_old + a * (mu0 - mu0_old);
+
+            if (!rc_append_model_point(m, x_s, mu_s, 1.0)) {
+                rc_free_model(m);
+                return 0;
+            }
+
+            m->x_surf = x_s;
+            m->mu_surf = mu_s;
+            m->mu0_surf = mu0_s;
+            m->compactness = x_s / mu_s;
+            break;
+        }
+
+        if (!rc_append_model_point(m, x, mu, z)) {
+            rc_free_model(m);
+            return 0;
+        }
+    }
+
+    if (m->n < 10 || m->z[m->n - 1] > 1.0) {
+        rc_free_model(m);
+        return 0;
+    }
+
+    if (m->mu_surf <= 0.0 || m->x_surf <= 2.0 * m->mu_surf) {
+        rc_free_model(m);
+        return 0;
+    }
+
+    /*
+     * Isotropic-radius mapping.
+     *
+     * Schwarzschild/areal metric:
+     *      dl^2 = dr^2 / (1 - 2m/r) + r^2 dOmega^2
+     *
+     * Isotropic metric:
+     *      dl^2 = psi^4 (d rbar^2 + rbar^2 dOmega^2)
+     *
+     * Matching angular part gives:
+     *      r = psi^2 rbar
+     *
+     * Matching radial part gives:
+     *      d ln rbar / dr = 1 / [r sqrt(1 - 2m/r)].
+     *
+     * In dimensionless variables the same equation holds for xiso(x).
+     */
+    const int n = m->n;
+    const double Xs = m->x_surf;
+    const double Ms = m->mu_surf;
+
+    const double xiso_s =
+        0.5 * (Xs - Ms + sqrt(Xs * (Xs - 2.0 * Ms)));
+
+    m->xiso[n - 1] = xiso_s;
+
+    double g_next = log(xiso_s / Xs);
+
+    for (int i = n - 2; i >= 0; i--) {
+        const double x1 = m->x[i];
+        const double x2 = m->x[i + 1];
+
+        const double A1 = 1.0 - 2.0 * m->mu[i] / x1;
+        const double A2 = 1.0 - 2.0 * m->mu[i + 1] / x2;
+
+        if (A1 <= 0.0 || A2 <= 0.0) {
+            rc_free_model(m);
+            return 0;
+        }
+
+        const double f1 = (1.0 / sqrt(A1) - 1.0) / x1;
+        const double f2 = (1.0 / sqrt(A2) - 1.0) / x2;
+
+        const double dg = 0.5 * (f1 + f2) * (x2 - x1);
+        const double g_i = g_next - dg;
+
+        m->xiso[i] = x1 * exp(g_i);
+        g_next = g_i;
+    }
+
+    /*
+     * CDF from proper rest-mass density.
+     */
+    m->cdf[0] = 0.0;
+
+    for (int i = 1; i < n; i++) {
+        const double x1 = m->x[i - 1];
+        const double x2 = m->x[i];
+
+        const double A1 = 1.0 - 2.0 * m->mu[i - 1] / x1;
+        const double A2 = 1.0 - 2.0 * m->mu[i] / x2;
+
+        if (A1 <= 0.0 || A2 <= 0.0) {
+            rc_free_model(m);
+            return 0;
+        }
+
+        const double w1 =
+            x1*x1 * rc_rho0_over_rhoc(m->z[i - 1], zc) / sqrt(A1);
+
+        const double w2 =
+            x2*x2 * rc_rho0_over_rhoc(m->z[i], zc) / sqrt(A2);
+
+        m->cdf[i] = m->cdf[i - 1] + 0.5 * (w1 + w2) * (x2 - x1);
+    }
+
+    const double total = m->cdf[n - 1];
+
+    if (total <= 0.0 || !isfinite(total)) {
+        rc_free_model(m);
+        return 0;
+    }
+
+    for (int i = 0; i < n; i++)
+        m->cdf[i] /= total;
+
+    return 1;
+}
+
+
+static double rc_model_compactness(double zc, int ngrid)
+{
+    struct rel_mono_model m;
+
+    if (!rc_integrate_model(zc, ngrid, &m))
+        return -1.0;
+
+    const double C = m.compactness;
+    rc_free_model(&m);
+    return C;
+}
+
+
+static double rc_solve_zc_for_compactness(double target_compactness, int ngrid)
+{
+    /*
+     * Scan zc > 1.  Very diffuse models can be numerically expensive, and
+     * very compact models may fail before reaching the surface. We skip
+     * failed samples and bracket using successful models.
+     */
+    const double zc_min = 1.0005;
+    const double zc_max = 50.0;
+    const int nscan = 400;
+
+    int have_prev = 0;
+    double zc_prev = 0.0;
+    double C_prev = 0.0;
+
+    for (int s = 0; s <= nscan; s++) {
+        const double loga = log(zc_min);
+        const double logb = log(zc_max);
+        const double zc = exp(loga + (logb - loga) * ((double)s / (double)nscan));
+
+        const double C = rc_model_compactness(zc, ngrid);
+
+        if (C < 0.0 || !isfinite(C))
+            continue;
+
+        printf("rel. cluster scan: zc = %.12e, R/M = %.12e\n", zc, C);
+
+        if (!have_prev) {
+            zc_prev = zc;
+            C_prev = C;
+            have_prev = 1;
+            continue;
+        }
+
+        if ((C_prev - target_compactness) * (C - target_compactness) <= 0.0) {
+            double lo = zc_prev;
+            double hi = zc;
+            double Clo = C_prev;
+
+            for (int it = 0; it < 80; it++) {
+                const double mid = 0.5 * (lo + hi);
+                const double Cmid = rc_model_compactness(mid, ngrid);
+
+                if (Cmid < 0.0 || !isfinite(Cmid)) {
+                    /*
+                     * Failed midpoint. Shrink cautiously toward the previous
+                     * valid lower endpoint.
+                     */
+                    hi = mid;
+                    continue;
+                }
+
+                if ((Clo - target_compactness) * (Cmid - target_compactness) <= 0.0) {
+                    hi = mid;
+                }
+                else {
+                    lo = mid;
+                    Clo = Cmid;
+                }
+            }
+
+            return 0.5 * (lo + hi);
+        }
+
+        zc_prev = zc;
+        C_prev = C;
+    }
+
+    errorexit("Could not bracket zc for requested cluster_compactness. "
+              "Try increasing cluster_ngrid, using a less extreme compactness, "
+              "or specifying cluster_central_z manually.");
+
+    return -1.0;
+}
+
+
+static void rc_sample_radius(struct rel_mono_model *m, unsigned long long *rng,
+    double *x_areal, double *x_iso, double *z_local)
+{
+    const double u = rc_rng_uniform(rng);
+
+    int lo = 0;
+    int hi = m->n - 1;
+
+    while (hi - lo > 1) {
+        const int mid = (lo + hi) / 2;
+
+        if (m->cdf[mid] < u)
+            lo = mid;
+        else
+            hi = mid;
+    }
+
+    double a = 0.0;
+
+    if (m->cdf[hi] > m->cdf[lo])
+        a = (u - m->cdf[lo]) / (m->cdf[hi] - m->cdf[lo]);
+
+    *x_areal = m->x[lo] + a * (m->x[hi] - m->x[lo]);
+    *x_iso = m->xiso[lo] + a * (m->xiso[hi] - m->xiso[lo]);
+    *z_local = m->z[lo] + a * (m->z[hi] - m->z[lo]);
+}
+
+
+static int rc_min_sep_ok(struct ode_params* params, double *x, double min_sep_factor)
+{
+    const int N = params->num_bodies_initial;
+    const int D = params->num_dim;
+
+    if (min_sep_factor <= 0.0)
+        return 1;
+
+    for (int i = 0; i < N; i++) {
+        for (int j = i + 1; j < N; j++) {
+            double rij2 = 0.0;
+
+            for (int k = 0; k < D; k++) {
+                const double dx = x[i*D + k] - x[j*D + k];
+                rij2 += dx*dx;
+            }
+
+            const double rij = sqrt(rij2);
+            const double min_sep = min_sep_factor *
+                (params->masses[i] + params->masses[j]);
+
+            if (rij < min_sep)
+                return 0;
+        }
+    }
+
+    return 1;
+}
+
+
+void ic_relativistic_monoenergetic_cluster(struct ode_params* params,
+    double target_compactness, double central_z, int solve_central_z,
+    int ngrid, unsigned long long seed, double min_sep_factor,
+    int remove_com, double* w0)
+{
+    const int N = params->num_bodies_initial;
+    const int D = params->num_dim;
+
+    if (D != 3)
+        errorexit("relativistic_monoenergetic_cluster requires num_dim = 3");
+
+    double M_target = 0.0;
+
+    for (int i = 0; i < N; i++) {
+        if (params->masses[i] <= 0.0)
+            errorexit("relativistic_monoenergetic_cluster requires all masses > 0");
+
+        M_target += params->masses[i];
+    }
+
+    /*
+     * Bamber et al. use equal rest-mass, nonspinning BHs. This warning is
+     * deliberately strict because the equilibrium distribution is not a
+     * multi-mass model.
+     */
+    for (int i = 1; i < N; i++) {
+        if (fabs(params->masses[i] - params->masses[0]) > 1e-12 * M_target) {
+            printf("Warning: the Bamber et al. monoenergetic cluster construction "
+                   "assumes equal rest-mass particles. Unequal masses are only a "
+                   "pragmatic PN extension.\n");
+            break;
+        }
+    }
+
+    if (seed == 0ULL)
+        seed = 1ULL;
+
+    double zc = central_z;
+
+    if (solve_central_z)
+        zc = rc_solve_zc_for_compactness(target_compactness, ngrid);
+
+    if (zc <= 1.0)
+        errorexit("central z must be > 1");
+
+    struct rel_mono_model model;
+
+    if (!rc_integrate_model(zc, ngrid, &model))
+        errorexit("Could not integrate relativistic monoenergetic cluster model");
+
+    /*
+     * Scale dimensionless model to the total mass used by the PN code.
+     * This treats sum(m_i) as the ADM-mass scale M. That is not identical
+     * to the NR puncture data, but it is the most natural PN convention.
+     */
+    const double length_scale = M_target / model.mu_surf;
+
+    double *x;
+    double *p;
+
+    allocate_vector(&x, N * D);
+    allocate_vector(&p, N * D);
+
+    unsigned long long rng = seed;
+    int accepted = 0;
+
+    for (int attempt = 0; attempt < 10000; attempt++) {
+        for (int i = 0; i < N; i++) {
+            double n_pos[3];
+            double n_p[3];
+
+            rc_random_unit_vector(&rng, n_pos);
+            rc_random_unit_vector(&rng, n_p);
+
+            double x_areal, x_iso, z_local;
+            rc_sample_radius(&model, &rng, &x_areal, &x_iso, &z_local);
+
+            const double r_areal = length_scale * x_areal;
+            const double r_iso = length_scale * x_iso;
+
+            for (int k = 0; k < D; k++)
+                x[i*D + k] = r_iso * n_pos[k];
+
+            /*
+             * Local orthonormal momentum magnitude:
+             *
+             *      |p_hat| = m sqrt(z^2 - 1).
+             *
+             * Isotropic spatial metric:
+             *
+             *      gamma_ij = psi^4 delta_ij,
+             *      psi^2 = r / rbar.
+             *
+             * The coordinate covariant momentum used in Bowen-York-style data is
+             *
+             *      P_i = psi^2 P_hat_i.
+             *
+             * For the PN code this is still an approximation, but it is the
+             * closest direct analogue to the Appendix A prescription.
+             */
+            double p_mag = params->masses[i] *
+                sqrt(fmax(0.0, z_local*z_local - 1.0));
+
+            if (r_iso <= 0.0)
+                errorexit("zero isotropic radius in relativistic cluster");
+
+            const double psi2 = r_areal / r_iso;
+            p_mag *= psi2;
+
+            for (int k = 0; k < D; k++)
+                p[i*D + k] = p_mag * n_p[k];
+        }
+
+        if (rc_min_sep_ok(params, x, min_sep_factor)) {
+            accepted = 1;
+            break;
+        }
+    }
+
+    if (!accepted)
+        errorexit("Could not sample relativistic monoenergetic cluster satisfying "
+                  "cluster_min_separation_factor");
+
+    if (remove_com) {
+        double xcom[3] = {0.0, 0.0, 0.0};
+        double ptot[3] = {0.0, 0.0, 0.0};
+
+        for (int i = 0; i < N; i++) {
+            for (int k = 0; k < D; k++) {
+                xcom[k] += params->masses[i] * x[i*D + k];
+                ptot[k] += p[i*D + k];
+            }
+        }
+
+        for (int k = 0; k < D; k++)
+            xcom[k] /= M_target;
+
+        for (int i = 0; i < N; i++) {
+            for (int k = 0; k < D; k++) {
+                x[i*D + k] -= xcom[k];
+                p[i*D + k] -= (params->masses[i] / M_target) * ptot[k];
+            }
+        }
+    }
+
+    for (int i = 0; i < N; i++) {
+        for (int k = 0; k < D; k++) {
+            w0[i*D + k] = x[i*D + k];
+            w0[N*D + i*D + k] = p[i*D + k];
+        }
+    }
+
+    printf("Relativistic monoenergetic cluster diagnostics:\n");
+    printf("central_z zc                 = % .16e\n", zc);
+    printf("smooth R/M                   = % .16e\n", model.compactness);
+    printf("smooth M0/M                  = % .16e\n", model.mu0_surf / model.mu_surf);
+    printf("dimensionless R              = % .16e\n", model.x_surf);
+    printf("dimensionless M              = % .16e\n", model.mu_surf);
+    printf("dimensionless M0             = % .16e\n", model.mu0_surf);
+    printf("physical M scale             = % .16e\n", M_target);
+    printf("physical areal R             = % .16e\n", length_scale * model.x_surf);
+    printf("physical isotropic Rbar      = % .16e\n",
+        length_scale * model.xiso[model.n - 1]);
+    printf("finite-N COM removed         = %d\n", remove_com);
+    print_divider();
+
+    free_vector(x);
+    free_vector(p);
+    rc_free_model(&model);
+}
