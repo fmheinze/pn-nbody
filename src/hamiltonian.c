@@ -20,6 +20,7 @@
 #include "eom.h"
 #include "hamiltonian.h"
 #include "utils.h"
+#include "pair_cache.h"
 
 #define PI 3.1415926535897932384626433832795
 #define INVPI 0.31830988618379067153776752674503
@@ -512,30 +513,25 @@ void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx)
 // Computes the 0PN (Newtonian) part of the N-body Hamiltonian
 double H0PN(double* w, struct ode_params* ode_params)
 {
-    int num_bodies = ode_params->num_bodies_initial;
-    int num_dim = ode_params->num_dim;
-    int array_half = num_dim * num_bodies;
-    double rel_dist2, p2;
-    double H = 0;
+    PairCache cache;
+    pair_cache_build(&cache, w, ode_params);
 
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
+    double H = 0.0;
+
+    for (int ia = 0; ia < cache.active.num_active; ia++) {
+        int a = cache.active.ids[ia];
+
         // Kinetic energy
-        p2 = 0.0;
-        for (int i = 0; i < num_dim; i++)
-            p2 += w[array_half + num_dim * a + i] * w[array_half + num_dim * a + i];
-        H += p2/(2 * ode_params->masses[a]);
+        H += cache.p2[a] / (2.0 * cache.m[a]);
 
         // Potential energy
-        for (int b = a+1; b < num_bodies; b++) {
-            if (!ode_params->active[b]) continue;
-            rel_dist2 = 0.0;
-            for (int i = 0; i < num_dim; i++)
-                rel_dist2 += (w[num_dim * a + i] - w[num_dim * b + i]) * 
-                    (w[num_dim * a + i] - w[num_dim * b + i]);
-            H -= ode_params->masses[a] * ode_params->masses[b] / sqrt(rel_dist2);
+        for (int ib = ia + 1; ib < cache.active.num_active; ib++) {
+            int b = cache.active.ids[ib];
+            H -= cache.m[a] * cache.m[b] * pair_cache_inv_r(&cache, a, b);
         }
     }
+
+    pair_cache_free(&cache);
     return H;
 }
 
@@ -543,76 +539,46 @@ double H0PN(double* w, struct ode_params* ode_params)
 // Computes the 1PN part of the N-body Hamiltonian
 double H1PN(double* w, struct ode_params* ode_params) 
 {
-    int num_bodies = ode_params->num_bodies_initial;
-    int num_dim = ode_params->num_dim;
-    int array_half = num_dim * num_bodies;
-    int a, b, c, i;
-    double m_a, m_b, m_c;
-    double pa_dot_pa, pa_dot_pb;
-    double dx, r_ab, r_ac, ni, na_dot_pa, na_dot_pb;
-    double p_ai, p_bi, dx_ac;
+    PairCache cache;
+    pair_cache_build(&cache, w, ode_params);
+
     double H = 0.0;
 
     // Compute kinetic and potential energy
-    for (a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        m_a = ode_params->masses[a];
-        pa_dot_pa = 0.0;
+    for (int ia = 0; ia < cache.active.num_active; ia++) {
+        int a = cache.active.ids[ia];
 
-        for (i = 0; i < num_dim; i++) {
-            p_ai = w[array_half + a * num_dim + i];
-            pa_dot_pa += p_ai * p_ai;
-        }
+        double m_a = cache.m[a];
+        double pa_dot_pa = cache.p2[a];
 
         H += -0.125 * m_a * pa_dot_pa * pa_dot_pa / (m_a * m_a * m_a * m_a);
 
-        for (b = 0; b < num_bodies; b++) {
-            if (b == a || !ode_params->active[b]) continue;
+        for (int ib = 0; ib < cache.active.num_active; ib++) {
+            int b = cache.active.ids[ib];
+            if (b == a) continue;
 
-            m_b = ode_params->masses[b];
-            r_ab = 0.0;
-            pa_dot_pb = 0.0;
-            na_dot_pa = 0.0;
-            na_dot_pb = 0.0;
+            double m_b = cache.m[b];
+            double r_ab = pair_cache_r(&cache, a, b);
+            double pa_dot_pb = pair_cache_p_dot(&cache, a, b);
+            double na_dot_pa = pair_cache_n_dot_p(&cache, a, b, a);
+            double na_dot_pb = pair_cache_n_dot_p(&cache, a, b, b);
 
-            for (i = 0; i < num_dim; i++) {
-                dx = w[a * num_dim + i] - w[b * num_dim + i];
-                r_ab += dx * dx;
-            }
+            H += -0.25 * m_a * m_b / r_ab * (6.0 * pa_dot_pa / (m_a * m_a) 
+                - 7.0 * pa_dot_pb / (m_a * m_b) - (na_dot_pa * na_dot_pb) / (m_a * m_b));
 
-            r_ab = sqrt(r_ab);
+            for (int ic = 0; ic < cache.active.num_active; ic++) {
+                int c = cache.active.ids[ic];
+                if (c == a) continue;
 
-            for (i = 0; i < num_dim; i++) {
-                p_ai = w[array_half + a * num_dim + i];
-                p_bi = w[array_half + b * num_dim + i];
-
-                dx = w[a * num_dim + i] - w[b * num_dim + i];
-                ni = dx / r_ab;
-
-                pa_dot_pb += p_ai * p_bi;
-                na_dot_pa += ni * p_ai;
-                na_dot_pb += ni * p_bi;
-            }
-
-            H += -0.25 * m_a * m_b / r_ab * (6 * pa_dot_pa / (m_a * m_a) 
-                - 7 * pa_dot_pb / (m_a * m_b) - (na_dot_pa * na_dot_pb) / (m_a * m_b));
-
-            for (c = 0; c < num_bodies; c++) {
-                if (c == a || !ode_params->active[c]) continue;
-
-                m_c = ode_params->masses[c];
-                r_ac = 0.0;
-
-                for (i = 0; i < num_dim; i++) {
-                dx_ac = w[a * num_dim + i] - w[c * num_dim + i];
-                r_ac += dx_ac * dx_ac;
-                }
-                r_ac = sqrt(r_ac);
+                double m_c = cache.m[c];
+                double r_ac = pair_cache_r(&cache, a, c);
 
                 H += 0.5 * m_a * m_b * m_c / (r_ab * r_ac);
             }
         }
     }
+
+    pair_cache_free(&cache);
     return H;
 }
 

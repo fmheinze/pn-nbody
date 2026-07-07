@@ -1,0 +1,406 @@
+diff --git a/src/active_list.c b/src/active_list.c
+new file mode 100644
+index 0000000..9db245c
+--- /dev/null
++++ b/src/active_list.c
+@@ -0,0 +1,55 @@
++/**
++ * @file active_list.c
++ * @brief Compact list of active bodies for faster N-body loops.
++ */
++
++#include <stdlib.h>
++#include "active_list.h"
++#include "utils.h"
++
++
++void active_list_init(ActiveList *list, const struct ode_params *ode_params)
++{
++    if (list == NULL)
++        errorexit("active_list_init received NULL list");
++    if (ode_params == NULL)
++        errorexit("active_list_init received NULL ode_params");
++    if (ode_params->num_bodies_initial < 0)
++        errorexit("num_bodies_initial must be non-negative");
++    if (ode_params->num_bodies_initial > 0 && ode_params->active == NULL)
++        errorexit("ode_params->active is NULL");
++
++    list->num_bodies_initial = ode_params->num_bodies_initial;
++    list->num_active = 0;
++    list->ids = NULL;
++
++    for (int a = 0; a < ode_params->num_bodies_initial; ++a) {
++        if (ode_params->active[a])
++            list->num_active++;
++    }
++
++    if (list->num_active == 0)
++        return;
++
++    list->ids = (int *)malloc((size_t)list->num_active * sizeof(int));
++    if (list->ids == NULL)
++        errorexit("Memory allocation failed for ActiveList ids");
++
++    int k = 0;
++    for (int a = 0; a < ode_params->num_bodies_initial; ++a) {
++        if (ode_params->active[a])
++            list->ids[k++] = a;
++    }
++}
++
++
++void active_list_free(ActiveList *list)
++{
++    if (list == NULL)
++        return;
++
++    free(list->ids);
++    list->ids = NULL;
++    list->num_active = 0;
++    list->num_bodies_initial = 0;
++}
+diff --git a/src/active_list.h b/src/active_list.h
+new file mode 100644
+index 0000000..93e8756
+--- /dev/null
++++ b/src/active_list.h
+@@ -0,0 +1,32 @@
++#ifndef ACTIVE_LIST_H
++#define ACTIVE_LIST_H
++
++#include "eom.h"
++
++/**
++ * @brief Compact list of currently active body indices.
++ *
++ * The code often loops over num_bodies_initial and skips inactive entries.
++ * This helper builds a dense list of active body slots once per RHS/cache build,
++ * so expensive PN loops can later iterate only over active bodies.
++ */
++typedef struct {
++    int num_bodies_initial;
++    int num_active;
++    int *ids;
++} ActiveList;
++
++/**
++ * @brief Build the active-body list from ode_params->active.
++ *
++ * The function counts active flags directly instead of trusting
++ * ode_params->num_active. This makes the helper robust during future refactors.
++ */
++void active_list_init(ActiveList *list, const struct ode_params *ode_params);
++
++/**
++ * @brief Release memory owned by the active-body list.
++ */
++void active_list_free(ActiveList *list);
++
++#endif
+diff --git a/src/pair_cache.c b/src/pair_cache.c
+new file mode 100644
+index 0000000..5236dcf
+--- /dev/null
++++ b/src/pair_cache.c
+@@ -0,0 +1,181 @@
++/**
++ * @file pair_cache.c
++ * @brief Cached pair geometry and scalar products for PN RHS evaluations.
++ */
++
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++#include "pair_cache.h"
++#include "utils.h"
++
++
++static void *xcalloc(size_t count, size_t size)
++{
++    void *ptr = calloc(count, size);
++    if (ptr == NULL)
++        errorexit("Memory allocation failed in pair_cache");
++    return ptr;
++}
++
++
++static void pair_cache_zero(PairCache *cache)
++{
++    memset(cache, 0, sizeof(*cache));
++}
++
++
++void pair_cache_build(PairCache *cache, const double *w, const struct ode_params *ode_params)
++{
++    if (cache == NULL)
++        errorexit("pair_cache_build received NULL cache");
++    if (w == NULL)
++        errorexit("pair_cache_build received NULL state vector");
++    if (ode_params == NULL)
++        errorexit("pair_cache_build received NULL ode_params");
++
++    pair_cache_zero(cache);
++
++    const int N = ode_params->num_bodies_initial;
++    const int D = ode_params->num_dim;
++    const int P0 = N * D;
++
++    if (N < 0)
++        errorexit("num_bodies_initial must be non-negative");
++    if (D <= 0)
++        errorexit("num_dim must be positive");
++
++    cache->num_bodies = N;
++    cache->num_dim = D;
++    cache->array_half = P0;
++
++    active_list_init(&cache->active, ode_params);
++
++    cache->m       = (double *)xcalloc((size_t)N, sizeof(double));
++    cache->inv_m   = (double *)xcalloc((size_t)N, sizeof(double));
++    cache->p       = (double *)xcalloc((size_t)N * (size_t)D, sizeof(double));
++    cache->p2      = (double *)xcalloc((size_t)N, sizeof(double));
++    cache->p_dot   = (double *)xcalloc((size_t)N * (size_t)N, sizeof(double));
++    cache->x_rel   = (double *)xcalloc((size_t)N * (size_t)N * (size_t)D, sizeof(double));
++    cache->r       = (double *)xcalloc((size_t)N * (size_t)N, sizeof(double));
++    cache->inv_r   = (double *)xcalloc((size_t)N * (size_t)N, sizeof(double));
++    cache->inv_r2  = (double *)xcalloc((size_t)N * (size_t)N, sizeof(double));
++    cache->n       = (double *)xcalloc((size_t)N * (size_t)N * (size_t)D, sizeof(double));
++    cache->n_dot_p = (double *)xcalloc((size_t)N * (size_t)N * (size_t)N, sizeof(double));
++
++    // Masses and momenta.
++    for (int ia = 0; ia < cache->active.num_active; ++ia) {
++        const int a = cache->active.ids[ia];
++
++        cache->m[a] = ode_params->masses[a];
++        if (cache->m[a] == 0.0)
++            errorexit("Encountered zero active-body mass in pair_cache_build");
++        cache->inv_m[a] = 1.0 / cache->m[a];
++
++        double p2 = 0.0;
++        for (int i = 0; i < D; ++i) {
++            const double pai = w[P0 + a * D + i];
++            cache->p[a * D + i] = pai;
++            p2 += pai * pai;
++        }
++        cache->p2[a] = p2;
++    }
++
++    // Momentum scalar products p_a . p_b.
++    for (int ia = 0; ia < cache->active.num_active; ++ia) {
++        const int a = cache->active.ids[ia];
++        for (int ib = ia; ib < cache->active.num_active; ++ib) {
++            const int b = cache->active.ids[ib];
++
++            double pdot = 0.0;
++            for (int i = 0; i < D; ++i)
++                pdot += cache->p[a * D + i] * cache->p[b * D + i];
++
++            cache->p_dot[pair_cache_idx2(cache, a, b)] = pdot;
++            cache->p_dot[pair_cache_idx2(cache, b, a)] = pdot;
++        }
++    }
++
++    // Relative positions, distances, inverse distances and unit vectors.
++    for (int ia = 0; ia < cache->active.num_active; ++ia) {
++        const int a = cache->active.ids[ia];
++        for (int ib = ia; ib < cache->active.num_active; ++ib) {
++            const int b = cache->active.ids[ib];
++
++            if (a == b)
++                continue;
++
++            double r2 = 0.0;
++            for (int i = 0; i < D; ++i) {
++                const double dx = w[a * D + i] - w[b * D + i];
++                cache->x_rel[pair_cache_idx3(cache, a, b, i)] = dx;
++                cache->x_rel[pair_cache_idx3(cache, b, a, i)] = -dx;
++                r2 += dx * dx;
++            }
++
++            if (r2 <= 0.0)
++                errorexit("Encountered zero separation in pair_cache_build");
++
++            const double r = sqrt(r2);
++            const double inv_r = 1.0 / r;
++            const double inv_r2 = inv_r * inv_r;
++
++            cache->r[pair_cache_idx2(cache, a, b)] = r;
++            cache->r[pair_cache_idx2(cache, b, a)] = r;
++            cache->inv_r[pair_cache_idx2(cache, a, b)] = inv_r;
++            cache->inv_r[pair_cache_idx2(cache, b, a)] = inv_r;
++            cache->inv_r2[pair_cache_idx2(cache, a, b)] = inv_r2;
++            cache->inv_r2[pair_cache_idx2(cache, b, a)] = inv_r2;
++
++            for (int i = 0; i < D; ++i) {
++                const double ni = cache->x_rel[pair_cache_idx3(cache, a, b, i)] * inv_r;
++                cache->n[pair_cache_idx3(cache, a, b, i)] = ni;
++                cache->n[pair_cache_idx3(cache, b, a, i)] = -ni;
++            }
++        }
++    }
++
++    // n_ab . p_c for active triples. Entries with a == b remain zero.
++    for (int ia = 0; ia < cache->active.num_active; ++ia) {
++        const int a = cache->active.ids[ia];
++        for (int ib = 0; ib < cache->active.num_active; ++ib) {
++            const int b = cache->active.ids[ib];
++            if (a == b)
++                continue;
++
++            for (int ic = 0; ic < cache->active.num_active; ++ic) {
++                const int c = cache->active.ids[ic];
++
++                double ndotp = 0.0;
++                for (int i = 0; i < D; ++i)
++                    ndotp += cache->n[pair_cache_idx3(cache, a, b, i)]
++                           * cache->p[c * D + i];
++
++                cache->n_dot_p[pair_cache_idx_ndotp(cache, a, b, c)] = ndotp;
++            }
++        }
++    }
++}
++
++
++void pair_cache_free(PairCache *cache)
++{
++    if (cache == NULL)
++        return;
++
++    active_list_free(&cache->active);
++
++    free(cache->m);
++    free(cache->inv_m);
++    free(cache->p);
++    free(cache->p2);
++    free(cache->p_dot);
++    free(cache->x_rel);
++    free(cache->r);
++    free(cache->inv_r);
++    free(cache->inv_r2);
++    free(cache->n);
++    free(cache->n_dot_p);
++
++    pair_cache_zero(cache);
++}
+diff --git a/src/pair_cache.h b/src/pair_cache.h
+new file mode 100644
+index 0000000..d426fb4
+--- /dev/null
++++ b/src/pair_cache.h
+@@ -0,0 +1,114 @@
++#ifndef PAIR_CACHE_H
++#define PAIR_CACHE_H
++
++#include "active_list.h"
++#include "eom.h"
++
++/**
++ * @brief Cached geometric and momentum invariants for one RHS evaluation.
++ *
++ * This is infrastructure for the analytic 2PN RHS. It does not change the
++ * equations of motion by itself. The expensive analytic terms can later reuse:
++ *
++ *   r_ab, 1/r_ab, 1/r_ab^2, n_ab,
++ *   p_a, p_a^2, p_a.p_b, n_ab.p_c.
++ *
++ * Arrays are stored flat for contiguous memory access.
++ */
++typedef struct {
++    int num_bodies;
++    int num_dim;
++    int array_half;
++
++    ActiveList active;
++
++    double *m;        // [N]
++    double *inv_m;    // [N]
++
++    double *p;        // [N*D]
++    double *p2;       // [N]
++    double *p_dot;    // [N*N], p_a . p_b
++
++    double *x_rel;    // [N*N*D], x_a - x_b
++    double *r;        // [N*N]
++    double *inv_r;    // [N*N]
++    double *inv_r2;   // [N*N]
++    double *n;        // [N*N*D], n_ab
++
++    double *n_dot_p;  // [N*N*N], n_ab . p_c
++} PairCache;
++
++
++static inline int pair_cache_idx2(const PairCache *cache, int a, int b)
++{
++    return a * cache->num_bodies + b;
++}
++
++
++static inline int pair_cache_idx3(const PairCache *cache, int a, int b, int i)
++{
++    return (a * cache->num_bodies + b) * cache->num_dim + i;
++}
++
++
++static inline int pair_cache_idx_ndotp(const PairCache *cache, int a, int b, int c)
++{
++    return (a * cache->num_bodies + b) * cache->num_bodies + c;
++}
++
++
++static inline double pair_cache_p(const PairCache *cache, int a, int i)
++{
++    return cache->p[a * cache->num_dim + i];
++}
++
++
++static inline double pair_cache_xrel(const PairCache *cache, int a, int b, int i)
++{
++    return cache->x_rel[pair_cache_idx3(cache, a, b, i)];
++}
++
++
++static inline double pair_cache_n(const PairCache *cache, int a, int b, int i)
++{
++    return cache->n[pair_cache_idx3(cache, a, b, i)];
++}
++
++
++static inline double pair_cache_r(const PairCache *cache, int a, int b)
++{
++    return cache->r[pair_cache_idx2(cache, a, b)];
++}
++
++
++static inline double pair_cache_inv_r(const PairCache *cache, int a, int b)
++{
++    return cache->inv_r[pair_cache_idx2(cache, a, b)];
++}
++
++
++static inline double pair_cache_p_dot(const PairCache *cache, int a, int b)
++{
++    return cache->p_dot[pair_cache_idx2(cache, a, b)];
++}
++
++
++static inline double pair_cache_n_dot_p(const PairCache *cache, int a, int b, int c)
++{
++    return cache->n_dot_p[pair_cache_idx_ndotp(cache, a, b, c)];
++}
++
++
++/**
++ * @brief Build all cached quantities from the current state vector.
++ *
++ * Call pair_cache_free after use.
++ */
++void pair_cache_build(PairCache *cache, const double *w, const struct ode_params *ode_params);
++
++/**
++ * @brief Release all memory owned by the cache.
++ */
++void pair_cache_free(PairCache *cache);
++
++#endif

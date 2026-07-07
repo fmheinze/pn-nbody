@@ -7,6 +7,7 @@
 #include "utils.h"
 #include "eom.h"
 #include "hamiltonian.h"
+#include "pair_cache.h"
 
 
 /**
@@ -29,69 +30,69 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     int array_half = num_bodies * num_dim; 
     double result, temp;
 
+    // Cached active-body, momentum and pair-geometry data.
+    //
+    // PairCache owns an ActiveList in cache.active.  All expensive RHS loops below now iterate over
+    // cache.active.ids instead of scanning num_bodies_initial and skipping inactive bodies.
+    PairCache cache;
+    pair_cache_build(&cache, w, ode_params);
+    const ActiveList *active = &cache.active;
+
     // Masses
     double m[num_bodies];
     double inv_m[num_bodies];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        m[a] = ode_params->masses[a];
-        inv_m[a] = 1.0 / m[a];
+    for (int ia = 0; ia < active->num_active; ia++) {
+        int a = active->ids[ia];
+        m[a] = cache.m[a];
+        inv_m[a] = cache.inv_m[a];
     }
-    
+
     // Momenta
     double p[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
+    for (int ia = 0; ia < active->num_active; ia++) {
+        int a = active->ids[ia];
         for (int i = 0; i < num_dim; i++)
-            p[a][i] = w[array_half + a * num_dim + i];
+            p[a][i] = pair_cache_p(&cache, a, i);
     }
-    
+
     // Relative positions and distances
     double x_rel[num_bodies][num_bodies][num_dim]; 
     double n[num_bodies][num_bodies][num_dim];
     double r[num_bodies][num_bodies];
     double inv_r[num_bodies][num_bodies];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        for (int b = a; b < num_bodies; b++) {
-            if (!ode_params->active[b]) continue;
-            for (int i = 0; i < num_dim; i++){
-                x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
-                x_rel[b][a][i] = -x_rel[a][b][i];
-            } 
-            if (a == b) {
-                r[a][b] = 0.0;
-                inv_r[a][b] = 0.0;
-            } else {
-                r[a][b] = norm(x_rel[a][b], num_dim);
-                inv_r[a][b] = 1.0 / r[a][b];
-            }
-            r[b][a] = r[a][b];
-            inv_r[b][a] = inv_r[a][b];
+    for (int ia = 0; ia < active->num_active; ia++) {
+        int a = active->ids[ia];
+        for (int ib = ia; ib < active->num_active; ib++) {
+            int b = active->ids[ib];
 
-            for (int i = 0; i < num_dim; i++){
-                if (a == b){
-                        n[a][b][i] = n[b][a][i] = 0.0;
-                } else {
-                        n[a][b][i] = x_rel[a][b][i] * inv_r[a][b];
-                        n[b][a][i] = -n[a][b][i];
-                }
+            for (int i = 0; i < num_dim; i++) {
+                x_rel[a][b][i] = pair_cache_xrel(&cache, a, b, i);
+                x_rel[b][a][i] = pair_cache_xrel(&cache, b, a, i);
+                n[a][b][i] = pair_cache_n(&cache, a, b, i);
+                n[b][a][i] = pair_cache_n(&cache, b, a, i);
             }
+
+            r[a][b] = pair_cache_r(&cache, a, b);
+            r[b][a] = pair_cache_r(&cache, b, a);
+            inv_r[a][b] = pair_cache_inv_r(&cache, a, b);
+            inv_r[b][a] = pair_cache_inv_r(&cache, b, a);
         }
     }
 
     // Time derivatives
     double p_dot[num_bodies][num_dim];
     double x_dot[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
+    for (int ia = 0; ia < active->num_active; ia++) {
+        int a = active->ids[ia];
         for (int i = 0; i < num_dim; i++) {
             p_dot[a][i] = 0.0;
             x_dot[a][i] = 0.0;
         }
     }
-            
-    // Set ODE right-hand side initially to zero
+
+    // Set ODE right-hand side initially to zero.
+    // This also guarantees that inactive bodies have zero RHS, because all contribution loops below
+    // iterate only over active->ids.
     for (int i = 0; i < 2 * array_half; i++)   
         dwdt[i] = 0.0;
 
@@ -99,20 +100,22 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     // Add 0PN (Newtonian) terms
     // --------------------------------------------------------------------------------------------
     if (ode_params->pn_terms[0]) {
-        for (int a = 0; a < num_bodies; a++) {
-            if (!ode_params->active[a]) continue;
+        for (int ia = 0; ia < active->num_active; ia++) {
+            int a = active->ids[ia];
+
             // Velocities
             for (int i = 0; i < num_dim; i++) {
-                result = w[array_half + a * num_dim + i] * inv_m[a];;
+                result = w[array_half + a * num_dim + i] * inv_m[a];
                 dwdt[a * num_dim + i] += result;
                 x_dot[a][i] += result;
             }
 
-            // Accelerations
-            for (int b = a + 1; b < num_bodies; b++) {
-                if (!ode_params->active[b]) continue;
+            // Accelerations.  Use ib = ia + 1 to keep the original pair-once symmetric update.
+            for (int ib = ia + 1; ib < active->num_active; ib++) {
+                int b = active->ids[ib];
+
                 for (int i = 0; i < num_dim; i++) {
-                    result = - m[a] * m[b] * inv_r[a][b] * inv_r[a][b] * n[a][b][i];
+                    result = -m[a] * m[b] * inv_r[a][b] * inv_r[a][b] * n[a][b][i];
                     dwdt[array_half + a * num_dim + i] += result;
                     dwdt[array_half + b * num_dim + i] += -result;
                     p_dot[a][i] += result;
@@ -126,21 +129,25 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
     // Add 1PN terms
     // --------------------------------------------------------------------------------------------
     if (ode_params->pn_terms[1]) {
-        for (int a = 0; a < num_bodies; a++) {
-            if (!ode_params->active[a]) continue;
-            double pa_dot_pa = dot_product(p[a], p[a], num_dim);
+        for (int ia = 0; ia < active->num_active; ia++) {
+            int a = active->ids[ia];
+
+            double pa_dot_pa = cache.p2[a];
+
             for (int i = 0; i < num_dim; i++) {
 
                 // Velocities
                 result = -0.5 * pa_dot_pa * inv_m[a] * inv_m[a] * inv_m[a] * p[a][i];
                 x_dot[a][i] += result;
                 dwdt[a * num_dim + i] += result;
-                for (int b = 0; b < num_bodies; b++) {
-                    if (!ode_params->active[b]) continue;
-                    double pa_dot_pb = dot_product(p[a], p[b], num_dim);
-                    double pb_dot_pb = dot_product(p[b], p[b], num_dim);
-                    double nab_dot_pa = dot_product(n[a][b], p[a], num_dim);
-                    double nab_dot_pb = dot_product(n[a][b], p[b], num_dim);
+
+                for (int ib = 0; ib < active->num_active; ib++) {
+                    int b = active->ids[ib];
+
+                    double pa_dot_pb = pair_cache_p_dot(&cache, a, b);
+                    double pb_dot_pb = cache.p2[b];
+                    double nab_dot_pa = pair_cache_n_dot_p(&cache, a, b, a);
+                    double nab_dot_pb = pair_cache_n_dot_p(&cache, a, b, b);
 
                     if (b != a) {
                         temp = -0.5 * inv_r[a][b];
@@ -161,14 +168,18 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
                         p_dot[a][i] += result;
                         dwdt[array_half + a * num_dim + i] += result;
                     }
-                    for (int c = 0; c < num_bodies; c++) {
-                        if (!ode_params->active[c]) continue;
+
+                    for (int ic = 0; ic < active->num_active; ic++) {
+                        int c = active->ids[ic];
+
                         temp = m[a] * m[b] * m[c] * inv_r[a][b] * inv_r[a][b] * n[a][b][i];
+
                         if (b != a && c != a) {
                             result = temp * inv_r[a][c];
                             p_dot[a][i] += result;
                             dwdt[array_half + a * num_dim + i] += result;
                         }
+
                         if (b != a && c != b) {
                             result = temp * inv_r[b][c];
                             p_dot[a][i] += result;
@@ -193,8 +204,13 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         {
             double dUdx[array_half];
             compute_dUTT4_dx(w, ode_params, dUdx);
-            for (int i = 0; i < array_half; i++)
-                dwdt[array_half + i] -= dUdx[i];
+            for (int ia = 0; ia < active->num_active; ia++) {
+                int a = active->ids[ia];
+                for (int i = 0; i < num_dim; i++) {
+                    int idx = a * num_dim + i;
+                    dwdt[array_half + idx] -= dUdx[idx];
+                }
+            }
         }
         #endif
     }
@@ -207,10 +223,11 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         // Initialize arrays
         double x_rel_dot[num_bodies][num_bodies][num_dim];
 
-        for (int a = 0; a < num_bodies; a++) {
-            if (!ode_params->active[a]) continue;
-            for (int b = 0; b < num_bodies; b++) {
-                if (!ode_params->active[b]) continue;
+        for (int ia = 0; ia < active->num_active; ia++) {
+            int a = active->ids[ia];
+            for (int ib = 0; ib < active->num_active; ib++) {
+                int b = active->ids[ib];
+
                 for (int i = 0; i < num_dim; i++)
                     x_rel_dot[a][b][i] = x_dot[a][i] - x_dot[b][i];
             }
@@ -224,8 +241,8 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
             for (int j = 0; j < num_dim; j++)
                 chi_dot[i][j] = 0.0;
 
-        for (int a = 0; a < num_bodies; a++) { 
-            if (!ode_params->active[a]) continue;
+        for (int ia = 0; ia < active->num_active; ia++) { 
+            int a = active->ids[ia];
             for (int i = 0; i < num_dim; i++) {
                 for (int j = 0; j < num_dim; j++) {
                     for (int k = 0; k < num_dim; k++) {
@@ -235,18 +252,21 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
                 }
             }
         }
-   
+
         // Compute Chi values
         for (int i = 0; i < num_dim; i++) {
             for (int j = 0; j < num_dim; j++) {
-                for (int a = 0; a < num_bodies; a++) {
-                    if (!ode_params->active[a]) continue;
+                for (int ia = 0; ia < active->num_active; ia++) {
+                    int a = active->ids[ia];
+
                     chi_dot[i][j] += 2.0 * inv_m[a] * (
                         2 * dot_product(p_dot[a], p[a], num_dim) * delta(i, j) 
                         - 3 * (p_dot[a][i] * p[a][j] + p[a][i] * p_dot[a][j]) );
-                    
-                    for (int b = 0; b < num_bodies; b++) {
-                        if (b != a && ode_params->active[b]) {
+
+                    for (int ib = 0; ib < active->num_active; ib++) {
+                        int b = active->ids[ib];
+
+                        if (b != a) {
                             chi_dot[i][j] += m[a] * m[b] * inv_r[a][b] * inv_r[a][b] * (3 * 
                                 (x_rel_dot[a][b][i] * n[a][b][j] + n[a][b][i] * x_rel_dot[a][b][j])
                                 + dot_product(n[a][b], x_rel_dot[a][b], num_dim) * (delta(i, j) 
@@ -257,18 +277,22 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
             }
         }
 
-        for (int c = 0; c < num_bodies; c++) {
-            if (!ode_params->active[c]) continue;
+        for (int ic = 0; ic < active->num_active; ic++) {
+            int c = active->ids[ic];
+
             for (int i = 0; i < num_dim; i++) {
                 for (int j = 0; j < num_dim; j++) {
                     for (int k = 0; k < num_dim; k++) {
                         dp_chi[c][i][j][k] += 2.0 / m[c] * (2 * p[c][k] * delta(i, j) 
                             - 3 * (p[c][j] * delta(i, k) + p[c][i] * delta(j, k)));
-                        
-                        for (int a = 0; a < num_bodies; a++) {
-                            if (!ode_params->active[a]) continue;
-                            for (int b = 0; b < num_bodies; b++) {
-                                if (b != a && ode_params->active[b]) {
+
+                        for (int ia = 0; ia < active->num_active; ia++) {
+                            int a = active->ids[ia];
+
+                            for (int ib = 0; ib < active->num_active; ib++) {
+                                int b = active->ids[ib];
+
+                                if (b != a) {
                                     dx_chi[c][i][j][k] += m[a] * m[b] * inv_r[a][b] * inv_r[a][b] *
                                         (delta(a, c) - delta(b, c)) * 
                                         (3 * (delta(i, k) * n[a][b][j] 
@@ -284,8 +308,9 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         }
 
         // Add contribution to the ODE right-hand side
-        for (int a = 0; a < num_bodies; a++) {
-            if (!ode_params->active[a]) continue;
+        for (int ia = 0; ia < active->num_active; ia++) {
+            int a = active->ids[ia];
+
             for (int k = 0; k < num_dim; k++) {
                 for (int i = 0; i < num_dim; i++) {
                     for (int j = 0; j < num_dim; j++) {
@@ -298,35 +323,7 @@ void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dw
         }
     }
 
-    // --------------------------------------------------------------------------------------------
-    // Make sure inactive bodies are not evolved
-    // --------------------------------------------------------------------------------------------
-
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) {
-            for (int i = 0; i < num_dim; i++) {
-                dwdt[a * num_dim + i] = 0.0;
-                dwdt[array_half + a * num_dim + i] = 0.0;
-            }
-        }
-    }
-}
-
-
-static int component_is_active(int idx, struct ode_params *ode_params)
-{
-    int num_dim = ode_params->num_dim;
-    int num_bodies = ode_params->num_bodies_initial;
-    int array_half = num_dim * num_bodies;
-
-    int body;
-
-    if (idx < array_half)
-        body = idx / num_dim;
-    else
-        body = (idx - array_half) / num_dim;
-
-    return ode_params->active[body];
+    pair_cache_free(&cache);
 }
 
 
@@ -348,12 +345,16 @@ static int component_is_active(int idx, struct ode_params *ode_params)
 void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_params* ode_params,
     double *dwdt)
 {
-    int array_half = ode_params->num_dim * ode_params->num_bodies_initial;
+    int num_dim = ode_params->num_dim;
+    int num_bodies = ode_params->num_bodies_initial;
+    int array_half = num_dim * num_bodies;
     int total_dim = 2 * array_half;
     complex double w_c[total_dim];
     complex double H_cs_val;
     double dHdw[total_dim];
-    int p_flag;
+
+    ActiveList active;
+    active_list_init(&active, ode_params);
 
     // Copy original array to w_c and initialize dHdw
     for (int i = 0; i < total_dim; ++i) {
@@ -361,28 +362,56 @@ void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_
         dHdw[i] = 0.0;
     }
 
-    for (int i = 0; i < total_dim; ++i) {
-        if (!component_is_active(i, ode_params)) {
-            dHdw[i] = 0.0;
-            continue;
+    // Position derivatives: dH/dx.  These are needed for dp/dt = -dH/dx.
+    for (int ia = 0; ia < active.num_active; ia++) {
+        int a = active.ids[ia];
+
+        for (int k = 0; k < num_dim; k++) {
+            int idx = a * num_dim + k;
+
+            // Add tiny imaginary step in coordinate idx
+            w_c[idx] += I * h;
+
+            // p_flag = 0: keep position-only Hamiltonian terms
+            H_cs_val = H(w_c, ode_params, 0);
+            dHdw[idx] = cimag(H_cs_val) / h;
+
+            // Restore original value
+            w_c[idx] = (complex double)w[idx];
         }
-        p_flag = (i < array_half) ? 0 : 1;
-
-        // Add tiny imaginary step in coordinate i
-        w_c[i] += I * h; 
-
-        // Compute derivative
-        H_cs_val = H(w_c, ode_params, p_flag);
-        dHdw[i] = cimag(H_cs_val) / h;
-
-        // Restore original value
-        w_c[i] = (complex double)w[i];
     }
 
-    // Compute dwdt
-    for (int i = 0; i < array_half; i++) {
-        if (!component_is_active(i, ode_params)) continue;
-        dwdt[i] += dHdw[i + array_half];
-        dwdt[i + array_half] += -dHdw[i];
+    // Momentum derivatives: dH/dp.  These are needed for dx/dt = dH/dp.
+    for (int ia = 0; ia < active.num_active; ia++) {
+        int a = active.ids[ia];
+
+        for (int k = 0; k < num_dim; k++) {
+            int idx = array_half + a * num_dim + k;
+
+            // Add tiny imaginary step in momentum component idx
+            w_c[idx] += I * h;
+
+            // p_flag = 1: skip Hamiltonian terms without momentum dependence
+            H_cs_val = H(w_c, ode_params, 1);
+            dHdw[idx] = cimag(H_cs_val) / h;
+
+            // Restore original value
+            w_c[idx] = (complex double)w[idx];
+        }
     }
+
+    // Compute dwdt for active bodies only
+    for (int ia = 0; ia < active.num_active; ia++) {
+        int a = active.ids[ia];
+
+        for (int k = 0; k < num_dim; k++) {
+            int x_idx = a * num_dim + k;
+            int p_idx = array_half + a * num_dim + k;
+
+            dwdt[x_idx] += dHdw[p_idx];
+            dwdt[p_idx] += -dHdw[x_idx];
+        }
+    }
+
+    active_list_free(&active);
 }
