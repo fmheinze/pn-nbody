@@ -2,16 +2,22 @@
 Software for the direct integration of the Newtonian and post-Newtonian equations of motion of the gravitational N-body problem (for more information, see [Heinze, Schäfer & Brügmann 2026](https://arxiv.org/abs/2602.06961)).
 
 ## Features
-* Direct integration of the post-Newtonian equations of motion up to 2.5PN order, suitable for relativistic simulations of few-body systems (first code to fully include all post-Newtonian terms for N bodies at 2PN order)
-* Implemented methods: adaptive embedded 5th-order Runge-Kutta method, the symmetric and symplectic implicit midpoint method, and the 4th-order Runge-Kutta method
-* Convenient use of customizable relativistic initial condition presets (e.g. binary, binary-single scattering, binary-binary scattering, hierarchical triple, figure-eight orbit) for different post-Newtonian approximations
+* Direct integration of nonspinning post-Newtonian N-body dynamics through conservative 2PN order, including the leading dissipative 2.5PN radiation-reaction terms
+* Complete general-N 2PN dynamics, including optional numerical evaluation of the four-body \(U_{\mathrm{TT}}^{(4)}\) contribution for \(N \geq 4\)
+* Multiple integration methods: the adaptive Cash–Karp embedded Runge–Kutta RK5(4) method, the second-order symmetric and symplectic implicit midpoint method, and the classical fourth-order Runge–Kutta method
+* Configurable initial-condition presets for binaries, hierarchical triples, binary–single and binary–binary scattering, figure-eight configurations, Newtonian Plummer clusters, and relativistic monoenergetic clusters
+* Automatic merger handling with active-body bookkeeping, remnant-generation tracking, and merger-event output
+* NR-calibrated analytic prescriptions for the remnant mass, spin, and recoil kick, including Lousto–Zlochower and Barausse-based options
+* Optional impulse splitting to reduce the number of expensive \(U_{\mathrm{TT}}^{(4)}\) evaluations
+* Python tools for static trajectory plots and two- or three-dimensional animations
+
+To our knowledge, `pn-nbody` is the first publicly available code to implement the complete general-\(N\) dynamics through 2PN order, including the four-body \(U_{\mathrm{TT}}^{(4)}\) contribution.
 
 ## Todo
 * Performance optimizations (parallelization, approximations for objects further away)
 * Regularization / handle close encounters
 * Additional ODE integration methods (e.g. higher-order symplectic methods, Hermite integrators)
 * Spins and spin evolution
-* Mergers
 
 ## Requirements
 * C compiler (e.g. gcc/clang)
