@@ -14,7 +14,7 @@ num_bodies           = 3                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 7000.0                          # Final time
+t_end                = 5000.0                          # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -32,7 +32,6 @@ ic_preset            = binary_single_scattering        # Initial condition prese
 mass1                = 0.5                             # Mass of body 1
 mass2                = 1.5                             # Mass of body 2
 mass3                = 1.0                             # Mass of body 3
-mass4                = 1.0                             # Mass of body 4
 
 binary_a             = 40.0                            # Semi-major axis of binary
 binary_e             = 0.3                             # Eccentricity of binary
@@ -41,7 +40,7 @@ binary_h_hat         = 1.0 -1.0 0.0                    # Angular momentum direct
 binary_e_hat         = 1.0 1.0 0.0                     # Periapsis direction of binary
 
 d0                   = 500.0                           # Initial distance for the scattering
-p0_rel               = 0.15                            # Initial momentum for the scattering
+p0_rel               = 0.1                             # Initial momentum for the scattering
 b                    = 100.0                           # Scattering impact parameter
 
 

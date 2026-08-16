@@ -14,7 +14,7 @@ num_bodies           = 4                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 1000.0                           # Final time
+t_end                = 1000.0                          # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -27,6 +27,14 @@ include_utt4         = 0
 
 
 # -------------------------------------------------------------------------------------------------
+# Merger settings
+# -------------------------------------------------------------------------------------------------
+merge_activate       = 1                               # Whether to activate mergers
+merge_factor         = 2.0                             # Distance at which to merge
+remnant_prescription = lz                              # Analytic remnant property prescription
+
+
+# -------------------------------------------------------------------------------------------------
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
 ic_preset            = binary_binary_scattering_circ   # Initial condition preset
@@ -36,23 +44,18 @@ mass3                = 0.5                             # Mass of body 3
 mass4                = 0.5                             # Mass of body 4
 
 d0                   = 100.0                           # Initial distance for the scattering
-p0_rel               = 0.05                            # Initial momentum for the scattering
+p0_rel               = 0.1                             # Initial momentum for the scattering
 b                    = 34.0                            # Scattering impact parameter
 
-binary1_r0            = 5.5                            # Initial radius of the binary 1
-binary1_pt0           = 0.087364                       # Initial tangential momentum of the binary 1
-binary1_pr0           = 0.00060110	               # Initial radial momentum of the binary 1
-binary1_phi0          = 0.4                            # Initial phase of binary 1
+binary1_r0           = 5.5                             # Initial radius of the binary 1
+binary1_pt0          = 0.087364                        # Initial tangential momentum of the binary 1
+binary1_pr0          = 0.00060110	               # Initial radial momentum of the binary 1
+binary1_phi0         = 0.4                             # Initial phase of binary 1
 
-binary2_r0            = 5.5                            # Initial radius of the binary 2
-binary2_pt0           = 0.087364                       # Initial tangential momentum of the binary 2
-binary2_pr0           = 0.00060110	               # Initial radial momentum of the binary 2
-binary2_phi0          = 1.8                            # Initial phase of binary 2
-
-spin1 = 0.0 0.0 0.8
-spin2 = 0.0 0.0 0.8
-spin3 = 0.0 0.8 0.0
-spin4 = 0.8 0.0 0.0
+binary2_r0           = 5.5                             # Initial radius of the binary 2
+binary2_pt0          = 0.087364                        # Initial tangential momentum of the binary 2
+binary2_pr0          = 0.00060110	               # Initial radial momentum of the binary 2
+binary2_phi0         = 1.8                             # Initial phase of binary 2
 
 
 

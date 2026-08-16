@@ -3,6 +3,7 @@
 
 struct ode_params; 
 
+
 // Binary struct
 struct binary_params {
     double a;           // Semi-major axis
@@ -19,6 +20,26 @@ struct binary_params {
     double h_hat[3];    // Orbital angular momentum direction
     double e_hat[3];    // Periapsis / eccentricity-vector direction
 };
+
+
+// Struct for relativistic monoenergetic cluster
+struct rel_mono_model {
+    int n;
+    int cap;
+
+    double *x;       // dimensionless areal radius x = r sqrt(4 pi rho_c)
+    double *mu;      // dimensionless mass mu = m sqrt(4 pi rho_c)
+    double *z;       // z = E0 exp(-nu) / m0 = local Lorentz factor
+    double *xiso;    // dimensionless isotropic radius
+    double *cdf;     // proper rest-mass CDF
+
+    double zc;
+    double x_surf;
+    double mu_surf;
+    double mu0_surf;
+    double compactness;   // R / M = x_surf / mu_surf
+};
+
 
 void position_binary(double com_pos[3], double h_input[3], double e_input[3], double w0[12]);
 
@@ -46,7 +67,7 @@ void ic_binary_binary_scattering_circ(double d0, double p0_rel, double b, double
     
 void ic_figure_eight_orbit(struct ode_params* params, double width, double* w0);
 
-void ic_virialized_cluster(struct ode_params* params, double compactness,
+void ic_newtonian_plummer_cluster(struct ode_params* params, double compactness,
     double virial_ratio, double rmax_factor, double min_sep_factor,
     unsigned long long seed, double* w0);
 

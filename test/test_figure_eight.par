@@ -1,4 +1,4 @@
-# Test for a figure-eight orbit (possible up to 2PN)
+# Test for a figure-eight orbit
 
 # -------------------------------------------------------------------------------------------------
 # General parameters
@@ -14,7 +14,7 @@ num_bodies           = 3                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 5000.0                          # Final time
+t_end                = 20000.0                          # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -32,7 +32,7 @@ ic_preset            = figure_eight                    # Initial condition prese
 mass1                = 1.0                             # Mass of body 1
 mass2                = 1.0                             # Mass of body 2
 mass3                = 1.0                             # Mass of body 3
-figure_eight_width   = 100.0                           # Figure-eight width
+figure_eight_width   = 150.0                           # Figure-eight width
 
 
 # -------------------------------------------------------------------------------------------------

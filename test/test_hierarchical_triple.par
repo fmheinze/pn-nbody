@@ -14,7 +14,7 @@ num_bodies           = 3                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 15000.0                         # Final time
+t_end                = 30000.0                         # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -39,7 +39,7 @@ binary1_h_hat        = 1.0 0.0 0.0                     # Angular momentum direct
 binary1_e_hat        = 0.0 0.0 1.0                     # Periapsis direction of inner binary
 
 binary2_e            = 0.5                             # Eccentricity of outer binary
-binary2_a            = 300.0	                       # Pericenter distance of outer binary
+binary2_a            = 400.0	                       # Semi-major axis of outer binary
 binary2_f0           = 0.9                             # True anomaly of outer binary
 binary2_h_hat        = 0.0 0.0 1.0                     # Angular momentum direction of outer binary
 binary2_e_hat        = 1.0 0.0 0.0                     # Periapsis direction of outer binary

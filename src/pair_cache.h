@@ -2,40 +2,54 @@
 #define PAIR_CACHE_H
 
 #include "active_list.h"
-#include "eom.h"
+
 
 /**
- * @brief Cached geometric and momentum invariants for one RHS evaluation.
+ * @brief Independently refreshable parts of the persistent pair cache.
  *
- * This is infrastructure for the analytic 2PN RHS. It does not change the
- * equations of motion by itself. The expensive analytic terms can later reuse:
- *
- *   r_ab, 1/r_ab, 1/r_ab^2, n_ab,
- *   p_a, p_a^2, p_a.p_b, n_ab.p_c.
- *
- * Arrays are stored flat for contiguous memory access.
+ * Dependencies are added automatically by pair_cache_refresh. In particular, pair momentum
+ * invariants imply geometry and all non-empty levels imply the mass/momentum-reference level.
  */
-typedef struct {
+enum PairCacheLevel {
+    PAIR_CACHE_LEVEL_NONE          = 0u,
+    PAIR_CACHE_LEVEL_MASS_MOMENTUM = 1u << 0,
+    PAIR_CACHE_LEVEL_GEOMETRY      = 1u << 1,
+    PAIR_CACHE_LEVEL_P2            = 1u << 2,
+    PAIR_CACHE_LEVEL_PAIR_DOTS     = 1u << 3,
+    PAIR_CACHE_LEVEL_FULL = PAIR_CACHE_LEVEL_MASS_MOMENTUM | PAIR_CACHE_LEVEL_GEOMETRY |
+        PAIR_CACHE_LEVEL_P2 | PAIR_CACHE_LEVEL_PAIR_DOTS
+};
+
+
+/**
+ * @brief Persistent RHS workspace for pair geometry and momentum invariants.
+ *
+ * Owned arrays are allocated once by pair_cache_create and refreshed in place. The masses and
+ * current momenta are references to ode_params->masses and the momentum half of the current state
+ * vector, respectively. A single ode_params instance must not be evaluated concurrently by
+ * multiple threads because refreshes intentionally reuse this mutable workspace.
+ */
+typedef struct PairCache {
     int num_bodies;
     int num_dim;
     int array_half;
+    unsigned int built_levels;
 
     ActiveList active;
 
-    double *m;        // [N]
-    double *inv_m;    // [N]
+    const double *m;       // [N], non-owning reference
+    double *inv_m;         // [N]
 
-    double *p;        // [N*D]
-    double *p2;       // [N]
-    double *p_dot;    // [N*N], p_a . p_b
+    const double *p;       // [N*D], non-owning reference
+    double *p2;            // [N]
+    double *p_dot;         // [N*N], p_a . p_b
 
-    double *x_rel;    // [N*N*D], x_a - x_b
-    double *r;        // [N*N]
-    double *inv_r;    // [N*N]
-    double *inv_r2;   // [N*N]
-    double *n;        // [N*N*D], n_ab
+    double *r;             // [N*N]
+    double *inv_r;         // [N*N]
+    double *n;             // [N*N*D], n_ab
 
-    double *n_dot_p;  // [N*N*N], n_ab . p_c
+    double *n_dot_p_a;     // [N*N], n_ab . p_a
+    double *n_dot_p_b;     // [N*N], n_ab . p_b
 } PairCache;
 
 
@@ -51,21 +65,9 @@ static inline int pair_cache_idx3(const PairCache *cache, int a, int b, int i)
 }
 
 
-static inline int pair_cache_idx_ndotp(const PairCache *cache, int a, int b, int c)
-{
-    return (a * cache->num_bodies + b) * cache->num_bodies + c;
-}
-
-
 static inline double pair_cache_p(const PairCache *cache, int a, int i)
 {
     return cache->p[a * cache->num_dim + i];
-}
-
-
-static inline double pair_cache_xrel(const PairCache *cache, int a, int b, int i)
-{
-    return cache->x_rel[pair_cache_idx3(cache, a, b, i)];
 }
 
 
@@ -93,22 +95,35 @@ static inline double pair_cache_p_dot(const PairCache *cache, int a, int b)
 }
 
 
+/**
+ * @brief Return n_ab . p_c without an O(N^3) cache.
+ *
+ * The two common pair-endpoint cases use cached O(N^2) arrays. Arbitrary c is
+ * evaluated on demand in O(D), which is cheaper than maintaining N^3 storage.
+ */
 static inline double pair_cache_n_dot_p(const PairCache *cache, int a, int b, int c)
 {
-    return cache->n_dot_p[pair_cache_idx_ndotp(cache, a, b, c)];
+    const int idx = pair_cache_idx2(cache, a, b);
+
+    if (cache->built_levels & PAIR_CACHE_LEVEL_PAIR_DOTS) {
+        if (c == a)
+            return cache->n_dot_p_a[idx];
+        if (c == b)
+            return cache->n_dot_p_b[idx];
+    }
+
+    double result = 0.0;
+    for (int i = 0; i < cache->num_dim; ++i)
+        result += pair_cache_n(cache, a, b, i) * pair_cache_p(cache, c, i);
+    return result;
 }
 
 
-/**
- * @brief Build all cached quantities from the current state vector.
- *
- * Call pair_cache_free after use.
- */
-void pair_cache_build(PairCache *cache, const double *w, const struct ode_params *ode_params);
-
-/**
- * @brief Release all memory owned by the cache.
- */
-void pair_cache_free(PairCache *cache);
+PairCache *pair_cache_create(const struct ode_params *ode_params);
+void pair_cache_destroy(PairCache *cache);
+PairCache *pair_cache_get_workspace(struct ode_params *ode_params);
+void pair_cache_refresh(PairCache *cache, const double *w, const struct ode_params *ode_params,
+    unsigned int levels);
+unsigned int pair_cache_levels_for_rhs(const struct ode_params *ode_params);
 
 #endif

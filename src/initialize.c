@@ -16,6 +16,7 @@
 #include "parameters.h"
 #include "utils.h"
 #include "initial_configurations.h"
+#include "pair_cache.h"
 
 #define NUM_PN_TERMS 4
 
@@ -57,7 +58,7 @@ void initialize_parameters()
     // Cash-Karp method
     if (strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
         add_parameter("rtol", "-1", "target relative error tolerance [> 0]");
-        add_parameter("dt_max", "-1", "target relative error tolerance [> 0]");
+        add_parameter("dt_max", "-1", "maximum adaptive timestep [> 0]");
     }
 
     // Implicit-midpoint
@@ -168,7 +169,7 @@ void initialize_parameters()
 
     // Binary-binary scattering
     if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering") == 0) {
-        add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
+        add_parameter("d0", "-1", "initial distance of the binaries [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
         add_parameter("binary1_a", "-1", "semi-major axis of binary 1 [> 0]");
@@ -199,7 +200,7 @@ void initialize_parameters()
 
     // Circular binary-binary scattering
     if (strcmp(get_parameter_string("ic_preset"), "binary_binary_scattering_circ") == 0) {
-        add_parameter("d0", "-1", "initial distance of the binary and the single [> 0]");
+        add_parameter("d0", "-1", "initial distance of the binaries [> 0]");
         add_parameter("p0_rel", "-1", "initial relative approach momentum [>= 0]");
         add_parameter("b", "-1", "scattering impact parameter [>= 0]");
         add_parameter("orientation_1", "-1", "components of the orientation of binary 1");
@@ -252,29 +253,58 @@ void initialize_parameters()
     // --------------------------------------------------------------------------------------------
     // Parameters associated with individual bodies
     // --------------------------------------------------------------------------------------------
-    int num_bodies = get_parameter_int("num_bodies"); 
+    int num_bodies = get_parameter_int("num_bodies");
+    int num_dim = get_parameter_int("num_dim");
+    const char *phase_space_vector_default =
+        (num_dim == 2) ? "0.0 0.0" : "0.0 0.0 0.0";
+
     for(int i = 1; i < num_bodies+1; i++) {
         add_parameter_i("mass", i, "0.0", "mass of body i [>= 0]");
-        add_parameter_i("pos", i, "0.0 0.0 0.0", "coordinates of the initial position of body i");
-        add_parameter_i("p", i, "0.0 0.0 0.0", "components of the initial momentum of body i");
+        add_parameter_i("pos", i, phase_space_vector_default,
+            "coordinates of the initial position of body i");
+        add_parameter_i("p", i, phase_space_vector_default,
+            "components of the initial momentum of body i");
         add_parameter_i("spin", i, "0.0 0.0 0.0", "components of the initial spin of body i");
     }
+}
+
+
+/** Return whether an initial-condition preset requires three spatial dimensions. */
+static int preset_requires_3d(const char *preset)
+{
+    static const char *const presets_3d[] = {
+        "hierarchical_triple",
+        "binary_single_scattering",
+        "binary_single_scattering_circ",
+        "binary_binary_scattering",
+        "binary_binary_scattering_circ",
+        "virialized_cluster",
+        "relativistic_monoenergetic_cluster"
+    };
+
+    const size_t count = sizeof(presets_3d) / sizeof(presets_3d[0]);
+
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(preset, presets_3d[i]) == 0)
+            return 1;
+    }
+
+    return 0;
 }
 
 
 /**
  * @brief Construct and return an ode_params struct from the parameter database.
  *
- * Loads all global simulation/ODE configuration needed by the integrator and the ODE
- * right-hand side (RHS), and caches them in an ode_params struct to avoid repeated
- * parameter-database lookups during RHS evaluations. The returned struct contains heap-allocated 
- * arrays (params.masses and params.pn_terms) and the caller is responsible for freeing these.
+ * The returned structure owns its masses, PN-term flags, merger-history arrays,
+ * remnant-prescription string, and persistent pair-cache workspace. The caller must release these
+ * resources with free_ode_params().
  *
- * @return Fully initialized ode_params with cached configuration and allocated arrays.
+ * @return Fully initialized ode_params structure.
  */
 struct ode_params initialize_ode_params()
 {
-    struct ode_params params;
+    struct ode_params params = {0};
 
     // General parameters
     params.num_dim = get_parameter_int("num_dim");
@@ -305,8 +335,8 @@ struct ode_params initialize_ode_params()
         params.include_utt4 = 0;
     }
     if (params.include_utt4 == 1) {
-        params.utt4_mineval = (int) get_parameter_double("utt4_mineval");
-        params.utt4_maxeval = (int) get_parameter_double("utt4_maxeval");
+        params.utt4_mineval = get_parameter_int("utt4_mineval");
+        params.utt4_maxeval = get_parameter_int("utt4_maxeval");
         params.utt4_epsrel = get_parameter_double("utt4_epsrel");
         params.utt4_epsabs = get_parameter_double("utt4_epsabs");
     } else {
@@ -319,9 +349,14 @@ struct ode_params initialize_ode_params()
     // Merger history
     params.num_active = params.num_bodies_initial;
     params.next_body_id = params.num_bodies_initial;
-    params.active = malloc(params.num_bodies_initial * sizeof(int));
-    params.body_id = malloc(params.num_bodies_initial * sizeof(long long));
-    params.generation = malloc(params.num_bodies_initial * sizeof(int));
+    params.active = malloc(params.num_bodies_initial * sizeof(*params.active));
+    params.body_id = malloc(params.num_bodies_initial * sizeof(*params.body_id));
+    params.generation = malloc(params.num_bodies_initial * sizeof(*params.generation));
+
+    if (params.active == NULL ||
+        params.body_id == NULL ||
+        params.generation == NULL)
+        errorexit("Could not allocate merger-history arrays");
 
     for (int i = 0; i < params.num_bodies_initial; i++) {
         params.active[i] = 1;
@@ -332,8 +367,10 @@ struct ode_params initialize_ode_params()
     // Merger remnant
     params.merge_activate = get_parameter_int("merge_activate");
     params.merge_factor = get_parameter_double("merge_factor");
-    params.remnant_prescription = malloc(256 * sizeof(char));
-    params.remnant_prescription = get_parameter_string("remnant_prescription");
+    const char *remnant_prescription = get_parameter_string("remnant_prescription");
+    params.remnant_prescription = strdup(remnant_prescription);
+    if (params.remnant_prescription == NULL)
+        errorexit("Could not allocate remnant_prescription");
 
     // Check validity
     if (params.num_dim != 2 && params.num_dim != 3) 
@@ -348,6 +385,17 @@ struct ode_params initialize_ode_params()
         if (params.pn_terms[i] != 0 && params.pn_terms[i] != 1) 
             errorexit("Please set pn_terms to 0 (off) or 1 (on)");
     }
+    if (params.num_dim != 3 && (params.pn_terms[2] == 1 || params.pn_terms[3] == 1))
+        errorexit("The 2PN and 2.5PN equations of motion require num_dim = 3");
+
+    const char *preset = get_parameter_string("ic_preset");
+    if (params.num_dim != 3 && preset_requires_3d(preset)) {
+        char message[256];
+        snprintf(message, sizeof(message),
+            "Initial-condition preset \"%s\" requires num_dim = 3", preset);
+        errorexit(message);
+    }
+
     if (params.use_impulse_method != 0 && params.use_impulse_method != 1)
         errorexit("Please set impulse_method to 0 (off) or 1 (on)");
     if (params.include_utt4 != 0 && params.include_utt4 != 1)
@@ -388,6 +436,8 @@ struct ode_params initialize_ode_params()
             "Consider turning it off via include_utt4 = 0\n");
     }
 
+    params.pair_cache = pair_cache_create(&params);
+
     return params;
 }
 
@@ -421,10 +471,16 @@ struct binary_params initialize_binary_params(int i)
     params.Omega = get_binary_parameter_double_i("Omega", i);
     params.omega = get_binary_parameter_double_i("omega", i);
 
+    double *h_hat = get_binary_parameter_double_array_i_checked("h_hat", i, 3);
+    double *e_hat = get_binary_parameter_double_array_i_checked("e_hat", i, 3);
+
     for (int j = 0; j < 3; j++) {
-        params.h_hat[j] = get_binary_parameter_double_array_i("h_hat", i)[j];
-        params.e_hat[j] = get_binary_parameter_double_array_i("e_hat", i)[j];
+        params.h_hat[j] = h_hat[j];
+        params.e_hat[j] = e_hat[j];
     }
+
+    free_vector(h_hat);
+    free_vector(e_hat);
 
     // --------------------------------------------------------------------------------------------
     // Initialization of non-orientation parameters
@@ -693,6 +749,37 @@ struct binary_params initialize_binary_params(int i)
 }
 
 
+// Validate whether the number of bodies is consistent with the selected preset.
+static void validate_fixed_size_preset(const char *preset, int num_bodies)
+{
+    static const struct {
+        const char *name;
+        int required_num_bodies;
+    } fixed_size_presets[] = {
+        {"binary", 2},
+        {"hierarchical_triple", 3},
+        {"binary_single_scattering", 3},
+        {"binary_single_scattering_circ", 3},
+        {"binary_binary_scattering", 4},
+        {"binary_binary_scattering_circ", 4},
+        {"figure_eight", 3}
+    };
+
+    const size_t count = sizeof(fixed_size_presets) / sizeof(fixed_size_presets[0]);
+
+    for (size_t i = 0; i < count; i++) {
+        if (strcmp(preset, fixed_size_presets[i].name) == 0 &&
+            num_bodies != fixed_size_presets[i].required_num_bodies) {
+            char message[256];
+            snprintf(message, sizeof(message),
+                "Initial-condition preset \"%s\" requires num_bodies = %d, but num_bodies = %d",
+                preset, fixed_size_presets[i].required_num_bodies, num_bodies);
+            errorexit(message);
+        }
+    }
+}
+
+
 /**
  * @brief Build and return the initial state vector w0.
  *
@@ -709,13 +796,15 @@ double* initialize_state_vector(struct ode_params* ode_params)
 {
     int num_dim = ode_params->num_dim;
     int num_bodies = ode_params->num_bodies_initial;
+    const char *preset = get_parameter_string("ic_preset");
+
+    validate_fixed_size_preset(preset, num_bodies);
 
     // Allocate state vector
     double* w0;
     allocate_vector(&w0, 2 * num_dim * num_bodies + 3 * num_bodies);
 
     // Check whether an initial condition preset has been selected and initialize w0 accordinly
-    const char *preset = get_parameter_string("ic_preset");
     if (strcmp(preset, "-1") != 0) {
         if (strcmp(preset, "binary") == 0)
             initialize_binary(ode_params, w0);
@@ -755,8 +844,8 @@ double* initialize_state_vector(struct ode_params* ode_params)
     // If no initial condition preset has been selected, use specified positions and momenta
     else {
         for (int i = 0; i < num_bodies; i++) {
-            double* pos = get_parameter_double_array_i("pos", i+1); 
-            double* p = get_parameter_double_array_i("p", i+1); 
+            double* pos = get_parameter_double_array_i_checked("pos", i + 1, num_dim);
+            double* p = get_parameter_double_array_i_checked("p", i + 1, num_dim);
             for (int j = 0; j < num_dim; j++) {
                 w0[i * num_dim + j] = pos[j];
                 w0[num_dim * num_bodies + i * num_dim + j] = p[j];
@@ -770,7 +859,7 @@ double* initialize_state_vector(struct ode_params* ode_params)
     int spin_offset = 2 * num_dim * num_bodies;
 
     for (int i = 0; i < num_bodies; i++) {
-        double *spin = get_parameter_double_array_i("spin", i + 1);
+        double *spin = get_parameter_double_array_i_checked("spin", i + 1, 3);
         double chi2 = 0.0;
 
         for (int j = 0; j < 3; j++) {
@@ -855,7 +944,7 @@ void initialize_binary_single_scattering(struct ode_params* ode_params, double* 
     double b = get_parameter_double("b");
 
     // Check specified values for validity
-    if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
+    if (d0 <= 0) errorexit("Please specify a valid d0 (must be d0 > 0)");
     if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
 
@@ -891,14 +980,11 @@ void initialize_binary_single_scattering_circ(struct ode_params* ode_params, dou
     double* orientation;
     if (strcmp(get_parameter_string("orientation"), "-1") == 0)
         orientation = NULL;
-    else {
-        allocate_vector(&orientation, 3);
-        for (int i = 0; i < 3; i++)
-            orientation[i] = get_parameter_double_array("orientation")[i];
-    }
+    else
+        orientation = get_parameter_double_array_checked("orientation", 3);
 
     // Check specified values for validity
-    if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
+    if (d0 <= 0) errorexit("Please specify a valid d0 (must be d0 > 0)");
     if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
     if (binary_r0 <= 0) errorexit("Please specify a valid binary_r0 (must be binary_r0 > 0)");
@@ -937,7 +1023,7 @@ void initialize_binary_binary_scattering(struct ode_params* ode_params, double* 
     double b = get_parameter_double("b");
 
     // Check specified values for validity
-    if (d0 < 0) errorexit("Please specify a valid d0 (d0 >= 0)");
+    if (d0 <= 0) errorexit("Please specify a valid d0 (d0 > 0)");
     if (p0_rel < 0) errorexit("Please specify a valid p0_rel (p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (|b| <= d0)");
 
@@ -974,22 +1060,17 @@ void initialize_binary_binary_scattering_circ(struct ode_params* ode_params, dou
     double* orientation_1;
     if (strcmp(get_parameter_string("orientation_1"), "-1") == 0)
         orientation_1 = NULL;
-    else {
-        allocate_vector(&orientation_1, 3);
-        for (int i = 0; i < 3; i++)
-            orientation_1[i] = get_parameter_double_array("orientation_1")[i];
-    }
+    else
+        orientation_1 = get_parameter_double_array_checked("orientation_1", 3);
+
     double* orientation_2;
     if (strcmp(get_parameter_string("orientation_2"), "-1") == 0)
         orientation_2 = NULL;
-    else {
-        allocate_vector(&orientation_2, 3);
-        for (int i = 0; i < 3; i++)
-            orientation_2[i] = get_parameter_double_array("orientation_2")[i];
-    }
+    else
+        orientation_2 = get_parameter_double_array_checked("orientation_2", 3);
 
     // Check specified values for validity
-    if (d0 < 0) errorexit("Please specify a valid d0 (must be d0 >= 0)");
+    if (d0 <= 0) errorexit("Please specify a valid d0 (must be d0 > 0)");
     if (p0_rel < 0) errorexit("Please specify a valid p0_rel (must be p0_rel >= 0)");
     if (fabs(b) > d0) errorexit("Please specify a valid b (must be |b| <= d0)");
     if (binary1_r0 <= 0) errorexit("Please specify a valid binary1_r0 (must be binary1_r0 > 0)");
@@ -1090,7 +1171,7 @@ void initialize_virialized_cluster(struct ode_params* ode_params, double* w0)
                "effects. Consider starting with R_v/M = 50, 100, 200.\n", compactness);
     }
 
-    ic_virialized_cluster(ode_params, compactness, virial_ratio, rmax_factor,
+    ic_newtonian_plummer_cluster(ode_params, compactness, virial_ratio, rmax_factor,
         min_sep_factor, (unsigned long long) seed_int, w0);
 }
 

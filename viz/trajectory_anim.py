@@ -27,15 +27,23 @@ Optional:
   --duration SECONDS   Target playback length (default 10).
   --max-frames N       Hard cap on animation frames (default 2000).
   --interval MS        Delay between frames in ms (default 30).
+  --xlim MIN MAX       Manually set x-axis limits.
+  --ylim MIN MAX       Manually set y-axis limits.
+  --zlim MIN MAX       Manually set z-axis limits for 3D data.
+  --save-dir DIR       Save the animation to DIR instead of only showing it.
+  --movie-name NAME    Output filename, e.g. movie.mp4 or movie.gif.
+  --writer ffmpeg|pillow
+                        Movie writer. Use ffmpeg for mp4, pillow for gif.
 """
 
 import argparse
 import math
+from pathlib import Path
 from typing import Tuple, List, Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
+from matplotlib.animation import FuncAnimation, FFMpegWriter, PillowWriter, writers
 
 
 def _load_data(path: str) -> Tuple[np.ndarray, Optional[List[str]]]:
@@ -189,6 +197,86 @@ def _set_equal_axes_3d(ax, pos: np.ndarray, pad_frac: float = 0.05):
         ax.set_box_aspect((1, 1, 1))
 
 
+
+def _validate_limits(name: str, lim: Optional[List[float]]) -> Optional[Tuple[float, float]]:
+    """
+    Validate a two-value axis limit argument.
+    """
+    if lim is None:
+        return None
+
+    lo, hi = float(lim[0]), float(lim[1])
+    if not np.isfinite(lo) or not np.isfinite(hi):
+        raise ValueError(f"{name} values must be finite. Got {lim}.")
+    if lo >= hi:
+        raise ValueError(f"{name} must satisfy MIN < MAX. Got {lim}.")
+    return lo, hi
+
+
+def _apply_manual_axis_limits(
+    ax,
+    dim: int,
+    xlim: Optional[Tuple[float, float]],
+    ylim: Optional[Tuple[float, float]],
+    zlim: Optional[Tuple[float, float]],
+):
+    """
+    Apply manual limits after automatic equal-axis setup.
+    Limits that are None keep the automatic value.
+    """
+    if xlim is not None:
+        ax.set_xlim(*xlim)
+    if ylim is not None:
+        ax.set_ylim(*ylim)
+    if zlim is not None:
+        if dim == 3:
+            ax.set_zlim(*zlim)
+        else:
+            print("Warning: --zlim was given but the data are 2D; ignoring z limits.")
+
+
+def _make_movie_path(save_dir: str, movie_name: Optional[str], input_file: str, writer_name: str) -> Path:
+    """
+    Construct the output movie path and create the output directory.
+    """
+    outdir = Path(save_dir).expanduser().resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
+
+    if movie_name is None:
+        suffix = ".gif" if writer_name == "pillow" else ".mp4"
+        name = Path(input_file).stem + "_trajectory" + suffix
+    else:
+        name = movie_name
+
+    outpath = outdir / name
+    if outpath.suffix == "":
+        outpath = outpath.with_suffix(".gif" if writer_name == "pillow" else ".mp4")
+
+    return outpath
+
+
+def _save_animation(ani: FuncAnimation, outpath: Path, writer_name: str, fps: float, dpi: int):
+    """
+    Save animation as mp4/gif.
+    """
+    if fps <= 0:
+        raise ValueError(f"fps must be positive. Got {fps}.")
+
+    if writer_name == "ffmpeg":
+        if not writers.is_available("ffmpeg"):
+            raise RuntimeError(
+                "Matplotlib cannot find ffmpeg. Install ffmpeg or use "
+                "--writer pillow --movie-name movie.gif."
+            )
+        writer = FFMpegWriter(fps=fps, metadata={"artist": "trajectory_anim"})
+    elif writer_name == "pillow":
+        writer = PillowWriter(fps=fps)
+    else:
+        raise ValueError(f"Unknown writer: {writer_name}")
+
+    ani.save(str(outpath), writer=writer, dpi=dpi)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("file", help="Path to trajectory data file (whitespace-delimited).")
@@ -198,7 +286,29 @@ def main():
     ap.add_argument("--interval", type=int, default=30, help="Delay between frames in ms.")
     ap.add_argument("--trail", type=int, default=0,
                     help="If >0, show only the last TRAIL points of each trajectory (0 = full).")
+    ap.add_argument("--xlim", type=float, nargs=2, metavar=("MIN", "MAX"), default=None,
+                    help="Manual x-axis limits: --xlim MIN MAX.")
+    ap.add_argument("--ylim", type=float, nargs=2, metavar=("MIN", "MAX"), default=None,
+                    help="Manual y-axis limits: --ylim MIN MAX.")
+    ap.add_argument("--zlim", type=float, nargs=2, metavar=("MIN", "MAX"), default=None,
+                    help="Manual z-axis limits for 3D data: --zlim MIN MAX.")
+    ap.add_argument("--save-dir", default=None,
+                    help="If set, save the animation movie to this directory instead of only showing it.")
+    ap.add_argument("--movie-name", default=None,
+                    help="Output movie filename, e.g. cluster.mp4 or cluster.gif. Default: <input_stem>_trajectory.mp4.")
+    ap.add_argument("--writer", choices=["ffmpeg", "pillow"], default="ffmpeg",
+                    help="Animation writer. Use ffmpeg for mp4, pillow for gif. Default: ffmpeg.")
+    ap.add_argument("--fps", type=float, default=None,
+                    help="Frames per second for saved movies. Default: 1000 / interval.")
+    ap.add_argument("--dpi", type=int, default=150,
+                    help="DPI for saved movies. Default: 150.")
+    ap.add_argument("--show", action="store_true",
+                    help="Show the interactive animation window even when --save-dir is used.")
     args = ap.parse_args()
+
+    xlim = _validate_limits("--xlim", args.xlim)
+    ylim = _validate_limits("--ylim", args.ylim)
+    zlim = _validate_limits("--zlim", args.zlim)
 
     data, names = _load_data(args.file)
     dim = _infer_dim(data.shape[1], names, args.dim)
@@ -225,6 +335,8 @@ def main():
         _set_equal_axes_2d(ax, pos_anim)
         ax.set_facecolor("whitesmoke")
         ax.grid(ls="--", alpha=0.5)
+
+    _apply_manual_axis_limits(ax, dim, xlim, ylim, zlim)
 
     # Artists: one line + one point per body, sharing color
     lines = []
@@ -285,7 +397,20 @@ def main():
     ani = FuncAnimation(fig, update, frames=len(t_anim), init_func=init,
                         interval=args.interval, blit=False)
 
-    plt.show()
+    if args.save_dir is not None:
+        fps = args.fps if args.fps is not None else 1000.0 / max(args.interval, 1)
+        outpath = _make_movie_path(args.save_dir, args.movie_name, args.file, args.writer)
+        print(f"Saving animation to: {outpath}")
+        print(f"Frames: {len(t_anim)}, fps: {fps:g}, writer: {args.writer}, dpi: {args.dpi}")
+        _save_animation(ani, outpath, args.writer, fps=fps, dpi=args.dpi)
+        print("Done.")
+
+        if args.show:
+            plt.show()
+        else:
+            plt.close(fig)
+    else:
+        plt.show()
 
 
 if __name__ == "__main__":

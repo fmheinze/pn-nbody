@@ -165,6 +165,7 @@ void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE
 {
     int array_half = ode_params->num_dim * ode_params->num_bodies_initial;
     int spin_offset = 2 * array_half;
+    int num_spin_components = 3 * ode_params->num_bodies_initial;
 
     // Write time
     fprintf(file_pos, "\n%.20e\t", t);
@@ -189,8 +190,8 @@ void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE
     }
 
     // Write spins
-    for (int i = 0; i < array_half; i++) {
-        if (component_is_active(i, ode_params))
+    for (int i = 0; i < num_spin_components; i++) {
+        if (ode_params->active[i / 3])
             fprintf(file_spin, "%.20e\t", w[spin_offset + i]);
         else
             fprintf(file_spin, "nan\t");

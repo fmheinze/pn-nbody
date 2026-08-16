@@ -1,11 +1,13 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-struct ode_params;
 #include <complex.h>
 #include <limits.h>
 #include <stdnoreturn.h>
 #include <sys/types.h>
+
+
+struct ode_params;
 
 void allocate_vector(double** ptr, int num_elements);
 void allocate_2d_array(double*** ptr, int num_vectors, int num_elements);
@@ -18,10 +20,10 @@ void free_3d_array(double*** ptr, int num_arrays, int num_vectors);
 void free_4d_array(double**** ptr, int num_3d_arrays, int num_arrays, int num_vectors);
 void free_ode_params(struct ode_params* params);
 
-double dot_product(double *a, double *b, int dim);
-complex double dot_product_c(complex double *a, complex double *b, int dim);
-double norm(double *v, int dim);
-complex double norm_c(complex double *v, int dim);
+double dot_product(const double *a, const double *b, int dim);
+complex double dot_product_c(const complex double *a, const complex double *b, int dim);
+double norm(const double *v, int dim);
+complex double norm_c(const complex double *v, int dim);
 void normalize(double v[3], double result[3]);
 int safe_normalize(double v[3], double result[3]);
 void cross_product(double a[3], double b[3], double result[3]);
@@ -45,6 +47,9 @@ void angles_from_orientation_vectors(double h_input[3], double e_input[3],
     double *inc_out, double *Omega_out, double *omega_out);
 void normalize_and_project_orientation_vectors(double h_hat[3], double e_hat[3], 
     double eccentricity);
+
+double rng_uniform(unsigned long long *state);
+void random_unit_vector(unsigned long long *rng, double n[3]);
 
 void print_divider(void);
 void print_state_vector(const double *w0, int num_bodies, int num_dim);

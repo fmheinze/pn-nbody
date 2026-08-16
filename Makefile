@@ -57,7 +57,7 @@ else
 endif
 
 # Compile flags
-CFLAGS ?= -O3
+CFLAGS ?= -O3 -march=native -mtune=native -fno-math-errno -DNDEBUG
 CFLAGS += -Wall -Wextra -MMD -MP
 
 # Default target

@@ -3,6 +3,10 @@
 
 #include "hamiltonian.h"
 
+
+struct PairCache;
+
+
 struct ode_params {
     // General setup
     int num_dim;
@@ -26,10 +30,12 @@ struct ode_params {
     // Merger history
     int num_active;
     int *active;
+    struct PairCache *pair_cache;  // Persistent, owned RHS/energy workspace
     long long *body_id;
     long long next_body_id;
     int *generation;
 };
+
 
 void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dwdt);
 void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_params* ode_params,

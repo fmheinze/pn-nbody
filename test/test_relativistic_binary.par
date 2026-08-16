@@ -26,6 +26,14 @@ ode_integrator       = rk4                             # ODE integration method
 
 
 # -------------------------------------------------------------------------------------------------
+# Merger settings
+# -------------------------------------------------------------------------------------------------
+merge_activate       = 1                               # Whether to activate mergers
+merge_factor         = 2.0                             # Distance at which to merge
+remnant_prescription = lz                              # Analytic remnant property prescription
+
+
+# -------------------------------------------------------------------------------------------------
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
 ic_preset            = binary                          # Initial condition preset
@@ -35,8 +43,8 @@ binary_a             = 10.0                            # Semi-major axis of bina
 binary_b             = 10.0                            # Semi-minor axis of binary
 binary_phi0          = 0.4                             # Initial phase of binary
 
-spin1                = 0.3 0.6 0.0
-spin2                = -0.1 0.1 0.7
+spin1                = 0.3 0.6 0.0                     # Spin of body 1
+spin2                = -0.1 0.1 0.7                    # Spin of body 2
 
 # -------------------------------------------------------------------------------------------------
 # Output parameters

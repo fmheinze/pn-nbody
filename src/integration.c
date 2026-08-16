@@ -54,14 +54,23 @@ static void check_integration_parameter_validity()
 {
     double t_end = get_parameter_double("t_end");
     double dt = get_parameter_double("dt");
+    double dt_save = get_parameter_double("dt_save");
     if (t_end == 0.0) errorexit("Please specify a nonzero t_end");
     if (dt <= 0.0) errorexit("Please specify a valid dt (must be dt > 0)");
+    if (!isfinite(dt_save) || (is_set_double(dt_save) && dt_save <= 0.0))
+        errorexit("Please specify dt_save > 0, or a negative value to use dt");
 
     // Cash-Karp method
     if (strcmp(get_parameter_string("ode_integrator"), "cash-karp") == 0) {
         double rtol = get_parameter_double("rtol");
+        double dt_max = get_parameter_double("dt_max");
+
+        if (t_end < 0.0)
+            errorexit("Backward integration is not currently supported by the Cash-Karp method");
         if(rtol <= 0.0) 
             errorexit("Please specify a valid rtol of the Cash-Karp method (must be rtol > 0)");
+        if (is_set_double(dt_max) && dt_max <= 0.0)
+            errorexit("Please specify a valid dt_max of the Cash-Karp method (must be dt_max > 0)");
     }
 
     // Implicit-midpoint method
@@ -313,7 +322,9 @@ static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size
 static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double dt_max, 
     double rtol, ode_rhs rhs, struct ode_params* ode_params, struct ode_ws *ws)
 {
-    if (!(rtol > 0.0)) return 1;
+    if (!(rtol > 0.0) || !(*dt > 0.0) || !(dt_max > 0.0)) return 1;
+
+    if (*dt > dt_max) *dt = dt_max;
 
     // Tuning constants
     const double SAFETY = 0.9;
@@ -453,9 +464,13 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 
         // Use specified ODE integration method
         switch (m) {
-            case M_CASH_KARP:
+            case M_CASH_KARP: {
+                if (dt > remaining) dt = remaining;
+
+                const double step_dt_max = fmin(dt_max, remaining);
+
                 // The Cash-Karp driver updates t_current and dt internally
-                failure = cash_karp_driver(w, w_size, &t_current, &dt, dt_max, rtol, rhs,
+                failure = cash_karp_driver(w, w_size, &t_current, &dt, step_dt_max, rtol, rhs,
                     ode_params, &ws);
 
                 // Use RK4 if the Cash-Karp method is stuck
@@ -469,6 +484,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
                     t_current += dt;
                 }
                 break;
+            }
 
             case M_RK4:
                 rk4_update(w, w_size, t_current, dt_signed, rhs, ode_params, &ws);
@@ -524,6 +540,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     fclose(file_mom);
     fclose(file_energy);
     fclose(file_merger);
+    fclose(file_spin);
 }
 
 
@@ -762,6 +779,7 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     fclose(file_mom);
     fclose(file_energy);
     fclose(file_merger);
+    fclose(file_spin);
     free_vector(dUdx);
     ode_ws_free(&ws);
 }

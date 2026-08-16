@@ -392,6 +392,38 @@ int get_parameter_array_count(const char* name) {
     return count;
 }
 
+
+double* get_parameter_double_array_checked(const char* name, int expected_count)
+{
+    if (expected_count < 0)
+        errorexit("get_parameter_double_array_checked: expected_count must be non-negative");
+
+    const int actual_count = get_parameter_array_count(name);
+
+    if (actual_count != expected_count) {
+        char message[256];
+        snprintf(message, sizeof(message),
+            "Parameter \"%s\" must contain exactly %d values, but contains %d",
+            name, expected_count, actual_count);
+        errorexit(message);
+    }
+
+    double *array = get_parameter_double_array(name);
+
+    if (array == NULL)
+        errorexit("Could not parse parameter array");
+
+    return array;
+}
+
+
+double* get_parameter_double_array_i_checked(const char* name, int i, int expected_count)
+{
+    char key[100];
+    snprintf(key, sizeof(key), "%s%d", name, i);
+    return get_parameter_double_array_checked(key, expected_count);
+}
+
 double get_parameter_double_array_entry(const char* name, int index) 
 {
     int count = get_parameter_array_count(name);
@@ -430,4 +462,15 @@ double* get_binary_parameter_double_array_i(const char* name, const int i)
     else
         snprintf(key, sizeof(key), "binary%d_%s", i, name);
     return get_parameter_double_array(key);
+}
+
+
+double* get_binary_parameter_double_array_i_checked(const char* name, int i, int expected_count)
+{
+    char key[64];
+    if (i == 0)
+        snprintf(key, sizeof(key), "binary_%s", name);
+    else
+        snprintf(key, sizeof(key), "binary%d_%s", i, name);
+    return get_parameter_double_array_checked(key, expected_count);
 }

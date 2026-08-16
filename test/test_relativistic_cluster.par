@@ -1,0 +1,72 @@
+# Test for a relativistic cluster
+
+# ---------------------------------------------------------------------------------------------------------------
+# General parameters
+# ---------------------------------------------------------------------------------------------------------------
+num_dim                       = 3                                     # Number of dimensions
+num_bodies                    = 16                                    # Number of bodies
+0pn_terms                     = 1                                     # Whether to include 0PN (Newtonian) terms
+1pn_terms                     = 1                                     # Whether to include 1PN terms
+2pn_terms                     = 1                                     # Whether to include 2PN terms
+2.5pn_terms                   = 1                                     # Whether to include 2.5PN terms
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Time parameters
+# ---------------------------------------------------------------------------------------------------------------
+t_end                         = 2000.0                                # Final time
+dt                            = 0.01                                  # Timestep
+dt_max                        = 1.0                                   # Maximum timestep
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Merger settings
+# ---------------------------------------------------------------------------------------------------------------
+merge_activate                = 1                                     # Whether to activate mergers
+merge_factor                  = 2.0                                   # Distance at which to merge
+remnant_prescription          = lz                                    # Analytic remnant property prescription
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# ODE integrator
+# ---------------------------------------------------------------------------------------------------------------
+ode_integrator                = cash-karp                             # ODE integration method
+rtol                          = 1e-12                                 # Relative error tolerance
+include_utt4                  = 0
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Initial conditions
+# ---------------------------------------------------------------------------------------------------------------
+ic_preset                     = relativistic_monoenergetic_cluster    # Initial condition preset
+
+mass1                         = 0.0625
+mass2                         = 0.0625
+mass3                         = 0.0625
+mass4                         = 0.0625
+mass5                         = 0.0625
+mass6                         = 0.0625
+mass7                         = 0.0625
+mass8                         = 0.0625
+mass9                         = 0.0625
+mass10                        = 0.0625
+mass11                        = 0.0625
+mass12                        = 0.0625
+mass13                        = 0.0625
+mass14                        = 0.0625
+mass15                        = 0.0625
+mass16                        = 0.0625
+
+cluster_compactness           = 40.0
+cluster_central_z             = -1
+cluster_ngrid                 = 20000
+cluster_min_separation_factor = 4.0
+cluster_remove_com            = 1
+cluster_seed                  = 5283
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Output parameters
+# ---------------------------------------------------------------------------------------------------------------
+dt_save                       = 1.0                             # Output times
+

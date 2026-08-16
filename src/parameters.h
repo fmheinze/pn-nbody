@@ -27,9 +27,12 @@ double get_parameter_double(const char *name);
 double get_parameter_double_i(const char* name, int i);
 double* get_parameter_double_array(const char* name);
 double* get_parameter_double_array_i(const char* name, const int i);
+double* get_parameter_double_array_checked(const char* name, int expected_count);
+double* get_parameter_double_array_i_checked(const char* name, int i, int expected_count);
 int get_parameter_array_count(const char* name);
 double get_parameter_double_array_entry(const char* name, int index);
 double get_binary_parameter_double_i(const char *name, int i);
 double* get_binary_parameter_double_array_i(const char* name, const int i);
+double* get_binary_parameter_double_array_i_checked(const char* name, int i, int expected_count);
 
 #endif

@@ -14,7 +14,7 @@ num_bodies           = 4                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 4000.0                          # Final time
+t_end                = 40000.0                         # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -26,26 +26,35 @@ include_utt4         = 0
 
 
 # -------------------------------------------------------------------------------------------------
+# Merger settings
+# -------------------------------------------------------------------------------------------------
+merge_activate       = 1                               # Whether to activate mergers
+merge_factor         = 2.0                             # Distance at which to merge
+remnant_prescription = lz                              # Analytic remnant property prescription
+
+
+# -------------------------------------------------------------------------------------------------
 # Initial conditions
 # -------------------------------------------------------------------------------------------------
 ic_preset            = binary_binary_scattering	       # Initial condition preset
 mass1                = 0.5                             # Mass of body 1
 mass2                = 1.5                             # Mass of body 2
 mass3                = 1.0                             # Mass of body 3
-mass4                = 1.0                             # Mass of body 4
+mass4                = 2.0                             # Mass of body 4
 
-binary1_a            = 30.0                            # Semi-major axis of binary 1
-binary1_b            = 25.0                            # Semi-minor axis of binary 1
+binary1_a            = 50.0                            # Semi-major axis of binary 1
+binary1_b            = 45.0                            # Semi-minor axis of binary 1
 binary1_f0           = 0.4                             # Initial phase of binary 1
+binary1_h_hat        = 0.9 0.2 0.3		       # Orientation of binary 1
 
-binary2_e            = 0.5                             # Eccentricity of binary 2
-binary2_rp           = 20.0	                       # Pericenter distance of binary 2
+binary2_e            = 0.3                             # Eccentricity of binary 2
+binary2_a            = 60.0	                       # Semi-major axis of binary 2
 binary2_f0           = 0.9                             # Initial phase of binary 2
-binary2_h_hat        = 0.0 1.0 0.0
+binary2_h_hat        = -0.9 -0.1 0.2                   # Orientation of binary 2
 
-d0                   = 200.0                           # Initial distance for the scattering
-p0_rel               = 0.2                             # Initial velocity for the scattering
-b                    = 50.0                            # Scattering impact parameter
+d0                   = 1000.0                          # Initial distance for the scattering
+p0_rel               = 0.1                             # Initial momentum for the scattering
+b                    = 350.0                           # Scattering impact parameter
 
 
 # -------------------------------------------------------------------------------------------------

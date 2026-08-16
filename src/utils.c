@@ -19,6 +19,7 @@
 #include <errno.h>
 #include "utils.h"
 #include "eom.h"
+#include "pair_cache.h"
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -38,6 +39,7 @@ void allocate_vector(double** ptr, int num_elements)
     }
 }
 
+
 void allocate_2d_array(double*** ptr, int num_vectors, int num_elements)
 {
     *ptr = (double **)malloc(num_vectors * sizeof(double *));
@@ -49,6 +51,7 @@ void allocate_2d_array(double*** ptr, int num_vectors, int num_elements)
         allocate_vector(&((*ptr)[i]), num_elements);
     }
 }
+
 
 void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_elements)
 {
@@ -64,6 +67,7 @@ void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_
         allocate_2d_array(&((*ptr)[i]), num_vectors, num_elements);
     }
 }
+
 
 void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors, 
     int num_elements)
@@ -81,11 +85,13 @@ void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int n
     }
 }
 
+
 void free_vector(double* ptr)
 {
     if (ptr != NULL)
         free(ptr);
 }
+
 
 void free_2d_array(double** ptr, int num_vectors)
 {
@@ -96,6 +102,7 @@ void free_2d_array(double** ptr, int num_vectors)
     }
 }
 
+
 void free_3d_array(double*** ptr, int num_arrays, int num_vectors)
 {
     if (ptr != NULL) {
@@ -105,6 +112,7 @@ void free_3d_array(double*** ptr, int num_arrays, int num_vectors)
     }
 }
 
+
 void free_4d_array(double**** ptr, int num_3d_arrays, int num_arrays, int num_vectors)
 {
     for (int i = 0; i < num_3d_arrays; i++)
@@ -112,16 +120,35 @@ void free_4d_array(double**** ptr, int num_3d_arrays, int num_arrays, int num_ve
     free(ptr);
 }
 
+
 void free_ode_params(struct ode_params* params)
 {
-    if (params->masses) {
-        free_vector(params->masses);
-        params->masses = NULL;
-    }
-    if (params->pn_terms) {
-        free(params->pn_terms);
-        params->pn_terms = NULL;
-    }
+    if (params == NULL)
+        return;
+
+    pair_cache_destroy(params->pair_cache);
+    params->pair_cache = NULL;
+
+    free_vector(params->masses);
+    params->masses = NULL;
+
+    free(params->pn_terms);
+    params->pn_terms = NULL;
+
+    free(params->active);
+    params->active = NULL;
+
+    free(params->body_id);
+    params->body_id = NULL;
+
+    free(params->generation);
+    params->generation = NULL;
+
+    free(params->remnant_prescription);
+    params->remnant_prescription = NULL;
+
+    params->num_active = 0;
+    params->next_body_id = 0;
 }
 
 
@@ -129,7 +156,7 @@ void free_ode_params(struct ode_params* params)
 // Math utils
 // ------------------------------------------------------------------------------------------------
 
-double dot_product(double *a, double *b, int dim)
+double dot_product(const double *a, const double *b, int dim)
 {
     double result = 0;
     for (int i = 0; i < dim; i++)
@@ -138,7 +165,7 @@ double dot_product(double *a, double *b, int dim)
 }
 
 
-complex double dot_product_c(complex double *a, complex double *b, int dim)
+complex double dot_product_c(const complex double *a, const complex double *b, int dim)
 {
     complex double result = 0;
     for (int i = 0; i < dim; i++)
@@ -147,13 +174,13 @@ complex double dot_product_c(complex double *a, complex double *b, int dim)
 }
 
 
-double norm(double *v, int dim)
+double norm(const double *v, int dim)
 {
     return sqrt(dot_product(v, v, dim));
 }
 
 
-complex double norm_c(complex double *v, int dim)
+complex double norm_c(const complex double *v, int dim)
 {
     return csqrt(dot_product_c(v, v, dim));
 }
@@ -170,6 +197,7 @@ void normalize(double v[3], double result[3])
         result[2] = v[2] / mag;
     }
 }
+
 
 int safe_normalize(double v[3], double result[3])
 {
@@ -239,39 +267,51 @@ void rotate_vector(double v[3], double R[3][3], double result[3])
 
 void align_vectors_rotation_matrix(double* v, double* v_target, double R[3][3])
 {
-    double v_norm[3] = {0.0, 0.0, 0.0};
-    double v_target_norm[3] = {0.0, 0.0, 0.0};
-    normalize(v, v_norm);
-    normalize(v_target, v_target_norm);
+    const double parallel_tol = 1e-12;
 
-    double cos_theta = dot_product(v_norm, v_target_norm, 3);
-    
-    // If vectors are already aligned, return identity matrix
-    if (fabs(cos_theta - 1.0) < 1e-6) {
-        R[0][0] = R[1][1] = R[2][2] = 1;
-        R[0][1] = R[0][2] = R[1][0] = R[1][2] = R[2][0] = R[2][1] = 0;
+    double from[3];
+    double to[3];
+
+    if (!safe_normalize(v, from) || !safe_normalize(v_target, to))
+        errorexit("Cannot align zero, non-finite, or near-zero vectors");
+
+    const double cos_theta =
+        clamp_unit(dot_product(from, to, 3));
+
+    // Parallel vectors: no rotation.
+    if (cos_theta >= 1.0 - parallel_tol) {
+        R[0][0] = 1.0; R[0][1] = 0.0; R[0][2] = 0.0;
+        R[1][0] = 0.0; R[1][1] = 1.0; R[1][2] = 0.0;
+        R[2][0] = 0.0; R[2][1] = 0.0; R[2][2] = 1.0;
         return;
     }
 
-    // If vectors are opposite, find a perpendicular axis
     double axis[3];
-    cross_product(v_norm, v_target_norm, axis);
-    normalize(axis, axis);
 
-    double sin_theta = sqrt(1.0 - cos_theta * cos_theta);
+    // Antiparallel vectors: choose a stable perpendicular axis.
+    if (cos_theta <= -1.0 + parallel_tol) {
+        double reference[3] = {0.0, 0.0, 0.0};
+        int least_aligned = 0;
 
-    // Rodrigues' formula
-    R[0][0] = cos_theta + axis[0] * axis[0] * (1 - cos_theta);
-    R[0][1] = axis[0] * axis[1] * (1 - cos_theta) - axis[2] * sin_theta;
-    R[0][2] = axis[0] * axis[2] * (1 - cos_theta) + axis[1] * sin_theta;
+        if (fabs(from[1]) < fabs(from[least_aligned]))
+            least_aligned = 1;
+        if (fabs(from[2]) < fabs(from[least_aligned]))
+            least_aligned = 2;
 
-    R[1][0] = axis[1] * axis[0] * (1 - cos_theta) + axis[2] * sin_theta;
-    R[1][1] = cos_theta + axis[1] * axis[1] * (1 - cos_theta);
-    R[1][2] = axis[1] * axis[2] * (1 - cos_theta) - axis[0] * sin_theta;
+        reference[least_aligned] = 1.0;
+        cross_product(from, reference, axis);
 
-    R[2][0] = axis[2] * axis[0] * (1 - cos_theta) - axis[1] * sin_theta;
-    R[2][1] = axis[2] * axis[1] * (1 - cos_theta) + axis[0] * sin_theta;
-    R[2][2] = cos_theta + axis[2] * axis[2] * (1 - cos_theta);
+        create_rotation_matrix(axis, acos(-1.0), R);
+        return;
+    }
+
+    // General case.
+    cross_product(from, to, axis);
+
+    const double sin_theta = norm(axis, 3);
+    const double angle = atan2(sin_theta, cos_theta);
+
+    create_rotation_matrix(axis, angle, R);
 }
 
 
@@ -491,6 +531,29 @@ void normalize_and_project_orientation_vectors(double h_hat[3], double e_hat[3],
     }
     else
         normalize(e_hat, e_hat);
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// Random
+// ------------------------------------------------------------------------------------------------
+
+double rng_uniform(unsigned long long *state)
+{
+    *state = 6364136223846793005ULL * (*state) + 1442695040888963407ULL;
+    return (double)(*state >> 11) * (1.0 / 9007199254740992.0);
+}
+
+
+void random_unit_vector(unsigned long long *rng, double n[3])
+{
+    const double z = 2.0 * rng_uniform(rng) - 1.0;
+    const double phi = 2.0 * M_PI * rng_uniform(rng);
+    const double s = sqrt(fmax(0.0, 1.0 - z*z));
+
+    n[0] = s * cos(phi);
+    n[1] = s * sin(phi);
+    n[2] = z;
 }
 
 
