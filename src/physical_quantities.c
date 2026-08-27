@@ -7,7 +7,7 @@
 
 #include "eom.h"
 #include "hamiltonian.h"
-#include "pair_cache.h"
+#include "cache.h"
 
 
 /**

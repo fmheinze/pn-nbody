@@ -18,8 +18,30 @@
 #include <omp.h>
 #endif
 
-#ifndef M_PI
-#define M_PI 3.141592653589793238462643383279502884L
+#define UTT4_PI ((utt4_real)3.141592653589793238462643383279502884)
+
+#if UTT4_USE_LONG_DOUBLE
+#define UTT4_SQRT   sqrtl
+#define UTT4_FABS   fabsl
+#define UTT4_COS    cosl
+#define UTT4_SIN    sinl
+#define UTT4_ATAN   atanl
+#define UTT4_CEIL   ceill
+#define UTT4_LOG10  log10l
+#define UTT4_FMAX   fmaxl
+#define UTT4_EPS    LDBL_EPSILON
+#define UTT4_HUGE   HUGE_VALL
+#else
+#define UTT4_SQRT   sqrt
+#define UTT4_FABS   fabs
+#define UTT4_COS    cos
+#define UTT4_SIN    sin
+#define UTT4_ATAN   atan
+#define UTT4_CEIL   ceil
+#define UTT4_LOG10  log10
+#define UTT4_FMAX   fmax
+#define UTT4_EPS    DBL_EPSILON
+#define UTT4_HUGE   HUGE_VAL
 #endif
 
 
@@ -29,43 +51,43 @@
 
 typedef struct {
     int n;
-    long double *x;
-    long double *weight;
+    utt4_real *x;
+    utt4_real *weight;
 } GaussLegendreRule;
 
 
 // Build an n-point Gauss-Legendre rule on [a, b].
-static int gauss_legendre_rule_init(int n, long double a, long double b, GaussLegendreRule *rule)
+static int gauss_legendre_rule_init(int n, utt4_real a, utt4_real b, GaussLegendreRule *rule)
 {
     rule->n = n;
-    rule->x = calloc((size_t)n, sizeof(long double));
-    rule->weight = calloc((size_t)n, sizeof(long double));
+    rule->x = calloc((size_t)n, sizeof(utt4_real));
+    rule->weight = calloc((size_t)n, sizeof(utt4_real));
     if (!rule->x || !rule->weight)
         return -1;
 
-    const long double eps = 8.0L * LDBL_EPSILON;
-    const long double midpoint = 0.5L * (a + b);
-    const long double half_width = 0.5L * (b - a);
+    const utt4_real eps = 8.0 * UTT4_EPS;
+    const utt4_real midpoint = 0.5 * (a + b);
+    const utt4_real half_width = 0.5 * (b - a);
     const int m = (n + 1) / 2;
 
     for (int i = 0; i < m; ++i) {
-        long double z = cosl(M_PI * ((long double)i + 0.75L) / ((long double)n + 0.5L));
-        long double z1;
-        long double pp = 0.0L;
+        utt4_real z = UTT4_COS(UTT4_PI * ((utt4_real)i + 0.75) / ((utt4_real)n + 0.5));
+        utt4_real z1;
+        utt4_real pp = 0.0;
         do {
-            long double p1 = 1.0L;
-            long double p2 = 0.0L;
+            utt4_real p1 = 1.0;
+            utt4_real p2 = 0.0;
             for (int j = 1; j <= n; ++j) {
-                const long double p3 = p2;
+                const utt4_real p3 = p2;
                 p2 = p1;
-                p1 = (((2.0L * j - 1.0L) * z * p2) - (j - 1.0L) * p3) / (long double)j;
+                p1 = (((2.0 * j - 1.0) * z * p2) - (j - 1.0) * p3) / (utt4_real)j;
             }
-            pp = n * (z * p1 - p2) / (z * z - 1.0L);
+            pp = n * (z * p1 - p2) / (z * z - 1.0);
             z1 = z;
             z = z1 - p1 / pp;
-        } while (fabsl(z - z1) > eps);
+        } while (UTT4_FABS(z - z1) > eps);
 
-        const long double w = 2.0L / ((1.0L - z * z) * pp * pp);
+        const utt4_real w = 2.0 / ((1.0 - z * z) * pp * pp);
         const int lo = i;
         const int hi = n - 1 - i;
         rule->x[lo] = midpoint - half_width * z;
@@ -100,19 +122,19 @@ static const int utt4_ln_sum_representatives[6][4] =
 // UTT4-specific precomputed transforms of a generic [0, pi] Gauss-Legendre rule.
 typedef struct {
     GaussLegendreRule base;
-    long double *half_sin_theta;
-    long double *mix;
+    utt4_real *half_sin_theta;
+    utt4_real *mix;
 } UTT4LnQuadratureRule;
 
 
 static int utt4_ln_quadrature_rule_init(int n, UTT4LnQuadratureRule *rule)
 {
     memset(rule, 0, sizeof(*rule));
-    if (gauss_legendre_rule_init(n, 0.0L, M_PI, &rule->base) != 0)
+    if (gauss_legendre_rule_init(n, 0.0, UTT4_PI, &rule->base) != 0)
         return -1;
 
-    rule->half_sin_theta = calloc((size_t)n, sizeof(long double));
-    rule->mix = calloc((size_t)n, sizeof(long double));
+    rule->half_sin_theta = calloc((size_t)n, sizeof(utt4_real));
+    rule->mix = calloc((size_t)n, sizeof(utt4_real));
     if (!rule->half_sin_theta || !rule->mix) {
         gauss_legendre_rule_free(&rule->base);
         free(rule->half_sin_theta);
@@ -122,8 +144,8 @@ static int utt4_ln_quadrature_rule_init(int n, UTT4LnQuadratureRule *rule)
     }
 
     for (int i = 0; i < n; ++i) {
-        rule->half_sin_theta[i] = 0.5L*sinl(rule->base.x[i]);
-        rule->mix[i] = 0.5L*(1.0L + cosl(rule->base.x[i]));
+        rule->half_sin_theta[i] = 0.5*UTT4_SIN(rule->base.x[i]);
+        rule->mix[i] = 0.5*(1.0 + UTT4_COS(rule->base.x[i]));
     }
     return 0;
 }
@@ -224,22 +246,22 @@ static int utt4_ln_pair_index(int a, int b)
 
 
 typedef struct {
-    long double v;
-    long double g[UTT4_LN_NPAIR];
+    utt4_real v;
+    utt4_real g[UTT4_LN_NPAIR];
 } Dual6;
 
 
 static inline Dual6 d6_zero(void)
 {
     Dual6 z;
-    z.v = 0.0L;
+    z.v = 0.0;
     for (int k = 0; k < UTT4_LN_NPAIR; ++k)
-        z.g[k] = 0.0L;
+        z.g[k] = 0.0;
     return z;
 }
 
 
-static inline Dual6 d6_const(long double x)
+static inline Dual6 d6_const(utt4_real x)
 {
     Dual6 z = d6_zero();
     z.v = x;
@@ -247,10 +269,10 @@ static inline Dual6 d6_const(long double x)
 }
 
 
-static inline Dual6 d6_seed(long double x, int k)
+static inline Dual6 d6_seed(utt4_real x, int k)
 {
     Dual6 z = d6_const(x);
-    z.g[k] = 1.0L;
+    z.g[k] = 1.0;
     return z;
 }
 
@@ -275,7 +297,7 @@ static inline Dual6 d6_sub(Dual6 a, Dual6 b)
 }
 
 
-static inline Dual6 d6_scale(Dual6 a, long double c)
+static inline Dual6 d6_scale(Dual6 a, utt4_real c)
 {
     Dual6 r;
     r.v = a.v * c;
@@ -297,10 +319,10 @@ static inline Dual6 d6_mul(Dual6 a, Dual6 b)
 
 static inline Dual6 d6_inv(Dual6 a)
 {
-    const long double iv = 1.0L / a.v;
+    const utt4_real iv = 1.0 / a.v;
     Dual6 r;
     r.v = iv;
-    const long double fac = -iv*iv;
+    const utt4_real fac = -iv*iv;
     for (int k = 0; k < UTT4_LN_NPAIR; ++k)
         r.g[k] = fac * a.g[k];
     return r;
@@ -309,15 +331,14 @@ static inline Dual6 d6_inv(Dual6 a)
 
 static inline Dual6 d6_sqrt(Dual6 a)
 {
-    const long double sv = sqrtl(a.v);
+    const utt4_real sv = UTT4_SQRT(a.v);
     Dual6 r;
     r.v = sv;
-    const long double fac = 0.5L / sv;
+    const utt4_real fac = 0.5 / sv;
     for (int k = 0; k < UTT4_LN_NPAIR; ++k)
         r.g[k] = fac * a.g[k];
     return r;
 }
-
 
 
 #define UTT4_LN_NUM_GENERATOR_DERIVATIVES 21
@@ -343,34 +364,34 @@ static inline Dual6 d6_sqrt(Dual6 a)
  *
  * Avoiding H(y) itself also removes an unnecessary log1p() from every quadrature node.
  */
-static void utt4_ln_H_derivatives(long double y, long double h[6])
+static void utt4_ln_H_derivatives(utt4_real y, utt4_real h[6])
 {
-    h[0] = 0.0L;
+    h[0] = 0.0;
 
-    if (y < 0.10L) {
+    if (y < 0.10) {
         for (int k = 1; k <= 5; ++k)
-            h[k] = 0.0L;
+            h[k] = 0.0;
 
-        long double power[6] = {0.0L, 1.0L, 0.0L, 0.0L, 0.0L, 0.0L};
+        utt4_real power[6] = {0.0, 1.0, 0.0, 0.0, 0.0, 0.0};
         for (int n = 1; n <= 128; ++n) {
             if (n <= 5 && n >= 2)
-                power[n] = 1.0L;
+                power[n] = 1.0;
 
-            const long double nn = (long double)n;
-            long double cn = 1.0L/(nn*(4.0L*nn*nn - 1.0L));
+            const utt4_real nn = (utt4_real)n;
+            utt4_real cn = 1.0/(nn*(4.0*nn*nn - 1.0));
             if (n & 1)
                 cn = -cn;
 
-            long double falling = nn;
+            utt4_real falling = nn;
             int converged = (n > 17);
             const int kmax = (n < 5) ? n : 5;
             for (int k = 1; k <= kmax; ++k) {
-                const long double term = cn*falling*power[k];
+                const utt4_real term = cn*falling*power[k];
                 h[k] += term;
                 if (converged &&
-                    fabsl(term) >= 2.0L*LDBL_EPSILON*fmaxl(1.0L, fabsl(h[k])))
+                    UTT4_FABS(term) >= 2.0*UTT4_EPS*UTT4_FMAX(1.0, UTT4_FABS(h[k])))
                     converged = 0;
-                falling *= (long double)(n - k);
+                falling *= (utt4_real)(n - k);
             }
 
             if (converged)
@@ -382,26 +403,26 @@ static void utt4_ln_H_derivatives(long double y, long double h[6])
         return;
     }
 
-    const long double inv_one_plus_y = 1.0L/(1.0L + y);
-    const long double two_y = 2.0L*y;
-    const long double t = sqrtl(y);
-    long double a[6];
-    a[0] = atanl(t)/t;
+    const utt4_real inv_one_plus_y = 1.0/(1.0 + y);
+    const utt4_real two_y = 2.0*y;
+    const utt4_real t = UTT4_SQRT(y);
+    utt4_real a[6];
+    a[0] = UTT4_ATAN(t)/t;
 
-    long double rhs_scale = inv_one_plus_y;
-    long double factorial = 1.0L;
-    long double sign = 1.0L;
+    utt4_real rhs_scale = inv_one_plus_y;
+    utt4_real factorial = 1.0;
+    utt4_real sign = 1.0;
     for (int n = 0; n < 5; ++n) {
-        a[n + 1] = (sign*factorial*rhs_scale - (2.0L*n + 1.0L)*a[n])/two_y;
+        a[n + 1] = (sign*factorial*rhs_scale - (2.0*n + 1.0)*a[n])/two_y;
         sign = -sign;
-        factorial *= (long double)(n + 1);
+        factorial *= (utt4_real)(n + 1);
         rhs_scale *= inv_one_plus_y;
     }
 
-    long double log_derivative = inv_one_plus_y;
+    utt4_real log_derivative = inv_one_plus_y;
     for (int n = 1; n <= 5; ++n) {
-        h[n] = (1.0L - y)*a[n] - (long double)n*a[n - 1] + log_derivative;
-        log_derivative *= -(long double)n*inv_one_plus_y;
+        h[n] = (1.0 - y)*a[n] - (utt4_real)n*a[n - 1] + log_derivative;
+        log_derivative *= -(utt4_real)n*inv_one_plus_y;
     }
 }
 
@@ -413,67 +434,55 @@ static void utt4_ln_H_derivatives(long double y, long double h[6])
  * explicitly in terms of y=q/s^2 and H'(y),...,H^(5)(y), which removes the generic coefficient
  * recurrence, three unused derivatives, and the logarithm that appears only in D00 and D10.
  */
-static void utt4_ln_generator_derivatives(long double s, long double q,
-    long double D[UTT4_LN_NUM_GENERATOR_DERIVATIVES])
+static void utt4_ln_generator_derivatives(utt4_real s, utt4_real q,
+    utt4_real D[UTT4_LN_NUM_GENERATOR_DERIVATIVES])
 {
-    const long double inv_s = 1.0L/s;
-    const long double inv_s2 = inv_s*inv_s;
-    const long double inv_s3 = inv_s2*inv_s;
-    const long double inv_s4 = inv_s2*inv_s2;
-    const long double inv_s5 = inv_s4*inv_s;
-    const long double inv_s6 = inv_s3*inv_s3;
-    const long double inv_s7 = inv_s6*inv_s;
-    const long double inv_s8 = inv_s4*inv_s4;
-    const long double inv_s9 = inv_s8*inv_s;
+    const utt4_real inv_s = 1.0/s;
+    const utt4_real inv_s2 = inv_s*inv_s;
+    const utt4_real inv_s3 = inv_s2*inv_s;
+    const utt4_real inv_s4 = inv_s2*inv_s2;
+    const utt4_real inv_s5 = inv_s4*inv_s;
+    const utt4_real inv_s6 = inv_s3*inv_s3;
+    const utt4_real inv_s7 = inv_s6*inv_s;
+    const utt4_real inv_s8 = inv_s4*inv_s4;
+    const utt4_real inv_s9 = inv_s8*inv_s;
 
-    const long double y = q*inv_s2;
-    const long double y2 = y*y;
-    const long double y3 = y2*y;
-    const long double y4 = y2*y2;
+    const utt4_real y = q*inv_s2;
+    const utt4_real y2 = y*y;
+    const utt4_real y3 = y2*y;
+    const utt4_real y4 = y2*y2;
 
-    long double h[6];
+    utt4_real h[6];
     utt4_ln_H_derivatives(y, h);
-    const long double h1 = h[1];
-    const long double h2 = h[2];
-    const long double h3 = h[3];
-    const long double h4 = h[4];
-    const long double h5 = h[5];
+    const utt4_real h1 = h[1];
+    const utt4_real h2 = h[2];
+    const utt4_real h3 = h[3];
+    const utt4_real h4 = h[4];
+    const utt4_real h5 = h[5];
 
     UTT4_LN_D(D, 0, 2) = h2*inv_s3;
     UTT4_LN_D(D, 0, 3) = h3*inv_s5;
     UTT4_LN_D(D, 0, 4) = h4*inv_s7;
     UTT4_LN_D(D, 0, 5) = h5*inv_s9;
 
-    UTT4_LN_D(D, 1, 1) = (-h1 - 2.0L*h2*y)*inv_s2;
-    UTT4_LN_D(D, 1, 2) = (-3.0L*h2 - 2.0L*h3*y)*inv_s4;
-    UTT4_LN_D(D, 1, 3) = (-5.0L*h3 - 2.0L*h4*y)*inv_s6;
-    UTT4_LN_D(D, 1, 4) = (-7.0L*h4 - 2.0L*h5*y)*inv_s8;
+    UTT4_LN_D(D, 1, 1) = (-h1 - 2.0*h2*y)*inv_s2;
+    UTT4_LN_D(D, 1, 2) = (-3.0*h2 - 2.0*h3*y)*inv_s4;
+    UTT4_LN_D(D, 1, 3) = (-5.0*h3 - 2.0*h4*y)*inv_s6;
+    UTT4_LN_D(D, 1, 4) = (-7.0*h4 - 2.0*h5*y)*inv_s8;
 
-    UTT4_LN_D(D, 2, 0) = (2.0L*y*(h1 + 2.0L*h2*y) + 2.0L)*inv_s;
-    UTT4_LN_D(D, 2, 1) =
-        2.0L*(h1 + 5.0L*h2*y + 2.0L*h3*y2)*inv_s3;
-    UTT4_LN_D(D, 2, 2) =
-        2.0L*(6.0L*h2 + 9.0L*h3*y + 2.0L*h4*y2)*inv_s5;
-    UTT4_LN_D(D, 2, 3) =
-        2.0L*(15.0L*h3 + 13.0L*h4*y + 2.0L*h5*y2)*inv_s7;
+    UTT4_LN_D(D, 2, 0) = (2.0*y*(h1 + 2.0*h2*y) + 2.0)*inv_s;
+    UTT4_LN_D(D, 2, 1) = 2.0*(h1 + 5.0*h2*y + 2.0*h3*y2)*inv_s3;
+    UTT4_LN_D(D, 2, 2) = 2.0*(6.0*h2 + 9.0*h3*y + 2.0*h4*y2)*inv_s5;
+    UTT4_LN_D(D, 2, 3) = 2.0*(15.0*h3 + 13.0*h4*y + 2.0*h5*y2)*inv_s7;
 
-    UTT4_LN_D(D, 3, 0) =
-        (-2.0L*y*(3.0L*h1 + 12.0L*h2*y + 4.0L*h3*y2) - 2.0L)*inv_s2;
-    UTT4_LN_D(D, 3, 1) =
-        -2.0L*(3.0L*h1 + 27.0L*h2*y + 24.0L*h3*y2 + 4.0L*h4*y3)*inv_s4;
-    UTT4_LN_D(D, 3, 2) =
-        -2.0L*(30.0L*h2 + 75.0L*h3*y + 36.0L*h4*y2 + 4.0L*h5*y3)*inv_s6;
+    UTT4_LN_D(D, 3, 0) = (-2.0*y*(3.0*h1 + 12.0*h2*y + 4.0*h3*y2) - 2.0)*inv_s2;
+    UTT4_LN_D(D, 3, 1) = -2.0*(3.0*h1 + 27.0*h2*y + 24.0*h3*y2 + 4.0*h4*y3)*inv_s4;
+    UTT4_LN_D(D, 3, 2) = -2.0*(30.0*h2 + 75.0*h3*y + 36.0*h4*y2 + 4.0*h5*y3)*inv_s6;
 
-    UTT4_LN_D(D, 4, 0) =
-        (4.0L*y*(6.0L*h1 + 39.0L*h2*y + 28.0L*h3*y2 + 4.0L*h4*y3)
-         + 4.0L)*inv_s3;
-    UTT4_LN_D(D, 4, 1) =
-        4.0L*(6.0L*h1 + 84.0L*h2*y + 123.0L*h3*y2 + 44.0L*h4*y3
-              + 4.0L*h5*y4)*inv_s5;
+    UTT4_LN_D(D, 4, 0) = (4.0*y*(6.0*h1 + 39.0*h2*y + 28.0*h3*y2 + 4.0*h4*y3) + 4.0)*inv_s3;
+    UTT4_LN_D(D, 4, 1) = 4.0*(6.0*h1 + 84.0*h2*y + 123.0*h3*y2 + 44.0*h4*y3 + 4.0*h5*y4)*inv_s5;
 
-    UTT4_LN_D(D, 5, 0) =
-        (-4.0L*y*(30.0L*h1 + 285.0L*h2*y + 330.0L*h3*y2 + 100.0L*h4*y3
-                   + 8.0L*h5*y4) - 12.0L)*inv_s4;
+    UTT4_LN_D(D, 5, 0) = (-4.0*y*(30.0*h1 + 285.0*h2*y + 330.0*h3*y2 + 100.0*h4*y3 + 8.0*h5*y4) - 12.0)*inv_s4;
 }
 
 
@@ -496,7 +505,7 @@ typedef struct {
 
 
 typedef struct {
-    long double d2[UTT4_LN_NPAIR];
+    utt4_real d2[UTT4_LN_NPAIR];
     Dual6 d2dual[UTT4_LN_NPAIR];
     Dual6 distance[UTT4_LN_NPAIR];
     Dual6 inv_distance[UTT4_LN_NPAIR];
@@ -509,9 +518,9 @@ static void utt4_ln_build_pair_geometry(const double pos[UTT4_LN_INTEGRAL_NUM_BO
 {
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const int a = utt4_ln_pair_body_i[p], b = utt4_ln_pair_body_j[p];
-        long double d2 = 0.0L;
+        utt4_real d2 = 0.0;
         for (int k = 0; k < 3; ++k) {
-            const long double dx = (long double)pos[a][k] - (long double)pos[b][k];
+            const utt4_real dx = (utt4_real)pos[a][k] - (utt4_real)pos[b][k];
             d2 += dx*dx;
         }
         geo->d2[p] = d2;
@@ -544,9 +553,9 @@ static void utt4_ln_build_pair_geometry(const double pos[UTT4_LN_INTEGRAL_NUM_BO
         rep->inv_r = geo->inv_distance[rep->pab];
         rep->inv_rho = geo->inv_distance[rep->pcd];
         rep->inv_r_rho = d6_mul(rep->inv_r, rep->inv_rho);
-        rep->xy = d6_scale(d6_add(d6_sub(dad, dac), d6_sub(dbc, dbd)), 0.5L);
-        rep->xw = d6_scale(d6_sub(d6_sub(dad, dab), dbd), 0.5L);
-        rep->wy = d6_scale(d6_sub(d6_add(dbd, dcd), dbc), 0.5L);
+        rep->xy = d6_scale(d6_add(d6_sub(dad, dac), d6_sub(dbc, dbd)), 0.5);
+        rep->xw = d6_scale(d6_sub(d6_sub(dad, dab), dbd), 0.5);
+        rep->wy = d6_scale(d6_sub(d6_add(dbd, dcd), dbc), 0.5);
         rep->nm = d6_mul(rep->xy, rep->inv_r_rho);
     }
 }
@@ -566,38 +575,38 @@ static void utt4_ln_build_pair_geometry(const double pos[UTT4_LN_INTEGRAL_NUM_BO
  * contraction.
  */
 typedef struct {
-    long double alpha;
-    long double beta;
-    long double gamma;
-    long double delta;
-    long double A;
-    long double B;
+    utt4_real alpha;
+    utt4_real beta;
+    utt4_real gamma;
+    utt4_real delta;
+    utt4_real A;
+    utt4_real B;
 
-    long double B2;
-    long double A2;
-    long double delta_gamma;
-    long double alpha_beta;
-    long double alpha_beta_delta_gamma;
-    long double sixty_alpha_beta_delta_gamma;
-    long double A2_delta_gamma;
-    long double alpha_beta_B2;
-    long double two_A;
-    long double two_A_B;
-    long double A_B;
-    long double two_B;
-    long double three_gamma;
-    long double three_delta;
+    utt4_real B2;
+    utt4_real A2;
+    utt4_real delta_gamma;
+    utt4_real alpha_beta;
+    utt4_real alpha_beta_delta_gamma;
+    utt4_real sixty_alpha_beta_delta_gamma;
+    utt4_real A2_delta_gamma;
+    utt4_real alpha_beta_B2;
+    utt4_real two_A;
+    utt4_real two_A_B;
+    utt4_real A_B;
+    utt4_real two_B;
+    utt4_real three_gamma;
+    utt4_real three_delta;
 } UTT4LnNodeParameters;
 
 
 static inline UTT4LnNodeParameters utt4_ln_node_parameters(
-    long double alpha, long double A, long double gamma, long double B)
+    utt4_real alpha, utt4_real A, utt4_real gamma, utt4_real B)
 {
     UTT4LnNodeParameters p;
     p.alpha = alpha;
-    p.beta = 1.0L - alpha;
+    p.beta = 1.0 - alpha;
     p.gamma = gamma;
-    p.delta = 1.0L - gamma;
+    p.delta = 1.0 - gamma;
     p.A = A;
     p.B = B;
     p.B2 = B*B;
@@ -605,179 +614,179 @@ static inline UTT4LnNodeParameters utt4_ln_node_parameters(
     p.delta_gamma = p.delta*gamma;
     p.alpha_beta = alpha*p.beta;
     p.alpha_beta_delta_gamma = p.alpha_beta*p.delta_gamma;
-    p.sixty_alpha_beta_delta_gamma = 60.0L*p.alpha_beta_delta_gamma;
+    p.sixty_alpha_beta_delta_gamma = 60.0*p.alpha_beta_delta_gamma;
     p.A2_delta_gamma = p.A2*p.delta_gamma;
     p.alpha_beta_B2 = p.alpha_beta*p.B2;
-    p.two_A = 2.0L*A;
+    p.two_A = 2.0*A;
     p.two_A_B = B*p.two_A;
     p.A_B = A*B;
-    p.two_B = 2.0L*B;
-    p.three_gamma = 3.0L*gamma;
-    p.three_delta = 3.0L*p.delta;
+    p.two_B = 2.0*B;
+    p.three_gamma = 3.0*gamma;
+    p.three_delta = 3.0*p.delta;
     return p;
 }
 
 
 typedef struct {
-    long double value;
-    long double d_s;
-    long double d_q;
-    long double d_nm;
-    long double d_np;
-    long double d_pm;
-    long double d_inv_r;
-    long double d_inv_rho;
+    utt4_real value;
+    utt4_real d_s;
+    utt4_real d_q;
+    utt4_real d_nm;
+    utt4_real d_np;
+    utt4_real d_pm;
+    utt4_real d_inv_r;
+    utt4_real d_inv_rho;
 } UTT4LnNodePartials;
 
 
 static inline UTT4LnNodePartials utt4_ln_contracted_node_partials(
-    const long double D[UTT4_LN_NUM_GENERATOR_DERIVATIVES],
-    const UTT4LnNodeParameters *node, long double nm, long double npv, long double pm,
-    long double q, long double inv_r, long double inv_rho)
+    const utt4_real D[UTT4_LN_NUM_GENERATOR_DERIVATIVES],
+    const UTT4LnNodeParameters *node, utt4_real nm, utt4_real npv, utt4_real pm,
+    utt4_real q, utt4_real inv_r, utt4_real inv_rho)
 {
-    const long double alpha = node->alpha;
-    const long double beta = node->beta;
-    const long double gamma = node->gamma;
-    const long double delta = node->delta;
-    const long double A = node->A;
-    const long double B = node->B;
-    const long double D02 = UTT4_LN_D(D, 0, 2);
-    const long double D03 = UTT4_LN_D(D, 0, 3);
-    const long double D04 = UTT4_LN_D(D, 0, 4);
-    const long double D05 = UTT4_LN_D(D, 0, 5);
-    const long double D11 = UTT4_LN_D(D, 1, 1);
-    const long double D12 = UTT4_LN_D(D, 1, 2);
-    const long double D13 = UTT4_LN_D(D, 1, 3);
-    const long double D14 = UTT4_LN_D(D, 1, 4);
-    const long double D20 = UTT4_LN_D(D, 2, 0);
-    const long double D21 = UTT4_LN_D(D, 2, 1);
-    const long double D22 = UTT4_LN_D(D, 2, 2);
-    const long double D23 = UTT4_LN_D(D, 2, 3);
-    const long double D30 = UTT4_LN_D(D, 3, 0);
-    const long double D31 = UTT4_LN_D(D, 3, 1);
-    const long double D32 = UTT4_LN_D(D, 3, 2);
-    const long double D40 = UTT4_LN_D(D, 4, 0);
-    const long double D41 = UTT4_LN_D(D, 4, 1);
-    const long double D50 = UTT4_LN_D(D, 5, 0);
+    const utt4_real alpha = node->alpha;
+    const utt4_real beta = node->beta;
+    const utt4_real gamma = node->gamma;
+    const utt4_real delta = node->delta;
+    const utt4_real A = node->A;
+    const utt4_real B = node->B;
+    const utt4_real D02 = UTT4_LN_D(D, 0, 2);
+    const utt4_real D03 = UTT4_LN_D(D, 0, 3);
+    const utt4_real D04 = UTT4_LN_D(D, 0, 4);
+    const utt4_real D05 = UTT4_LN_D(D, 0, 5);
+    const utt4_real D11 = UTT4_LN_D(D, 1, 1);
+    const utt4_real D12 = UTT4_LN_D(D, 1, 2);
+    const utt4_real D13 = UTT4_LN_D(D, 1, 3);
+    const utt4_real D14 = UTT4_LN_D(D, 1, 4);
+    const utt4_real D20 = UTT4_LN_D(D, 2, 0);
+    const utt4_real D21 = UTT4_LN_D(D, 2, 1);
+    const utt4_real D22 = UTT4_LN_D(D, 2, 2);
+    const utt4_real D23 = UTT4_LN_D(D, 2, 3);
+    const utt4_real D30 = UTT4_LN_D(D, 3, 0);
+    const utt4_real D31 = UTT4_LN_D(D, 3, 1);
+    const utt4_real D32 = UTT4_LN_D(D, 3, 2);
+    const utt4_real D40 = UTT4_LN_D(D, 4, 0);
+    const utt4_real D41 = UTT4_LN_D(D, 4, 1);
+    const utt4_real D50 = UTT4_LN_D(D, 5, 0);
 
     UTT4LnNodePartials out;
-    const long double t0 = A*inv_rho;
-    const long double t1 = B*inv_r;
-    const long double t2 = D20*t1;
-    const long double t3 = node->B2;
-    const long double t4 = D30*t3;
-    const long double t5 = A*inv_r;
-    const long double t6 = node->A2;
-    const long double t7 = D30*t6;
-    const long double t8 = B*inv_rho;
-    const long double t9 = node->delta_gamma;
-    const long double t10 = t5*t9;
-    const long double t11 = 4*D11;
-    const long double t12 = node->alpha_beta;
-    const long double t13 = t12*t8;
-    const long double t14 = node->alpha_beta_delta_gamma;
-    const long double t15 = node->sixty_alpha_beta_delta_gamma;
-    const long double t16 = node->A2_delta_gamma;
-    const long double t17 = 2*D21;
-    const long double t18 = node->alpha_beta_B2;
-    const long double t19 = D21*alpha;
-    const long double t20 = node->two_A;
-    const long double t21 = node->two_A_B;
-    const long double t22 = nm*t21;
-    const long double t23 = node->A_B;
-    const long double t24 = nm*t23;
-    const long double t25 = gamma*t24;
-    const long double t26 = node->two_B;
-    const long double t27 = npv*t0;
-    const long double t28 = t26*t27;
-    const long double t29 = D21*beta;
-    const long double t30 = delta*t24;
-    const long double t31 = D21*delta;
-    const long double t32 = pm*t1;
-    const long double t33 = t20*t32;
-    const long double t34 = D21*gamma;
-    const long double t35 = A*npv;
-    const long double t36 = t35*t9;
-    const long double t37 = alpha*t36;
-    const long double t38 = 20*D12;
-    const long double t39 = beta*t36;
-    const long double t40 = q*t10;
-    const long double t41 = 4*D12;
-    const long double t42 = B*pm;
-    const long double t43 = t12*t42;
-    const long double t44 = delta*t43;
-    const long double t45 = gamma*t43;
-    const long double t46 = q*t13;
-    const long double t47 = q*t9;
-    const long double t48 = 80*t12*t47;
-    const long double t49 = (nm*nm);
-    const long double t50 = t0*t49;
-    const long double t51 = alpha*t42;
-    const long double t52 = nm*t0;
-    const long double t53 = t51*t52;
-    const long double t54 = beta*t42;
-    const long double t55 = t52*t54;
-    const long double t56 = delta*t35;
-    const long double t57 = nm*t1;
-    const long double t58 = t56*t57;
-    const long double t59 = gamma*t35;
-    const long double t60 = t57*t59;
-    const long double t61 = 4*D22;
-    const long double t62 = t51*t56;
-    const long double t63 = alpha*q;
-    const long double t64 = t25*t63;
-    const long double t65 = beta*q;
-    const long double t66 = t30*t65;
-    const long double t67 = t54*t59;
-    const long double t68 = 8*q;
-    const long double t69 = D13*t68;
-    const long double t70 = nm*pm*t20;
-    const long double t71 = D31*t3*t70;
-    const long double t72 = (npv*npv);
-    const long double t73 = t10*t72;
-    const long double t74 = nm*npv*t26;
-    const long double t75 = D31*t6*t74;
-    const long double t76 = (pm*pm);
-    const long double t77 = t13*t76;
-    const long double t78 = (q*q);
-    const long double t79 = 16*t14*t78;
-    const long double t80 = t3*t49*t6;
-    const long double t81 = t4*t49;
-    const long double t82 = t49*t7;
-    const long double t83 = t16*t72;
-    const long double t84 = t18*t76;
-    const long double t85 = t49 + 1;
-    const long double t86 = 4*t10 + 4*t13;
-    const long double t87 = t51 - t54 + t56 - t59;
-    const long double t88 = t23*(-t0 + t1*t49 - t1 + t50);
-    const long double t89 = t68*(t37 - t39 + t44 - t45);
-    const long double t90 = -4*t62 + 4*t64 + 4*t66 - 4*t67 + 4*t83 + 4*t84;
-    const long double t91 = 20*t37 - 20*t39 + 4*t40 + 20*t44 - 20*t45 + 4*t46 - 4*t73 - 4*t77;
-    const long double t92 = B*t27;
-    const long double t93 = A*t32;
-    const long double t94 = node->three_gamma;
-    const long double t95 = node->three_delta;
-    const long double t96 = 2*alpha*t24*t94 - 2*alpha*t30 - 2*alpha*t92 + 2*beta*t24*t95 - 2*beta*t25 + 2*beta*t92 - 2*delta*t93 + 2*gamma*t93 + 2*t16 + 2*t18 + 2*t53 - 2*t55 + 2*t58 - 2*t60;
-    const long double t97 = 8*D13;
-    const long double t98 = D30*nm;
-    const long double t99 = inv_rho*pm;
-    const long double t100 = inv_r*npv;
-    const long double t101 = 2*D22;
-    const long double t102 = gamma*t101;
-    const long double t103 = delta*t101;
-    const long double t104 = 10*D12;
-    const long double t105 = t104*t9;
-    const long double t106 = t41*t9;
-    const long double t107 = 4*D13;
-    const long double t108 = t107*t9;
-    const long double t109 = t104*t12;
-    const long double t110 = D31*t24;
-    const long double t111 = t12*t41;
-    const long double t112 = q*t107*t12;
-    const long double t113 = D20*t8;
-    const long double t114 = 2*t42;
-    const long double t115 = D20*t5;
-    const long double t116 = 2*t35;
+    const utt4_real t0 = A*inv_rho;
+    const utt4_real t1 = B*inv_r;
+    const utt4_real t2 = D20*t1;
+    const utt4_real t3 = node->B2;
+    const utt4_real t4 = D30*t3;
+    const utt4_real t5 = A*inv_r;
+    const utt4_real t6 = node->A2;
+    const utt4_real t7 = D30*t6;
+    const utt4_real t8 = B*inv_rho;
+    const utt4_real t9 = node->delta_gamma;
+    const utt4_real t10 = t5*t9;
+    const utt4_real t11 = 4*D11;
+    const utt4_real t12 = node->alpha_beta;
+    const utt4_real t13 = t12*t8;
+    const utt4_real t14 = node->alpha_beta_delta_gamma;
+    const utt4_real t15 = node->sixty_alpha_beta_delta_gamma;
+    const utt4_real t16 = node->A2_delta_gamma;
+    const utt4_real t17 = 2*D21;
+    const utt4_real t18 = node->alpha_beta_B2;
+    const utt4_real t19 = D21*alpha;
+    const utt4_real t20 = node->two_A;
+    const utt4_real t21 = node->two_A_B;
+    const utt4_real t22 = nm*t21;
+    const utt4_real t23 = node->A_B;
+    const utt4_real t24 = nm*t23;
+    const utt4_real t25 = gamma*t24;
+    const utt4_real t26 = node->two_B;
+    const utt4_real t27 = npv*t0;
+    const utt4_real t28 = t26*t27;
+    const utt4_real t29 = D21*beta;
+    const utt4_real t30 = delta*t24;
+    const utt4_real t31 = D21*delta;
+    const utt4_real t32 = pm*t1;
+    const utt4_real t33 = t20*t32;
+    const utt4_real t34 = D21*gamma;
+    const utt4_real t35 = A*npv;
+    const utt4_real t36 = t35*t9;
+    const utt4_real t37 = alpha*t36;
+    const utt4_real t38 = 20*D12;
+    const utt4_real t39 = beta*t36;
+    const utt4_real t40 = q*t10;
+    const utt4_real t41 = 4*D12;
+    const utt4_real t42 = B*pm;
+    const utt4_real t43 = t12*t42;
+    const utt4_real t44 = delta*t43;
+    const utt4_real t45 = gamma*t43;
+    const utt4_real t46 = q*t13;
+    const utt4_real t47 = q*t9;
+    const utt4_real t48 = 80*t12*t47;
+    const utt4_real t49 = (nm*nm);
+    const utt4_real t50 = t0*t49;
+    const utt4_real t51 = alpha*t42;
+    const utt4_real t52 = nm*t0;
+    const utt4_real t53 = t51*t52;
+    const utt4_real t54 = beta*t42;
+    const utt4_real t55 = t52*t54;
+    const utt4_real t56 = delta*t35;
+    const utt4_real t57 = nm*t1;
+    const utt4_real t58 = t56*t57;
+    const utt4_real t59 = gamma*t35;
+    const utt4_real t60 = t57*t59;
+    const utt4_real t61 = 4*D22;
+    const utt4_real t62 = t51*t56;
+    const utt4_real t63 = alpha*q;
+    const utt4_real t64 = t25*t63;
+    const utt4_real t65 = beta*q;
+    const utt4_real t66 = t30*t65;
+    const utt4_real t67 = t54*t59;
+    const utt4_real t68 = 8*q;
+    const utt4_real t69 = D13*t68;
+    const utt4_real t70 = nm*pm*t20;
+    const utt4_real t71 = D31*t3*t70;
+    const utt4_real t72 = (npv*npv);
+    const utt4_real t73 = t10*t72;
+    const utt4_real t74 = nm*npv*t26;
+    const utt4_real t75 = D31*t6*t74;
+    const utt4_real t76 = (pm*pm);
+    const utt4_real t77 = t13*t76;
+    const utt4_real t78 = (q*q);
+    const utt4_real t79 = 16*t14*t78;
+    const utt4_real t80 = t3*t49*t6;
+    const utt4_real t81 = t4*t49;
+    const utt4_real t82 = t49*t7;
+    const utt4_real t83 = t16*t72;
+    const utt4_real t84 = t18*t76;
+    const utt4_real t85 = t49 + 1;
+    const utt4_real t86 = 4*t10 + 4*t13;
+    const utt4_real t87 = t51 - t54 + t56 - t59;
+    const utt4_real t88 = t23*(-t0 + t1*t49 - t1 + t50);
+    const utt4_real t89 = t68*(t37 - t39 + t44 - t45);
+    const utt4_real t90 = -4*t62 + 4*t64 + 4*t66 - 4*t67 + 4*t83 + 4*t84;
+    const utt4_real t91 = 20*t37 - 20*t39 + 4*t40 + 20*t44 - 20*t45 + 4*t46 - 4*t73 - 4*t77;
+    const utt4_real t92 = B*t27;
+    const utt4_real t93 = A*t32;
+    const utt4_real t94 = node->three_gamma;
+    const utt4_real t95 = node->three_delta;
+    const utt4_real t96 = 2*alpha*t24*t94 - 2*alpha*t30 - 2*alpha*t92 + 2*beta*t24*t95 - 2*beta*t25 + 2*beta*t92 - 2*delta*t93 + 2*gamma*t93 + 2*t16 + 2*t18 + 2*t53 - 2*t55 + 2*t58 - 2*t60;
+    const utt4_real t97 = 8*D13;
+    const utt4_real t98 = D30*nm;
+    const utt4_real t99 = inv_rho*pm;
+    const utt4_real t100 = inv_r*npv;
+    const utt4_real t101 = 2*D22;
+    const utt4_real t102 = gamma*t101;
+    const utt4_real t103 = delta*t101;
+    const utt4_real t104 = 10*D12;
+    const utt4_real t105 = t104*t9;
+    const utt4_real t106 = t41*t9;
+    const utt4_real t107 = 4*D13;
+    const utt4_real t108 = t107*t9;
+    const utt4_real t109 = t104*t12;
+    const utt4_real t110 = D31*t24;
+    const utt4_real t111 = t12*t41;
+    const utt4_real t112 = q*t107*t12;
+    const utt4_real t113 = D20*t8;
+    const utt4_real t114 = 2*t42;
+    const utt4_real t115 = D20*t5;
+    const utt4_real t116 = 2*t35;
     out.value = D02*t15 + D03*t48 + D04*t79 + D40*t80 + alpha*t71 - beta*t71 + delta*t19*t22 + delta*t75 + gamma*t22*t29 - gamma*t75 + t0*t2 - t10*t11 - t11*t13 - t16*t17 - t17*t18 - t17*t53 + t17*t55 - t17*t58 + t17*t60 - 6*t19*t25 + t19*t28 + t2*t50 - t28*t29 - 6*t29*t30 + t31*t33 - t33*t34 - t37*t38 - t37*t69 + t38*t39 - t38*t44 + t38*t45 + t39*t69 + t4*t5 - t40*t41 - t41*t46 + t41*t73 + t41*t77 - t44*t69 + t45*t69 - t5*t81 + t61*t62 - t61*t64 - t61*t66 + t61*t67 - t61*t83 - t61*t84 + t7*t8 - t8*t82;
     out.d_s = D12*t15 + D13*t48 + D14*t79 - D21*t86 - D22*t91 - D23*t89 + D30*t0*t1*t85 - D31*t96 - D32*t90 - D40*t88 + D41*t22*t87 + D50*t80;
     out.d_q = A*B*D21*inv_r*inv_rho*t85 + 2*A*B*D32*nm*t87 + 8*A*D13*beta*delta*gamma*npv + 8*B*D13*alpha*beta*gamma*pm + 140*D03*alpha*beta*delta*gamma + 112*D04*alpha*beta*delta*gamma*q + 16*D05*alpha*beta*delta*gamma*t78 - D12*t86 - D13*t91 - D14*t89 - D22*t96 - D23*t90 - D31*t88 + D41*t3*t49*t6 - alpha*t25*t61 - beta*t30*t61 - t10*t41 - t13*t41 - t37*t97 - t44*t97;
@@ -800,34 +809,34 @@ static inline UTT4LnNodePartials utt4_ln_contracted_node_partials(
 static Dual6 utt4_ln_ordered_node(const UTT4LnPairGeometry *geo,
     const UTT4LnRepresentativeGeometry *rep, const UTT4LnNodeParameters *node)
 {
-    const long double alpha = node->alpha;
-    const long double beta = node->beta;
-    const long double gamma = node->gamma;
-    const long double delta = node->delta;
-    const long double A = node->A;
-    const long double B = node->B;
+    const utt4_real alpha = node->alpha;
+    const utt4_real beta = node->beta;
+    const utt4_real gamma = node->gamma;
+    const utt4_real delta = node->delta;
+    const utt4_real A = node->A;
+    const utt4_real B = node->B;
 
-    const long double dab = geo->d2[rep->pab];
-    const long double dcd = geo->d2[rep->pcd];
-    const long double dac = geo->d2[rep->pac];
-    const long double dad = geo->d2[rep->pad];
-    const long double dbc = geo->d2[rep->pbc];
-    const long double dbd = geo->d2[rep->pbd];
+    const utt4_real dab = geo->d2[rep->pab];
+    const utt4_real dcd = geo->d2[rep->pcd];
+    const utt4_real dac = geo->d2[rep->pac];
+    const utt4_real dad = geo->d2[rep->pad];
+    const utt4_real dbc = geo->d2[rep->pbc];
+    const utt4_real dbd = geo->d2[rep->pbd];
 
-    const long double q_ac = alpha*gamma;
-    const long double q_ad = alpha*delta;
-    const long double q_bc = beta*gamma;
-    const long double q_bd = beta*delta;
-    const long double q_ab = -alpha*beta;
-    const long double q_cd = -gamma*delta;
+    const utt4_real q_ac = alpha*gamma;
+    const utt4_real q_ad = alpha*delta;
+    const utt4_real q_bc = beta*gamma;
+    const utt4_real q_bd = beta*delta;
+    const utt4_real q_ab = -alpha*beta;
+    const utt4_real q_cd = -gamma*delta;
 
-    long double q = q_ac*dac + q_ad*dad + q_bc*dbc + q_bd*dbd
+    utt4_real q = q_ac*dac + q_ad*dad + q_bc*dbc + q_bd*dbd
         + q_ab*dab + q_cd*dcd;
-    const long double s = A*rep->r.v + B*rep->rho.v;
+    const utt4_real s = A*rep->r.v + B*rep->rho.v;
 
-    if (!(s > 0.0L) || q < 0.0L) {
-        if (q > -1e-26L*fmaxl(1.0L, s*s))
-            q = 0.0L;
+    if (!(s > 0.0) || q < 0.0) {
+        if (q > -1e-26*UTT4_FMAX(1.0, s*s))
+            q = 0.0;
         else {
             Dual6 bad = d6_const(NAN);
             for (int k = 0; k < UTT4_LN_NPAIR; ++k)
@@ -836,20 +845,20 @@ static Dual6 utt4_ln_ordered_node(const UTT4LnPairGeometry *geo,
         }
     }
 
-    const long double xp = rep->xw.v + alpha*dab - gamma*rep->xy.v;
-    const long double py = rep->wy.v + alpha*rep->xy.v - gamma*dcd;
-    const long double inv_r = rep->inv_r.v;
-    const long double inv_rho = rep->inv_rho.v;
-    const long double npv = xp*inv_r;
-    const long double pm = py*inv_rho;
+    const utt4_real xp = rep->xw.v + alpha*dab - gamma*rep->xy.v;
+    const utt4_real py = rep->wy.v + alpha*rep->xy.v - gamma*dcd;
+    const utt4_real inv_r = rep->inv_r.v;
+    const utt4_real inv_rho = rep->inv_rho.v;
+    const utt4_real npv = xp*inv_r;
+    const utt4_real pm = py*inv_rho;
 
-    long double D[UTT4_LN_NUM_GENERATOR_DERIVATIVES];
+    utt4_real D[UTT4_LN_NUM_GENERATOR_DERIVATIVES];
     utt4_ln_generator_derivatives(s, q, D);
 
     const UTT4LnNodePartials p = utt4_ln_contracted_node_partials(
         D, node, rep->nm.v, npv, pm, q, inv_r, inv_rho);
 
-    long double dq[UTT4_LN_NPAIR] = {0.0L, 0.0L, 0.0L, 0.0L, 0.0L, 0.0L};
+    utt4_real dq[UTT4_LN_NPAIR] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     dq[rep->pac] = q_ac;
     dq[rep->pad] = q_ad;
     dq[rep->pbc] = q_bc;
@@ -860,16 +869,16 @@ static Dual6 utt4_ln_ordered_node(const UTT4LnPairGeometry *geo,
     Dual6 out;
     out.v = p.value;
     for (int k = 0; k < UTT4_LN_NPAIR; ++k) {
-        long double dxp = rep->xw.g[k] - gamma*rep->xy.g[k];
-        long double dpy = rep->wy.g[k] + alpha*rep->xy.g[k];
+        utt4_real dxp = rep->xw.g[k] - gamma*rep->xy.g[k];
+        utt4_real dpy = rep->wy.g[k] + alpha*rep->xy.g[k];
         if (k == rep->pab)
             dxp += alpha;
         if (k == rep->pcd)
             dpy -= gamma;
 
-        const long double ds = A*rep->r.g[k] + B*rep->rho.g[k];
-        const long double dnp = dxp*inv_r + xp*rep->inv_r.g[k];
-        const long double dpm = dpy*inv_rho + py*rep->inv_rho.g[k];
+        const utt4_real ds = A*rep->r.g[k] + B*rep->rho.g[k];
+        const utt4_real dnp = dxp*inv_r + xp*rep->inv_r.g[k];
+        const utt4_real dpm = dpy*inv_rho + py*rep->inv_rho.g[k];
 
         out.g[k] = p.d_s*ds + p.d_q*dq[k] + p.d_nm*rep->nm.g[k]
                  + p.d_np*dnp + p.d_pm*dpm
@@ -884,14 +893,14 @@ static Dual6 utt4_ln_ordered_node(const UTT4LnPairGeometry *geo,
  * The factor four reconstructs the full ordered sum using I_ab;cd = I_ba;dc = I_cd;ab = I_dc;ba.
  * The 1/pi normalization is included here.
  */
-static Dual6 utt4_ln_sum_node(const UTT4LnPairGeometry *geo, long double alpha, long double A,
-    long double gamma, long double B)
+static Dual6 utt4_ln_sum_node(const UTT4LnPairGeometry *geo, utt4_real alpha, utt4_real A,
+    utt4_real gamma, utt4_real B)
 {
     const UTT4LnNodeParameters node = utt4_ln_node_parameters(alpha, A, gamma, B);
     Dual6 sum = d6_zero();
     for (int p = 0; p < 6; ++p)
         sum = d6_add(sum, utt4_ln_ordered_node(geo, &geo->representative[p], &node));
-    return d6_scale(sum, -4.0L/M_PI);
+    return d6_scale(sum, -4.0/UTT4_PI);
 }
 
 
@@ -900,11 +909,11 @@ static Dual6 utt4_ln_sum_node(const UTT4LnPairGeometry *geo, long double alpha, 
 // ------------------------------------------------------------------------------------------------
 
 typedef struct {
-    long double value;
-    long double d_d2[UTT4_LN_NPAIR];
-    long double grad[UTT4_LN_INTEGRAL_NUM_BODIES][3];
-    long double error_estimate;
-    long double max_component_error;
+    utt4_real value;
+    utt4_real d_d2[UTT4_LN_NPAIR];
+    utt4_real grad[UTT4_LN_INTEGRAL_NUM_BODIES][3];
+    utt4_real error_estimate;
+    utt4_real max_component_error;
     long long node_evals;
 } UTT4LnWorkResult;
 
@@ -957,8 +966,8 @@ static UTT4LnWorkResult utt4_ln_fixed_quadrature(const double pos[UTT4_LN_INTEGR
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const int a = utt4_ln_pair_body_i[p], b = utt4_ln_pair_body_j[p];
         for (int k = 0; k < 3; ++k) {
-            const long double dx = (long double)pos[a][k] - (long double)pos[b][k];
-            const long double c = 2.0L*out.d_d2[p]*dx;
+            const utt4_real dx = (utt4_real)pos[a][k] - (utt4_real)pos[b][k];
+            const utt4_real c = 2.0*out.d_d2[p]*dx;
             out.grad[a][k] += c;
             out.grad[b][k] -= c;
         }
@@ -972,7 +981,7 @@ static UTT4LnWorkResult utt4_ln_fixed_quadrature(const double pos[UTT4_LN_INTEGR
 // ------------------------------------------------------------------------------------------------
 
 // Kronrod-15 nodes and weights on [-1,1], with the embedded Gauss-7 weights.
-static const long double gk15_x[15] = {
+static const utt4_real gk15_x[15] = {
     -0.991455371120812639206854697526329L,
     -0.949107912342758524526189684047851L,
     -0.864864423359769072789712788640926L,
@@ -990,7 +999,7 @@ static const long double gk15_x[15] = {
      0.991455371120812639206854697526329L
 };
 
-static const long double gk15_wk[15] = {
+static const utt4_real gk15_wk[15] = {
     0.022935322010529224963732008058970L,
     0.063092092629978553290700663189204L,
     0.104790010322250183839876322541518L,
@@ -1008,7 +1017,7 @@ static const long double gk15_wk[15] = {
     0.022935322010529224963732008058970L
 };
 
-static const long double gk15_wg[15] = {
+static const utt4_real gk15_wg[15] = {
     0.0L,
     0.129484966168869693270611432679082L,
     0.0L,
@@ -1036,42 +1045,42 @@ typedef struct {
 
 typedef struct {
     UTT4LnPairGeometry geo;
-    long double rel_tol;
+    utt4_real rel_tol;
     int max_depth;
     int parallel_root;
-    long double length2_scale;
+    utt4_real length2_scale;
 } UTT4LnAdaptiveContext;
 
 
 typedef struct {
     Dual6 result;
-    long double abs_error;
-    long double max_component_error;
+    utt4_real abs_error;
+    utt4_real max_component_error;
     long long node_evals;
 } UTT4LnAdaptiveAccum;
 
 
 static UTT4LnCellEstimate utt4_ln_cell_estimate(const UTT4LnAdaptiveContext *ctx,
-    long double ta, long double tb, long double pa, long double pb)
+    utt4_real ta, utt4_real tb, utt4_real pa, utt4_real pb)
 {
     UTT4LnCellEstimate out;
     out.kronrod = d6_zero();
     out.gauss = d6_zero();
     out.node_evals = 225;
-    const long double tm = 0.5L*(ta + tb), th = 0.5L*(tb - ta);
-    const long double pm = 0.5L*(pa + pb), ph = 0.5L*(pb - pa);
+    const utt4_real tm = 0.5*(ta + tb), th = 0.5*(tb - ta);
+    const utt4_real pm = 0.5*(pa + pb), ph = 0.5*(pb - pa);
 
-    long double alpha[15], A[15], wk_t[15], wg_t[15];
-    long double gamma[15], B[15], wk_p[15], wg_p[15];
+    utt4_real alpha[15], A[15], wk_t[15], wg_t[15];
+    utt4_real gamma[15], B[15], wk_p[15], wg_p[15];
     for (int i = 0; i < 15; ++i) {
-        const long double theta = tm + th*gk15_x[i];
-        const long double phi = pm + ph*gk15_x[i];
-        alpha[i] = 0.5L*(1.0L + cosl(theta));
-        A[i] = 0.5L*sinl(theta);
+        const utt4_real theta = tm + th*gk15_x[i];
+        const utt4_real phi = pm + ph*gk15_x[i];
+        alpha[i] = 0.5*(1.0 + UTT4_COS(theta));
+        A[i] = 0.5*UTT4_SIN(theta);
         wk_t[i] = th*gk15_wk[i];
         wg_t[i] = th*gk15_wg[i];
-        gamma[i] = 0.5L*(1.0L + cosl(phi));
-        B[i] = 0.5L*sinl(phi);
+        gamma[i] = 0.5*(1.0 + UTT4_COS(phi));
+        B[i] = 0.5*UTT4_SIN(phi);
         wk_p[i] = ph*gk15_wk[i];
         wg_p[i] = ph*gk15_wg[i];
     }
@@ -1081,7 +1090,7 @@ static UTT4LnCellEstimate utt4_ln_cell_estimate(const UTT4LnAdaptiveContext *ctx
         for (int j = 0; j < 15; ++j) {
             Dual6 f = utt4_ln_sum_node(&ctx->geo, alpha[i], A[i], gamma[j], B[j]);
             ksum = d6_add(ksum, d6_scale(f, wk_t[i]*wk_p[j]));
-            if (wg_t[i] != 0.0L && wg_p[j] != 0.0L)
+            if (wg_t[i] != 0.0 && wg_p[j] != 0.0)
                 gsum = d6_add(gsum, d6_scale(f, wg_t[i]*wg_p[j]));
         }
     }
@@ -1092,30 +1101,30 @@ static UTT4LnCellEstimate utt4_ln_cell_estimate(const UTT4LnAdaptiveContext *ctx
 
 
 static int utt4_ln_cell_accept(const UTT4LnAdaptiveContext *ctx, const UTT4LnCellEstimate *e,
-    long double local_abs, long double *value_err, long double *max_comp_err)
+    utt4_real local_abs, utt4_real *value_err, utt4_real *max_comp_err)
 {
-    const long double ev = fabsl(e->kronrod.v - e->gauss.v);
-    long double maxe = ev;
-    int ok = (ev <= local_abs + ctx->rel_tol*fabsl(e->kronrod.v));
-    const long double grad_abs = local_abs/fmaxl(ctx->length2_scale, 1e-30L);
+    const utt4_real ev = UTT4_FABS(e->kronrod.v - e->gauss.v);
+    utt4_real maxe = ev;
+    int ok = (ev <= local_abs + ctx->rel_tol*UTT4_FABS(e->kronrod.v));
+    const utt4_real grad_abs = local_abs/UTT4_FMAX(ctx->length2_scale, 1e-30);
     for (int k = 0; k < UTT4_LN_NPAIR; ++k) {
-        const long double eg = fabsl(e->kronrod.g[k] - e->gauss.g[k]);
+        const utt4_real eg = UTT4_FABS(e->kronrod.g[k] - e->gauss.g[k]);
         if (eg > maxe) maxe = eg;
-        if (eg > grad_abs + ctx->rel_tol*fabsl(e->kronrod.g[k])) ok = 0;
+        if (eg > grad_abs + ctx->rel_tol*UTT4_FABS(e->kronrod.g[k])) ok = 0;
     }
     *value_err=ev;
     *max_comp_err=maxe;
     return ok;
 }
 
-static UTT4LnAdaptiveAccum utt4_ln_adaptive_cell(const UTT4LnAdaptiveContext *ctx, long double ta,
-    long double tb, long double pa, long double pb, long double local_abs, int depth)
+static UTT4LnAdaptiveAccum utt4_ln_adaptive_cell(const UTT4LnAdaptiveContext *ctx, utt4_real ta,
+    utt4_real tb, utt4_real pa, utt4_real pb, utt4_real local_abs, int depth)
 {
     UTT4LnAdaptiveAccum acc;
     memset(&acc, 0, sizeof(acc));
     UTT4LnCellEstimate e = utt4_ln_cell_estimate(ctx, ta, tb, pa, pb);
     acc.node_evals = e.node_evals;
-    long double verr = 0.0L, maxerr = 0.0L;
+    utt4_real verr = 0.0, maxerr = 0.0;
     if (utt4_ln_cell_accept(ctx, &e, local_abs, &verr, &maxerr) || depth >= ctx->max_depth) {
         acc.result = e.kronrod;
         acc.abs_error = verr;
@@ -1123,8 +1132,8 @@ static UTT4LnAdaptiveAccum utt4_ln_adaptive_cell(const UTT4LnAdaptiveContext *ct
         return acc;
     }
 
-    const long double tm = 0.5L*(ta + tb), pm = 0.5L*(pa + pb);
-    const long double bounds[4][4] = {
+    const utt4_real tm = 0.5*(ta + tb), pm = 0.5*(pa + pb);
+    const utt4_real bounds[4][4] = {
         {ta, tm, pa, pm}, {tm, tb, pa, pm}, {ta, tm, pm, pb}, {tm, tb, pm, pb}
     };
     UTT4LnAdaptiveAccum child[4];
@@ -1137,14 +1146,14 @@ static UTT4LnAdaptiveAccum utt4_ln_adaptive_cell(const UTT4LnAdaptiveContext *ct
             UTT4LnAdaptiveContext sub = *ctx;
             sub.parallel_root = 0;
             child[c] = utt4_ln_adaptive_cell(&sub, bounds[c][0], bounds[c][1],bounds[c][2],
-                bounds[c][3], local_abs*0.25L, depth + 1);
+                bounds[c][3], local_abs*0.25, depth + 1);
         }
     } else
 #endif
     {
         for (int c = 0; c < 4; ++c)
             child[c] = utt4_ln_adaptive_cell(ctx, bounds[c][0], bounds[c][1], bounds[c][2],
-                bounds[c][3], local_abs*0.25L, depth + 1);
+                bounds[c][3], local_abs*0.25, depth + 1);
     }
 
     acc.result = d6_zero();
@@ -1161,7 +1170,7 @@ static UTT4LnAdaptiveAccum utt4_ln_adaptive_cell(const UTT4LnAdaptiveContext *ct
 
 
 static UTT4LnWorkResult utt4_ln_adaptive_quadrature(
-    const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3], long double rel_tol, long double abs_tol,
+    const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3], utt4_real rel_tol, utt4_real abs_tol,
     int max_depth, int parallel_root)
 {
     UTT4LnAdaptiveContext ctx;
@@ -1170,11 +1179,11 @@ static UTT4LnWorkResult utt4_ln_adaptive_quadrature(
     ctx.rel_tol = rel_tol;
     ctx.max_depth = max_depth;
     ctx.parallel_root = parallel_root;
-    long double maxd2 = 0.0L;
+    utt4_real maxd2 = 0.0;
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) if (ctx.geo.d2[p] > maxd2) maxd2 = ctx.geo.d2[p];
     ctx.length2_scale = maxd2;
 
-    UTT4LnAdaptiveAccum a = utt4_ln_adaptive_cell(&ctx, 0.0L, M_PI, 0.0L, M_PI, abs_tol, 0);
+    UTT4LnAdaptiveAccum a = utt4_ln_adaptive_cell(&ctx, 0.0, UTT4_PI, 0.0, UTT4_PI, abs_tol, 0);
     UTT4LnWorkResult out;
     memset(&out, 0, sizeof(out));
     out.value = a.result.v;
@@ -1188,8 +1197,8 @@ static UTT4LnWorkResult utt4_ln_adaptive_quadrature(
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const int i = utt4_ln_pair_body_i[p], j = utt4_ln_pair_body_j[p];
         for (int k = 0; k < 3; ++k) {
-            const long double dx = (long double)pos[i][k] - (long double)pos[j][k];
-            const long double contribution = 2.0L*out.d_d2[p]*dx;
+            const utt4_real dx = (utt4_real)pos[i][k] - (utt4_real)pos[j][k];
+            const utt4_real contribution = 2.0*out.d_d2[p]*dx;
             out.grad[i][k] += contribution;
             out.grad[j][k] -= contribution;
         }
@@ -1209,35 +1218,35 @@ static UTT4LnWorkResult utt4_ln_adaptive_quadrature(
  * A refinement is requested when any component exceeds its absolute-plus-relative tolerance.
  */
 static int utt4_ln_needs_refinement(const UTT4LnWorkResult *low, const UTT4LnWorkResult *high,
-    const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3], long double rtol, long double atol,
-    long double *value_error, long double *max_component_error, long double *value_rel_est,
-    long double *max_component_rel_est, long double *worst_tol_ratio)
+    const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3], utt4_real rtol, utt4_real atol,
+    utt4_real *value_error, utt4_real *max_component_error, utt4_real *value_rel_est,
+    utt4_real *max_component_rel_est, utt4_real *worst_tol_ratio)
 {
-    const long double ev = fabsl(high->value-low->value);
-    const long double value_scale = fmaxl(fabsl(high->value), 1e-300L);
-    const long double vr = ev/value_scale;
-    const long double value_allowed = atol + rtol*fabsl(high->value);
-    long double worst = (value_allowed > 0.0L) ? ev/value_allowed : (ev == 0.0L ? 0.0L : HUGE_VALL);
-    long double maxe = ev, maxrel = vr;
-    int refine = worst > 1.0L;
-    long double maxd2 = 0.0L;
+    const utt4_real ev = UTT4_FABS(high->value-low->value);
+    const utt4_real value_scale = UTT4_FMAX(UTT4_FABS(high->value), 1e-300);
+    const utt4_real vr = ev/value_scale;
+    const utt4_real value_allowed = atol + rtol*UTT4_FABS(high->value);
+    utt4_real worst = (value_allowed > 0.0) ? ev/value_allowed : (ev == 0.0 ? 0.0 : UTT4_HUGE);
+    utt4_real maxe = ev, maxrel = vr;
+    int refine = worst > 1.0;
+    utt4_real maxd2 = 0.0;
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const int i = utt4_ln_pair_body_i[p], j = utt4_ln_pair_body_j[p];
-        long double d2 = 0.0L;
-        for (int k = 0; k < 3; ++k) {const long double x = (long double)pos[i][k] - pos[j][k]; d2 += x*x; }
+        utt4_real d2 = 0.0;
+        for (int k = 0; k < 3; ++k) {const utt4_real x = (utt4_real)pos[i][k] - pos[j][k]; d2 += x*x; }
         if (d2 > maxd2)maxd2 = d2;
     }
-    const long double datol = atol/fmaxl(maxd2, 1e-30L);
+    const utt4_real datol = atol/UTT4_FMAX(maxd2, 1e-30);
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
-        const long double e = fabsl(high->d_d2[p] - low->d_d2[p]);
-        const long double scale = fmaxl(fabsl(high->d_d2[p]), 1e-300L);
-        const long double rel = e/scale;
-        const long double allowed = datol + rtol*fabsl(high->d_d2[p]);
-        const long double ratio = (allowed > 0.0L) ? e/allowed : (e == 0.0L ? 0.0L : HUGE_VALL);
+        const utt4_real e = UTT4_FABS(high->d_d2[p] - low->d_d2[p]);
+        const utt4_real scale = UTT4_FMAX(UTT4_FABS(high->d_d2[p]), 1e-300);
+        const utt4_real rel = e/scale;
+        const utt4_real allowed = datol + rtol*UTT4_FABS(high->d_d2[p]);
+        const utt4_real ratio = (allowed > 0.0) ? e/allowed : (e == 0.0 ? 0.0 : UTT4_HUGE);
         if (e > maxe)maxe = e;
         if (rel > maxrel)maxrel = rel;
         if (ratio > worst)worst = ratio;
-        if (ratio > 1.0L)refine = 1;
+        if (ratio > 1.0)refine = 1;
     }
     if (value_error)*value_error = ev;
     if (max_component_error)*max_component_error = maxe;
@@ -1248,19 +1257,27 @@ static int utt4_ln_needs_refinement(const UTT4LnWorkResult *low, const UTT4LnWor
 }
 
 
-static int integral_round_up_even_order(long double x)
+/*
+ * How far inside tolerance the lower comparison rule must land before its order is suggested for
+ * the next evaluation. A twentyfold margin means the descent only happens on clear evidence and
+ * leaves room for the geometry to drift between verifications.
+ */
+#define UTT4_LN_ORDER_DESCEND_MARGIN ((utt4_real)0.05)
+
+
+static int integral_round_up_even_order(utt4_real x)
 {
-    int n = (int)ceill(x);
+    int n = (int)UTT4_CEIL(x);
     if (n < 4)n = 4;
     if (n & 1)++n;
     return n;
 }
 
-static int integral_initial_high_order(long double rtol, int min_order, int max_order)
+static int integral_initial_high_order(utt4_real rtol, int min_order, int max_order)
 {
-    long double digits = -log10l(rtol);
-    if (digits < 1.0L)digits = 1.0L;
-    int high = integral_round_up_even_order(2.7L*digits);
+    utt4_real digits = -UTT4_LOG10(rtol);
+    if (digits < 1.0)digits = 1.0;
+    int high = integral_round_up_even_order(2.7*digits);
     if (high < min_order + 2)high = min_order + 2;
     if (high > max_order)high = max_order;
     return high;
@@ -1268,7 +1285,7 @@ static int integral_initial_high_order(long double rtol, int min_order, int max_
 
 static int integral_previous_order(int high, int min_order)
 {
-    int low = integral_round_up_even_order(0.88L*(long double)high);
+    int low = integral_round_up_even_order(0.88*(utt4_real)high);
     if (low >= high)low = high - 2;
     if (low < min_order)low = min_order;
     if (low >= high)low = high - 2;
@@ -1277,7 +1294,7 @@ static int integral_previous_order(int high, int min_order)
 
 static int integral_next_order(int high, int max_order)
 {
-    int next = (high < 64) ? high + 4 : integral_round_up_even_order(1.20L*(long double)high);
+    int next = (high < 64) ? high + 4 : integral_round_up_even_order(1.20*(utt4_real)high);
     if (next <= high)next = high + 2;
     if (next > max_order)next = max_order;
     return next;
@@ -1285,29 +1302,29 @@ static int integral_next_order(int high, int max_order)
 
 
 static int utt4_ln_adaptive_meets_target(const UTT4LnWorkResult *r,
-    const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3], long double rtol, long double atol,
-    long double *worst_ratio)
+    const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3], utt4_real rtol, utt4_real atol,
+    utt4_real *worst_ratio)
 {
-    const long double value_allowed = atol + rtol*fabsl(r->value);
-    long double worst = (value_allowed > 0.0L) ? r->error_estimate/value_allowed : 0.0L;
-    long double maxd2 = 0.0L;
+    const utt4_real value_allowed = atol + rtol*UTT4_FABS(r->value);
+    utt4_real worst = (value_allowed > 0.0) ? r->error_estimate/value_allowed : 0.0;
+    utt4_real maxd2 = 0.0;
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const int i = utt4_ln_pair_body_i[p], j = utt4_ln_pair_body_j[p];
-        long double d2 = 0.0L;
+        utt4_real d2 = 0.0;
         for (int k = 0; k < 3; ++k) {
-            const long double dx = (long double)pos[i][k] - (long double)pos[j][k];
+            const utt4_real dx = (utt4_real)pos[i][k] - (utt4_real)pos[j][k];
             d2 += dx*dx;
         }
         if (d2 > maxd2)maxd2 = d2;
     }
-    const long double datol = atol/fmaxl(maxd2, 1e-30L);
+    const utt4_real datol = atol/UTT4_FMAX(maxd2, 1e-30);
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
-        const long double allowed = datol + rtol*fabsl(r->d_d2[p]);
-        const long double ratio = (allowed > 0.0L) ? r->max_component_error/allowed : 0.0L;
+        const utt4_real allowed = datol + rtol*UTT4_FABS(r->d_d2[p]);
+        const utt4_real ratio = (allowed > 0.0) ? r->max_component_error/allowed : 0.0;
         if (ratio > worst)worst = ratio;
     }
     if (worst_ratio)*worst_ratio = worst;
-    return worst <= 1.0L;
+    return worst <= 1.0;
 }
 
 
@@ -1333,12 +1350,46 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
 {
     if (!pos || !settings || !out) return -1;
     memset(out, 0, sizeof(*out));
-    if (!(settings->rel_tol > 0.0L) || !(settings->abs_tol > 0.0L) ||
+    if (!(settings->rel_tol > 0.0) || !(settings->abs_tol > 0.0) ||
        settings->min_order < 4 || settings->max_order < settings->min_order ||
        settings->max_depth < 0) return -1;
 
-    int high_order = integral_initial_high_order(settings->rel_tol, settings->min_order,
-        settings->max_order);
+    int high_order;
+    if (settings->start_order > 0) {
+        high_order = integral_round_up_even_order(settings->start_order);
+        if (high_order < settings->min_order) high_order = settings->min_order;
+        if (high_order > settings->max_order) high_order = settings->max_order;
+    } else {
+        high_order = integral_initial_high_order(settings->rel_tol, settings->min_order,
+            settings->max_order);
+    }
+
+    /*
+     * Unverified fast path: run the remembered order alone and skip the comparison sweep, which
+     * is otherwise close to half the cost of an evaluation. No error estimate is produced here,
+     * so target_met is inherited from the caller's last verified evaluation rather than
+     * established; the caller is responsible for verifying often enough that the order stays
+     * valid as the geometry drifts.
+     */
+    if (settings->start_order > 0 && !settings->verify) {
+        const UTT4LnQuadratureRule *qfast = utt4_ln_quadrature_rule_get(high_order);
+        if (qfast == NULL)
+            return -1;
+
+        const UTT4LnWorkResult fast = utt4_ln_fixed_quadrature(pos, qfast, settings->use_openmp);
+        out->value = fast.value;
+        for (int b = 0; b < UTT4_LN_INTEGRAL_NUM_BODIES; ++b)
+            for (int k = 0; k < 3; ++k)
+                out->grad[b][k] = fast.grad[b][k];
+
+        out->diagnostics.node_evals = fast.node_evals;
+        out->diagnostics.low_order = high_order;
+        out->diagnostics.high_order = high_order;
+        out->diagnostics.suggested_order = high_order;
+        out->diagnostics.target_met = 1;
+        return 0;
+    }
+
     int low_order = integral_previous_order(high_order, settings->min_order);
     if (low_order < 4 || high_order <= low_order) {
         low_order = settings->min_order;
@@ -1358,8 +1409,8 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
     UTT4LnWorkResult high = utt4_ln_fixed_quadrature(pos, qhigh, settings->use_openmp);
     out->diagnostics.node_evals = low.node_evals + high.node_evals;
 
-    long double value_error = 0.0L, max_component_error = 0.0L;
-    long double value_rel = 0.0L, max_component_rel = 0.0L, worst = 0.0L;
+    utt4_real value_error = 0.0, max_component_error = 0.0;
+    utt4_real value_rel = 0.0, max_component_rel = 0.0, worst = 0.0;
     int refine = utt4_ln_needs_refinement(&low, &high, pos, settings->rel_tol, settings->abs_tol,
         &value_error, &max_component_error, &value_rel, &max_component_rel, &worst);
     while (refine && high_order < settings->max_order) {
@@ -1387,6 +1438,18 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
     out->diagnostics.max_derivative_rel_est = max_component_rel;
     out->diagnostics.worst_tolerance_ratio = worst;
 
+    /*
+     * Order to start from next time this quadruple is evaluated. When the comparison sweep showed
+     * the lower rule was already well inside tolerance, suggest that lower order: the comparison
+     * is direct evidence that low_order sufficed, so a caller feeding this back walks down to the
+     * cheapest adequate rule instead of paying the conservative initial guess forever. The margin
+     * leaves headroom for the geometry drifting between verifications. Nothing is suggested below
+     * the current order while a refinement is still outstanding.
+     */
+    out->diagnostics.suggested_order = high_order;
+    if (!refine && low_order >= settings->min_order && worst <= UTT4_LN_ORDER_DESCEND_MARGIN)
+        out->diagnostics.suggested_order = low_order;
+
     if (refine && settings->adaptive) {
         final = utt4_ln_adaptive_quadrature(pos, settings->rel_tol, settings->abs_tol,
             settings->max_depth, settings->use_openmp);
@@ -1394,11 +1457,12 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
         out->diagnostics.node_evals += final.node_evals;
         out->diagnostics.value_error = final.error_estimate;
         out->diagnostics.max_derivative_error = final.max_component_error;
-        out->diagnostics.value_rel_est = final.error_estimate/fmaxl(fabsl(final.value), 1e-300L);
-        long double maxrel = 0.0L;
+        out->diagnostics.value_rel_est =
+            final.error_estimate/UTT4_FMAX(UTT4_FABS(final.value), 1e-300);
+        utt4_real maxrel = 0.0;
         for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
-            const long double rel = final.max_component_error/
-                fmaxl(fabsl(final.d_d2[p]), 1e-300L);
+            const utt4_real rel = final.max_component_error/
+                UTT4_FMAX(UTT4_FABS(final.d_d2[p]), 1e-300);
             if (rel > maxrel)maxrel = rel;
         }
         out->diagnostics.max_derivative_rel_est = maxrel;

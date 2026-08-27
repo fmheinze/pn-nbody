@@ -5,6 +5,7 @@
 
 
 struct PairCache;
+struct UTT4Cache;
 
 struct ode_params {
     // General setup
@@ -16,13 +17,14 @@ struct ode_params {
     // EOM parameters (frequent access, parameter database queries would be expensive)
     int use_impulse_method;
     int include_utt4;
-    double utt4_ln_integral_epsrel;
-    double utt4_ln_integral_epsabs;
-    int utt4_ln_integral_min_order;
-    int utt4_ln_integral_max_order;
-    int utt4_ln_integral_adaptive;
-    int utt4_ln_integral_max_depth;
-    int utt4_ln_integral_parallel;
+    double utt4_epsrel;
+    double utt4_epsabs;
+    int utt4_min_order;
+    int utt4_max_order;
+    int utt4_adaptive;
+    int utt4_max_depth;
+    int utt4_parallel;
+    int utt4_verify_interval;
 
     // Merger parameters
     int merge_activate;
@@ -33,6 +35,7 @@ struct ode_params {
     int num_active;
     int *active;
     struct PairCache *pair_cache;  // Persistent, owned RHS/energy workspace
+    struct UTT4Cache *utt4_cache;  // Persistent, owned UTT4 evaluation cache
     long long *body_id;
     long long next_body_id;
     int *generation;

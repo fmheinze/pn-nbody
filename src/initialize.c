@@ -16,7 +16,7 @@
 #include "parameters.h"
 #include "utils.h"
 #include "initial_configurations.h"
-#include "pair_cache.h"
+#include "cache.h"
 
 #define NUM_PN_TERMS 4
 
@@ -71,20 +71,23 @@ void initialize_parameters()
     if (get_parameter_int("2pn_terms") == 1 && get_parameter_int("num_bodies") >= 4) {
         add_parameter("include_utt4", "1", "whether to include UTT4 in the Hamiltonian [0, 1]");
         if (get_parameter_int("include_utt4") == 1) {
-            add_parameter("utt4_ln_integral_epsrel", "1e-10",
+            add_parameter("utt4_epsrel", "1e-10",
                 "target relative error for the logarithmic integral in UTT4 [> 0]");
-            add_parameter("utt4_ln_integral_epsabs", "1e-20",
+            add_parameter("utt4_epsabs", "1e-20",
                 "target absolute error for the logarithmic integral in UTT4 [> 0]");
-            add_parameter("utt4_ln_integral_min_order", "8",
+            add_parameter("utt4_min_order", "8",
                 "minimum Gauss-Legendre order for UTT4 logarithmic-integral quadrature");
-            add_parameter("utt4_ln_integral_max_order", "160",
+            add_parameter("utt4_max_order", "160",
                 "maximum Gauss-Legendre order for UTT4 logarithmic-integral quadrature");
-            add_parameter("utt4_ln_integral_adaptive", "1",
+            add_parameter("utt4_adaptive", "1",
                 "whether to use adaptive Gauss-Kronrod fallback [0, 1]");
-            add_parameter("utt4_ln_integral_max_depth", "7",
+            add_parameter("utt4_max_depth", "7",
                 "maximum adaptive subdivision depth for the logarithmic integral in UTT4 [>= 0]");
-            add_parameter("utt4_ln_integral_parallel", "1",
+            add_parameter("utt4_parallel", "1",
                 "whether to use OpenMP for the UTT4 logarithmic-integral quadrature [0, 1]");
+            add_parameter("utt4_verify_interval", "8",
+                "evaluations a remembered quadrature order is reused before it is rechecked "
+                "[>= 1; 1 rechecks every time]");
         }
 
         add_parameter("impulse_method", "0", "whether to use the impulse method");
@@ -346,21 +349,23 @@ struct ode_params initialize_ode_params()
         params.include_utt4 = 0;
     }
     if (params.include_utt4 == 1) {
-        params.utt4_ln_integral_epsrel = get_parameter_double("utt4_ln_integral_epsrel");
-        params.utt4_ln_integral_epsabs = get_parameter_double("utt4_ln_integral_epsabs");
-        params.utt4_ln_integral_min_order = get_parameter_int("utt4_ln_integral_min_order");
-        params.utt4_ln_integral_max_order = get_parameter_int("utt4_ln_integral_max_order");
-        params.utt4_ln_integral_adaptive = get_parameter_int("utt4_ln_integral_adaptive");
-        params.utt4_ln_integral_max_depth = get_parameter_int("utt4_ln_integral_max_depth");
-        params.utt4_ln_integral_parallel = get_parameter_int("utt4_ln_integral_parallel");
+        params.utt4_epsrel = get_parameter_double("utt4_epsrel");
+        params.utt4_epsabs = get_parameter_double("utt4_epsabs");
+        params.utt4_min_order = get_parameter_int("utt4_min_order");
+        params.utt4_max_order = get_parameter_int("utt4_max_order");
+        params.utt4_adaptive = get_parameter_int("utt4_adaptive");
+        params.utt4_max_depth = get_parameter_int("utt4_max_depth");
+        params.utt4_parallel = get_parameter_int("utt4_parallel");
+        params.utt4_verify_interval = get_parameter_int("utt4_verify_interval");
     } else {
-        params.utt4_ln_integral_epsrel = -1;
-        params.utt4_ln_integral_epsabs = -1;
-        params.utt4_ln_integral_min_order = -1;
-        params.utt4_ln_integral_max_order = -1;
-        params.utt4_ln_integral_adaptive = 0;
-        params.utt4_ln_integral_max_depth = -1;
-        params.utt4_ln_integral_parallel = 0;
+        params.utt4_epsrel = -1;
+        params.utt4_epsabs = -1;
+        params.utt4_min_order = -1;
+        params.utt4_max_order = -1;
+        params.utt4_adaptive = 0;
+        params.utt4_max_depth = -1;
+        params.utt4_parallel = 0;
+        params.utt4_verify_interval = 1;
     }
 
     // Merger history
@@ -419,23 +424,22 @@ struct ode_params initialize_ode_params()
         errorexit("Please set include_utt4 to 0 (off) or 1 (on)");
     if (params.use_impulse_method == 1 && params.include_utt4 == 0)
         errorexit("You cannot use the impulse method without also including UTT4!");
-    if (params.include_utt4 == 1 && params.utt4_ln_integral_epsrel <= 0)
-        errorexit("Please specify a valid utt4_ln_integral_epsrel (must be > 0)");
-    if (params.include_utt4 == 1 && params.utt4_ln_integral_epsabs <= 0)
-        errorexit("Please specify a valid utt4_ln_integral_epsabs (must be > 0)");
-    if (params.include_utt4 == 1 && params.utt4_ln_integral_min_order < 4)
-        errorexit("Please specify a valid utt4_ln_integral_min_order (must be >= 4)");
-    if (params.include_utt4 == 1
-            && params.utt4_ln_integral_max_order < params.utt4_ln_integral_min_order + 2)
-        errorexit("Please ensure utt4_ln_integral_max_order >= utt4_ln_integral_min_order + 2");
-    if (params.include_utt4 == 1
-            && params.utt4_ln_integral_adaptive != 0 && params.utt4_ln_integral_adaptive != 1)
-        errorexit("Please set utt4_ln_integral_adaptive to 0 (off) or 1 (on)");
-    if (params.include_utt4 == 1 && params.utt4_ln_integral_max_depth < 0)
-        errorexit("Please specify a valid utt4_ln_integral_max_depth (must be >= 0)");
-    if (params.include_utt4 == 1
-            && params.utt4_ln_integral_parallel != 0 && params.utt4_ln_integral_parallel != 1)
-        errorexit("Please set utt4_ln_integral_parallel to 0 (off) or 1 (on)");
+    if (params.include_utt4 == 1 && params.utt4_epsrel <= 0)
+        errorexit("Please specify a valid utt4_epsrel (must be > 0)");
+    if (params.include_utt4 == 1 && params.utt4_epsabs <= 0)
+        errorexit("Please specify a valid utt4_epsabs (must be > 0)");
+    if (params.include_utt4 == 1 && params.utt4_min_order < 4)
+        errorexit("Please specify a valid utt4_min_order (must be >= 4)");
+    if (params.include_utt4 == 1 && params.utt4_max_order < params.utt4_min_order + 2)
+        errorexit("Please ensure utt4_max_order >= utt4_min_order + 2");
+    if (params.include_utt4 == 1 && params.utt4_adaptive != 0 && params.utt4_adaptive != 1)
+        errorexit("Please set utt4_adaptive to 0 (off) or 1 (on)");
+    if (params.include_utt4 == 1 && params.utt4_max_depth < 0)
+        errorexit("Please specify a valid utt4_max_depth (must be >= 0)");
+    if (params.include_utt4 == 1 && params.utt4_parallel != 0 && params.utt4_parallel != 1)
+        errorexit("Please set utt4_parallel to 0 (off) or 1 (on)");
+    if (params.include_utt4 == 1 && params.utt4_verify_interval < 1)
+        errorexit("Please specify a valid utt4_verify_interval (must be >= 1)");
 
     if (params.merge_activate != 1 && params.merge_activate != 0)
         errorexit("Please set merge_activate to 0 (off) or 1 (on)");
@@ -450,10 +454,12 @@ struct ode_params initialize_ode_params()
     // UTT4 information
     if (params.include_utt4) {
         printf("Numerical evaluation of UTT4 enabled with target relative error %.3e\n",
-            params.utt4_ln_integral_epsrel);
+            params.utt4_epsrel);
     }
 
     params.pair_cache = pair_cache_create(&params);
+    if (params.include_utt4)
+        params.utt4_cache = utt4_cache_create(&params);
 
     return params;
 }

@@ -19,7 +19,7 @@
 #include <errno.h>
 #include "utils.h"
 #include "eom.h"
-#include "pair_cache.h"
+#include "cache.h"
 
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
@@ -128,6 +128,9 @@ void free_ode_params(struct ode_params* params)
 
     pair_cache_destroy(params->pair_cache);
     params->pair_cache = NULL;
+
+    utt4_cache_destroy(params->utt4_cache);
+    params->utt4_cache = NULL;
 
     free_vector(params->masses);
     params->masses = NULL;

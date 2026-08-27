@@ -12,11 +12,12 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <complex.h>
 #include "eom.h"
 #include "hamiltonian.h"
 #include "utils.h"
-#include "pair_cache.h"
+#include "cache.h"
 #include "integrals.h"
 
 #ifdef _OPENMP
@@ -34,14 +35,116 @@
 static NumericalIntegralSettings utt4_ln_integral_settings_from_ode(const struct ode_params *ode_params)
 {
     NumericalIntegralSettings settings;
-    settings.rel_tol = (long double)ode_params->utt4_ln_integral_epsrel;
-    settings.abs_tol = (long double)ode_params->utt4_ln_integral_epsabs;
-    settings.min_order = ode_params->utt4_ln_integral_min_order;
-    settings.max_order = ode_params->utt4_ln_integral_max_order;
-    settings.adaptive = ode_params->utt4_ln_integral_adaptive;
-    settings.max_depth = ode_params->utt4_ln_integral_max_depth;
-    settings.use_openmp = ode_params->utt4_ln_integral_parallel;
+    settings.rel_tol = (utt4_real)ode_params->utt4_epsrel;
+    settings.abs_tol = (utt4_real)ode_params->utt4_epsabs;
+    settings.min_order = ode_params->utt4_min_order;
+    settings.max_order = ode_params->utt4_max_order;
+    settings.adaptive = ode_params->utt4_adaptive;
+    settings.max_depth = ode_params->utt4_max_depth;
+    settings.use_openmp = ode_params->utt4_parallel;
+
+    settings.start_order = 0;
+    settings.verify = 1;
     return settings;
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// Per-quadruple quadrature-order memory
+// ------------------------------------------------------------------------------------------------
+
+#define UTT4_ORDER_SLOT_NONE ((size_t)-1)
+
+
+/**
+ * @brief Discard the remembered orders when the active set changes. 
+ * 
+ * A merger frees a body slot for reuse, so an entry addressed by slot would otherwise describe a 
+ * quadruple that no longer exists. This runs once per refresh and is O(N) against the O(N^4) 
+ * integrals it guards.
+ */
+static void utt4_order_memory_sync(UTT4Cache *cache, const struct ode_params *ode_params)
+{
+    UTT4OrderMemory *mem = &cache->order;
+    if (!mem->enabled)
+        return;
+
+    int changed = 0;
+    for (int a = 0; a < cache->num_bodies; ++a) {
+        if (mem->active[a] != ode_params->active[a]) {
+            changed = 1;
+            break;
+        }
+    }
+
+    if (!changed)
+        return;
+
+    memset(mem->order, 0, mem->count*sizeof(*mem->order));
+    memset(mem->age, 0, mem->count*sizeof(*mem->age));
+
+    for (int a = 0; a < cache->num_bodies; ++a)
+        mem->active[a] = ode_params->active[a];
+}
+
+
+/**
+ * @brief Specialize the integral settings for one quadruple from what is remembered about it. 
+ * 
+ * The functions returns the slot to record the outcome in. A quadruple with a remembered order 
+ * runs unverified until its age reaches the verify interval, at which point the full two-order 
+ * check runs again.
+ */
+static size_t utt4_order_memory_apply(const UTT4Cache *cache, const struct ode_params *ode_params,
+    const int body[NUM_LOCAL_BODIES], NumericalIntegralSettings *settings)
+{
+    const UTT4OrderMemory *mem = &cache->order;
+
+    settings->start_order = 0;
+    settings->verify = 1;
+
+    if (!mem->enabled)
+        return UTT4_ORDER_SLOT_NONE;
+
+    const size_t slot = utt4_order_memory_index(body[0], body[1], body[2], body[3]);
+    if (slot >= mem->count)
+        return UTT4_ORDER_SLOT_NONE;
+
+    if (mem->order[slot] > 0) {
+        settings->start_order = mem->order[slot];
+        settings->verify = (mem->age[slot] >= ode_params->utt4_verify_interval);
+    }
+
+    return slot;
+}
+
+
+/**
+ * @brief Record one quadruple evaluation. 
+ * 
+ * Only a verified evaluation may move the remembered order, because only it produced an error
+ * estimate; an unverified one just ages the entry toward its next check. Each quadruple owns
+ * a distinct slot, so the parallel loop needs no synchronization.
+ */
+static void utt4_order_memory_update(UTT4Cache *cache, size_t slot, int verified,
+    const UTT4LnIntegralResult *result)
+{
+    UTT4OrderMemory *mem = &cache->order;
+
+    if (slot == UTT4_ORDER_SLOT_NONE)
+        return;
+
+    if (verified) {
+        const int suggested = (result->diagnostics.suggested_order > 0)
+            ? result->diagnostics.suggested_order : result->diagnostics.high_order;
+
+        // An order too large for the slot is simply not remembered, so such a quadruple keeps
+        // taking the fully verified path rather than being restarted from a truncated order.
+        mem->order[slot] = (suggested > 0 && suggested <= 32767) ? (short)suggested : 0;
+        mem->age[slot] = 0;
+    } else if (mem->age[slot] < 32000) {
+        mem->age[slot]++;
+    }
 }
 
 
@@ -56,49 +159,49 @@ static void utt4_ln_integral_warning(const UTT4LnIntegralResult *result,
     if (!warned) {
         progress_bar_break_line();
         printf("Warning: the UTT4 logarithmic integral did not reach the requested tolerance "
-               "(epsrel=%.3e, last fixed orders %d/%d, worst tolerance ratio %.3Le). "
-               "Consider increasing utt4_ln_integral_max_order or utt4_ln_integral_max_depth.\n",
-               ode_params->utt4_ln_integral_epsrel, result->diagnostics.low_order,
+               "(epsrel=%.3e, last fixed orders %d/%d, worst tolerance ratio %.3e). "
+               "Consider increasing utt4_max_order or utt4_max_depth.\n",
+               ode_params->utt4_epsrel, result->diagnostics.low_order,
                result->diagnostics.high_order,
-               result->diagnostics.worst_tolerance_ratio);
+               (double)result->diagnostics.worst_tolerance_ratio);
         warned = 1;
     }
 }
 
 
 // Check whether the cached logarithmic UTT4 result is valid for the current position state.
-static int utt4_ln_cache_matches(const PairCache *cache, const double *w,
+static int utt4_ln_cache_matches(const UTT4Cache *cache, const double *w,
     const struct ode_params *ode_params)
 {
-    const UTT4LnCache *utt4_cache = &cache->utt4_ln;
-    if (!utt4_cache->valid)
+    const UTT4LnCache *ln = &cache->ln;
+    if (!ln->valid)
         return 0;
 
-    if (utt4_cache->epsrel != ode_params->utt4_ln_integral_epsrel
-        || utt4_cache->epsabs != ode_params->utt4_ln_integral_epsabs
-        || utt4_cache->min_order != ode_params->utt4_ln_integral_min_order
-        || utt4_cache->max_order != ode_params->utt4_ln_integral_max_order
-        || utt4_cache->adaptive != ode_params->utt4_ln_integral_adaptive
-        || utt4_cache->max_depth != ode_params->utt4_ln_integral_max_depth
-        || utt4_cache->parallel != ode_params->utt4_ln_integral_parallel)
+    if (ln->epsrel != ode_params->utt4_epsrel
+        || ln->epsabs != ode_params->utt4_epsabs
+        || ln->min_order != ode_params->utt4_min_order
+        || ln->max_order != ode_params->utt4_max_order
+        || ln->adaptive != ode_params->utt4_adaptive
+        || ln->max_depth != ode_params->utt4_max_depth
+        || ln->parallel != ode_params->utt4_parallel)
         return 0;
 
     const int num_bodies = cache->num_bodies;
     const int num_dim = cache->num_dim;
 
     for (int a = 0; a < num_bodies; ++a) {
-        if (utt4_cache->active[a] != ode_params->active[a])
+        if (ln->active[a] != ode_params->active[a])
             return 0;
 
         if (!ode_params->active[a])
             continue;
 
-        if (utt4_cache->masses[a] != ode_params->masses[a])
+        if (ln->masses[a] != ode_params->masses[a])
             return 0;
 
         for (int axis = 0; axis < num_dim; ++axis) {
             const int idx = a * num_dim + axis;
-            if (utt4_cache->positions[idx] != w[idx])
+            if (ln->positions[idx] != w[idx])
                 return 0;
         }
     }
@@ -108,31 +211,31 @@ static int utt4_ln_cache_matches(const PairCache *cache, const double *w,
 
 
 // Store the exact position/mass/active-set/settings key for a freshly evaluated UTT4 cache entry.
-static void utt4_ln_cache_store_key(PairCache *cache, const double *w,
+static void utt4_ln_cache_store_key(UTT4Cache *cache, const double *w,
     const struct ode_params *ode_params)
 {
-    UTT4LnCache *utt4_cache = &cache->utt4_ln;
+    UTT4LnCache *ln = &cache->ln;
     const int num_bodies = cache->num_bodies;
     const int num_dim = cache->num_dim;
 
     for (int a = 0; a < num_bodies; ++a) {
-        utt4_cache->active[a] = ode_params->active[a];
-        utt4_cache->masses[a] = ode_params->masses[a];
+        ln->active[a] = ode_params->active[a];
+        ln->masses[a] = ode_params->masses[a];
 
         for (int axis = 0; axis < num_dim; ++axis) {
             const int idx = a * num_dim + axis;
-            utt4_cache->positions[idx] = w[idx];
+            ln->positions[idx] = w[idx];
         }
     }
 
-    utt4_cache->epsrel = ode_params->utt4_ln_integral_epsrel;
-    utt4_cache->epsabs = ode_params->utt4_ln_integral_epsabs;
-    utt4_cache->min_order = ode_params->utt4_ln_integral_min_order;
-    utt4_cache->max_order = ode_params->utt4_ln_integral_max_order;
-    utt4_cache->adaptive = ode_params->utt4_ln_integral_adaptive;
-    utt4_cache->max_depth = ode_params->utt4_ln_integral_max_depth;
-    utt4_cache->parallel = ode_params->utt4_ln_integral_parallel;
-    utt4_cache->valid = 1;
+    ln->epsrel = ode_params->utt4_epsrel;
+    ln->epsabs = ode_params->utt4_epsabs;
+    ln->min_order = ode_params->utt4_min_order;
+    ln->max_order = ode_params->utt4_max_order;
+    ln->adaptive = ode_params->utt4_adaptive;
+    ln->max_depth = ode_params->utt4_max_depth;
+    ln->parallel = ode_params->utt4_parallel;
+    ln->valid = 1;
 }
 
 
@@ -225,20 +328,22 @@ static void utt4_ln_accumulate_quadruple(const struct ode_params *ode_params,
 
 
 // Evaluate the complete mass-weighted logarithmic UTT4 value and gradient for one position state.
-static void utt4_ln_cache_refresh(PairCache *cache, double *w, struct ode_params *ode_params)
+static void utt4_ln_cache_refresh(UTT4Cache *cache, double *w, struct ode_params *ode_params)
 {
     const int num_dim = ode_params->num_dim;
     const int array_half = cache->array_half;
     const NumericalIntegralSettings settings = utt4_ln_integral_settings_from_ode(ode_params);
     const ActiveList *active = &cache->active;
-    UTT4LnCache *utt4_cache = &cache->utt4_ln;
+    UTT4LnCache *ln = &cache->ln;
     const size_t num_quadruples = utt4_ln_num_quadruples(active->num_active);
 
     if (num_dim != 3)
         errorexit("The UTT4 logarithmic integral can only be computed in 3D! Use num_dim = 3");
 
+    utt4_order_memory_sync(cache, ode_params);
+
     for (int i = 0; i < array_half; ++i)
-        utt4_cache->grad[i] = 0.0;
+        ln->grad[i] = 0.0;
 
     long double sum = 0.0L;
 
@@ -279,10 +384,17 @@ static void utt4_ln_cache_refresh(PairCache *cache, double *w, struct ode_params
                 UTT4LnIntegralResult result;
                 utt4_ln_quadruple_from_index(active, q, body);
 
-                if (utt4_ln_evaluate_quadruple(w, ode_params, body, &serial_settings, &result) != 0) {
+                NumericalIntegralSettings quadruple_settings = serial_settings;
+                const size_t slot = utt4_order_memory_apply(cache, ode_params, body,
+                    &quadruple_settings);
+
+                if (utt4_ln_evaluate_quadruple(w, ode_params, body, &quadruple_settings,
+                        &result) != 0) {
                     thread_failed[tid] = 1;
                     continue;
                 }
+
+                utt4_order_memory_update(cache, slot, quadruple_settings.verify, &result);
 
                 if (!result.diagnostics.target_met && !thread_warn[tid]) {
                     warning_result[tid] = result;
@@ -310,7 +422,7 @@ static void utt4_ln_cache_refresh(PairCache *cache, double *w, struct ode_params
             long double component = 0.0L;
             for (int tid = 0; tid < max_threads; ++tid)
                 component += thread_grad[(size_t)tid*(size_t)array_half + i];
-            utt4_cache->grad[i] = (double)component;
+            ln->grad[i] = (double)component;
         }
 
         free(thread_sum);
@@ -333,17 +445,23 @@ static void utt4_ln_cache_refresh(PairCache *cache, double *w, struct ode_params
             UTT4LnIntegralResult result;
             utt4_ln_quadruple_from_index(active, q, body);
 
-            if (utt4_ln_evaluate_quadruple(w, ode_params, body, &settings, &result) != 0)
+            NumericalIntegralSettings quadruple_settings = settings;
+            const size_t slot = utt4_order_memory_apply(cache, ode_params, body,
+                &quadruple_settings);
+
+            if (utt4_ln_evaluate_quadruple(w, ode_params, body, &quadruple_settings, &result) != 0)
                 errorexit("UTT4 logarithmic integral evaluation failed");
+
+            utt4_order_memory_update(cache, slot, quadruple_settings.verify, &result);
             utt4_ln_integral_warning(&result, ode_params);
             utt4_ln_accumulate_quadruple(ode_params, body, &result, &sum, serial_grad);
         }
 
         for (int i = 0; i < array_half; ++i)
-            utt4_cache->grad[i] = (double)serial_grad[i];
+            ln->grad[i] = (double)serial_grad[i];
     }
 
-    utt4_cache->value = (double)sum;
+    ln->value = (double)sum;
     utt4_ln_cache_store_key(cache, w, ode_params);
 }
 
@@ -361,18 +479,18 @@ void utt4_ln_integral_cached(double *w, struct ode_params *ode_params, double *v
     if (w == NULL || ode_params == NULL)
         errorexit("utt4_ln_integral_cached received a NULL input");
 
-    PairCache *cache = pair_cache_get_workspace(ode_params);
+    UTT4Cache *cache = utt4_cache_get_workspace(ode_params);
     active_list_refresh(&cache->active, ode_params);
 
     if (!utt4_ln_cache_matches(cache, w, ode_params))
         utt4_ln_cache_refresh(cache, w, ode_params);
 
     if (value != NULL)
-        *value = cache->utt4_ln.value;
+        *value = cache->ln.value;
 
     if (grad != NULL) {
         for (int i = 0; i < cache->array_half; ++i)
-            grad[i] = cache->utt4_ln.grad[i];
+            grad[i] = cache->ln.grad[i];
     }
 }
 

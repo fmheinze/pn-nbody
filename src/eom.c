@@ -9,7 +9,7 @@
 #include "utils.h"
 #include "eom.h"
 #include "hamiltonian.h"
-#include "pair_cache.h"
+#include "cache.h"
 
 #define UTT4_NUM_LOCAL_BODIES 4
 #define UTT4_NUM_LOCAL_PAIRS 6

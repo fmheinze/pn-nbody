@@ -1,25 +1,28 @@
 /**
- * @file pair_cache.c
- * @brief Persistent pair cache used by post-Newtonian RHS and Hamiltonian evaluations.
+ * @file cache.c
+ * @brief Persistent workspaces reused across post-Newtonian RHS and Hamiltonian evaluations.
  *
- * This file implements the creation, refresh, and destruction of the persistent PairCache
- * workspace. The cache stores a compact list of active bodies and derived quantities for
- * the current phase-space state, including inverse masses, momentum norms and scalar products,
- * pair separations, inverse separations, unit separation vectors, and pair-endpoint momentum
- * contractions. It also owns a small cache for the expensive position-only logarithmic UTT4
- * value and gradient so energy and force evaluations at the same positions can share one numerical
- * quadrature. Its storage is allocated once and subsequently refreshed in place, with only the
- * levels required by the enabled post-Newtonian terms being recomputed. Masses and momenta
- * are retained as non-owning references to the existing parameter and state arrays.
- * Pair symmetries are used to avoid redundant calculations, while arbitrary triple contractions
- * are evaluated on demand instead of being stored in an (O(N^3)) array. The resulting mutable
- * workspace is shared by the equations of motion and conservative Hamiltonians and must be
- * refreshed whenever the state or active-body configuration changes.
+ * Two independent caches live here. PairCache holds the per-state geometry the equations of
+ * motion and the conservative Hamiltonians both need: inverse masses, momentum norms and scalar
+ * products, pair separations, inverse separations, unit separation vectors, and pair-endpoint
+ * momentum contractions. Its storage is allocated once and refreshed in place, with only the
+ * levels required by the enabled post-Newtonian terms being recomputed, and masses and momenta
+ * retained as non-owning references to the existing parameter and state arrays. Pair symmetries
+ * avoid redundant calculations, while arbitrary triple contractions are evaluated on demand
+ * rather than stored in an O(N^3) array.
+ *
+ * UTT4Cache holds what is memoized about the four-body UTT4 term: the logarithmic value and
+ * gradient for one exact position state, so energy and force evaluations at the same positions
+ * share one numerical quadrature, and the per-quadruple quadrature-order memory. None of that is
+ * pair data, which is why it is a separate workspace rather than a member of PairCache.
+ *
+ * Both are mutable workspaces shared across an evaluation, so a single ode_params instance must
+ * not be evaluated concurrently by multiple threads.
  */
 
 #include <math.h>
 #include <stdlib.h>
-#include "pair_cache.h"
+#include "cache.h"
 #include "utils.h"
 
 
@@ -67,6 +70,7 @@ PairCache *pair_cache_create(const struct ode_params *ode_params)
     const size_t D = (size_t)ode_params->num_dim;
     const size_t N2 = N * N;
 
+
     cache->num_bodies = ode_params->num_bodies_initial;
     cache->num_dim = ode_params->num_dim;
     cache->array_half = cache->num_bodies * cache->num_dim;
@@ -81,12 +85,6 @@ PairCache *pair_cache_create(const struct ode_params *ode_params)
     cache->n         = (double *)xcalloc(N2 * D, sizeof(*cache->n));
     cache->n_dot_p_a = (double *)xcalloc(N2, sizeof(*cache->n_dot_p_a));
     cache->n_dot_p_b = (double *)xcalloc(N2, sizeof(*cache->n_dot_p_b));
-
-    cache->utt4_ln.positions = (double *)xcalloc(N * D, sizeof(*cache->utt4_ln.positions));
-    cache->utt4_ln.masses = (double *)xcalloc(N, sizeof(*cache->utt4_ln.masses));
-    cache->utt4_ln.active = (int *)xcalloc(N, sizeof(*cache->utt4_ln.active));
-    cache->utt4_ln.grad = (double *)xcalloc(N * D, sizeof(*cache->utt4_ln.grad));
-    cache->utt4_ln.valid = 0;
 
     cache->m = ode_params->masses;
     return cache;
@@ -108,10 +106,6 @@ void pair_cache_destroy(PairCache *cache)
     free(cache->n);
     free(cache->n_dot_p_a);
     free(cache->n_dot_p_b);
-    free(cache->utt4_ln.positions);
-    free(cache->utt4_ln.masses);
-    free(cache->utt4_ln.active);
-    free(cache->utt4_ln.grad);
     free(cache);
 }
 
@@ -279,4 +273,93 @@ unsigned int pair_cache_levels_for_rhs(const struct ode_params *ode_params)
     }
 
     return levels;
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// UTT4 evaluation cache
+// ------------------------------------------------------------------------------------------------
+
+/**
+ * @brief Allocate the UTT4 evaluation cache for ode_params.
+ *
+ * The order memory is only allocated when UTT4 is actually evaluated, and only up to a bounded
+ * size: C(N,4) grows steeply, so past the cap the memory is left disabled and every evaluation
+ * takes the fully verified path.
+ */
+UTT4Cache *utt4_cache_create(const struct ode_params *ode_params)
+{
+    if (ode_params == NULL)
+        errorexit("utt4_cache_create received NULL ode_params");
+    if (ode_params->num_bodies_initial < 0)
+        errorexit("num_bodies_initial must be non-negative");
+    if (ode_params->num_dim <= 0)
+        errorexit("num_dim must be positive");
+
+    UTT4Cache *cache = (UTT4Cache *)calloc(1, sizeof(*cache));
+    if (cache == NULL)
+        errorexit("Memory allocation failed for UTT4Cache workspace");
+
+    const size_t N = (size_t)ode_params->num_bodies_initial;
+    const size_t D = (size_t)ode_params->num_dim;
+
+    cache->num_bodies = ode_params->num_bodies_initial;
+    cache->num_dim = ode_params->num_dim;
+    cache->array_half = cache->num_bodies * cache->num_dim;
+
+    active_list_init(&cache->active, ode_params);
+
+    cache->ln.positions = (double *)xcalloc(N * D, sizeof(*cache->ln.positions));
+    cache->ln.masses    = (double *)xcalloc(N, sizeof(*cache->ln.masses));
+    cache->ln.active    = (int *)xcalloc(N, sizeof(*cache->ln.active));
+    cache->ln.grad      = (double *)xcalloc(N * D, sizeof(*cache->ln.grad));
+    cache->ln.valid = 0;
+
+    cache->order.enabled = 0;
+    cache->order.count = 0;
+    if (ode_params->include_utt4 && N >= 4) {
+        const size_t quadruples = N*(N - 1)*(N - 2)*(N - 3)/24;
+
+        if (quadruples <= UTT4_ORDER_MEMORY_MAX_ENTRIES) {
+            UTT4OrderMemory *mem = &cache->order;
+            mem->order  = (short *)xcalloc(quadruples, sizeof(*mem->order));
+            mem->age    = (short *)xcalloc(quadruples, sizeof(*mem->age));
+            mem->active = (int *)xcalloc(N, sizeof(*mem->active));
+            mem->count = quadruples;
+            mem->enabled = 1;
+        }
+    }
+
+    return cache;
+}
+
+
+// Release a workspace created by utt4_cache_create.
+void utt4_cache_destroy(UTT4Cache *cache)
+{
+    if (cache == NULL)
+        return;
+
+    active_list_free(&cache->active);
+    free(cache->ln.positions);
+    free(cache->ln.masses);
+    free(cache->ln.active);
+    free(cache->ln.grad);
+    free(cache->order.order);
+    free(cache->order.age);
+    free(cache->order.active);
+    free(cache);
+}
+
+
+// Return the UTT4 evaluation cache, allocating it on first use.
+UTT4Cache *utt4_cache_get_workspace(struct ode_params *ode_params)
+{
+    if (ode_params == NULL)
+        errorexit("utt4_cache_get_workspace received NULL ode_params");
+
+    if (ode_params->utt4_cache == NULL)
+        ode_params->utt4_cache = utt4_cache_create(ode_params);
+
+    return ode_params->utt4_cache;
 }
