@@ -15,20 +15,19 @@
 #include <sys/types.h>
 #include <errno.h>
 #include <limits.h>
-#include "integration.h"
+#include "ode_integration.h"
 #include "utils.h"
 #include "eom.h"
 #include "parameters.h"
 #include "initialize.h"
-#include "hamiltonian.h"
 
 
 /**
  * @brief Parses command-line arguments and creates output directory.
- * 
- * Parses command-line arguments, creates the project output directory, and initializes the 
+ *
+ * Parses command-line arguments, creates the project output directory, and initializes the
  * parameter database by adding the first parameters (parameter file name and output directory)
- * 
+ *
  * @param[in]   argc    Number of command-line arguments
  * @param[in]   argv    Array of command-line argument strings
  */
@@ -88,16 +87,16 @@ void read_command_line(int argc, char** argv)
 
 /**
  * @brief Program entry point.
- * 
- * Parses command-line arguments, initializes the simulation, executes the numerical ODE 
+ *
+ * Parses command-line arguments, initializes the simulation, executes the numerical ODE
  * integration, and performs the final cleanup.
- * 
+ *
  * @param[in]   argc    Number of command-line arguments
  * @param[in]   argv    Array of command-line argument strings
  * @return EXIT_SUCCESS on successful completion,
  *         EXIT_FAILURE if an error occurs during execution.
  */
-int main(int argc, char** argv) 
+int main(int argc, char** argv)
 {
     print_divider();
     printf("Welcome to pn-nbody\n");
@@ -116,14 +115,12 @@ int main(int argc, char** argv)
     double* w = initialize_state_vector(&ode_params);
 
     // Run simulation
-    printf("Running simulation...\n"); 
-    #if HAVE_CUBA
+    printf("Running simulation...\n");
     if (ode_params.use_impulse_method)
         ode_integrator_impulse(w, rhs_pn_nbody, compute_dUTT4_dx, &ode_params);
-    #endif
     if (!ode_params.use_impulse_method)
         ode_integrator(w, rhs_pn_nbody, &ode_params);
-    printf("\n"); 
+    printf("\n");
     print_divider();
 
     // Finalize

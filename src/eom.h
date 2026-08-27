@@ -6,7 +6,6 @@
 
 struct PairCache;
 
-
 struct ode_params {
     // General setup
     int num_dim;
@@ -17,10 +16,13 @@ struct ode_params {
     // EOM parameters (frequent access, parameter database queries would be expensive)
     int use_impulse_method;
     int include_utt4;
-    int utt4_mineval;
-    int utt4_maxeval;
-    double utt4_epsrel;
-    double utt4_epsabs;
+    double utt4_ln_integral_epsrel;
+    double utt4_ln_integral_epsabs;
+    int utt4_ln_integral_min_order;
+    int utt4_ln_integral_max_order;
+    int utt4_ln_integral_adaptive;
+    int utt4_ln_integral_max_depth;
+    int utt4_ln_integral_parallel;
 
     // Merger parameters
     int merge_activate;
@@ -36,7 +38,7 @@ struct ode_params {
     int *generation;
 };
 
-
+void compute_dUTT4_dx(double* w, struct ode_params* ode_params, double *dUdx);
 void rhs_pn_nbody(double t, double* w, struct ode_params* ode_params, double* dwdt);
 void update_eom_hamiltonian_cs(double *w, c_hamiltonian H, double h, struct ode_params* ode_params,
     double *dwdt);

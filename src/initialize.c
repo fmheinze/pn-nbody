@@ -3,7 +3,7 @@
  * @brief Functions for initializing parameters and initial condition presets
  *
  * Functions for the initialization of the parameter database, the ODE parameters, as well as the
- * state vector based on specific initial condition presets. The parameters are checked for 
+ * state vector based on specific initial condition presets. The parameters are checked for
  * consistency and validity and missing parameters are computed from user-specified ones.
  */
 
@@ -23,15 +23,15 @@
 
 /**
  * @brief Initializes needed parameters in the parameter database.
- * 
- * Initializes needed parameters in the parameter database, together with default values 
- * (-1 usually means not set, 1 on, 0 off), as well as a short description that contains which 
+ *
+ * Initializes needed parameters in the parameter database, together with default values
+ * (-1 usually means not set, 1 on, 0 off), as well as a short description that contains which
  * values are valid. When main() calls this function, the parameters from the parameter file should
  * already be saved in the parameter database. Calling the function add_parameter() for these
  * parameters only updates the description. Parameters that are not included in the parameter file
  * will be added to the parameter database with their default value.
  */
-void initialize_parameters() 
+void initialize_parameters()
 {
     // --------------------------------------------------------------------------------------------
     // General parameters
@@ -67,14 +67,24 @@ void initialize_parameters()
         add_parameter("max_iter", "50", "maximum number of fixed-point interations [> 0]");
     }
 
-    // UTT4 Integration
+    // UTT4 logarithmic integral
     if (get_parameter_int("2pn_terms") == 1 && get_parameter_int("num_bodies") >= 4) {
         add_parameter("include_utt4", "1", "whether to include UTT4 in the Hamiltonian [0, 1]");
         if (get_parameter_int("include_utt4") == 1) {
-            add_parameter("utt4_mineval", "1e5", "minimum integrand evaluations for UTT4 [> 0]");
-            add_parameter("utt4_maxeval", "1e7", "maximum integrand evaluations for UTT4 [> 0]");
-            add_parameter("utt4_epsrel", "1e-4", "rel. error threshold for UTT4 integral [> 0]");
-            add_parameter("utt4_epsabs", "1e-20", "abs. error threshold for UTT4 integral [> 0]");
+            add_parameter("utt4_ln_integral_epsrel", "1e-10",
+                "target relative error for the logarithmic integral in UTT4 [> 0]");
+            add_parameter("utt4_ln_integral_epsabs", "1e-20",
+                "target absolute error for the logarithmic integral in UTT4 [> 0]");
+            add_parameter("utt4_ln_integral_min_order", "8",
+                "minimum Gauss-Legendre order for UTT4 logarithmic-integral quadrature");
+            add_parameter("utt4_ln_integral_max_order", "160",
+                "maximum Gauss-Legendre order for UTT4 logarithmic-integral quadrature");
+            add_parameter("utt4_ln_integral_adaptive", "1",
+                "whether to use adaptive Gauss-Kronrod fallback [0, 1]");
+            add_parameter("utt4_ln_integral_max_depth", "7",
+                "maximum adaptive subdivision depth for the logarithmic integral in UTT4 [>= 0]");
+            add_parameter("utt4_ln_integral_parallel", "1",
+                "whether to use OpenMP for the UTT4 logarithmic-integral quadrature [0, 1]");
         }
 
         add_parameter("impulse_method", "0", "whether to use the impulse method");
@@ -326,7 +336,7 @@ struct ode_params initialize_ode_params()
     params.pn_terms[2] = get_parameter_int("2pn_terms");
     params.pn_terms[3] = get_parameter_int("2.5pn_terms");
 
-    // UTT4 Integration
+    // UTT4 logarithmic integral
     if (params.pn_terms[2] == 1 && params.num_bodies_initial >= 4) {
         params.use_impulse_method = get_parameter_int("impulse_method");
         params.include_utt4 = get_parameter_int("include_utt4");
@@ -335,15 +345,21 @@ struct ode_params initialize_ode_params()
         params.include_utt4 = 0;
     }
     if (params.include_utt4 == 1) {
-        params.utt4_mineval = get_parameter_int("utt4_mineval");
-        params.utt4_maxeval = get_parameter_int("utt4_maxeval");
-        params.utt4_epsrel = get_parameter_double("utt4_epsrel");
-        params.utt4_epsabs = get_parameter_double("utt4_epsabs");
+        params.utt4_ln_integral_epsrel = get_parameter_double("utt4_ln_integral_epsrel");
+        params.utt4_ln_integral_epsabs = get_parameter_double("utt4_ln_integral_epsabs");
+        params.utt4_ln_integral_min_order = get_parameter_int("utt4_ln_integral_min_order");
+        params.utt4_ln_integral_max_order = get_parameter_int("utt4_ln_integral_max_order");
+        params.utt4_ln_integral_adaptive = get_parameter_int("utt4_ln_integral_adaptive");
+        params.utt4_ln_integral_max_depth = get_parameter_int("utt4_ln_integral_max_depth");
+        params.utt4_ln_integral_parallel = get_parameter_int("utt4_ln_integral_parallel");
     } else {
-        params.utt4_mineval = -1;
-        params.utt4_maxeval = -1;
-        params.utt4_epsrel = -1;
-        params.utt4_epsabs = -1;
+        params.utt4_ln_integral_epsrel = -1;
+        params.utt4_ln_integral_epsabs = -1;
+        params.utt4_ln_integral_min_order = -1;
+        params.utt4_ln_integral_max_order = -1;
+        params.utt4_ln_integral_adaptive = 0;
+        params.utt4_ln_integral_max_depth = -1;
+        params.utt4_ln_integral_parallel = 0;
     }
 
     // Merger history
@@ -373,16 +389,16 @@ struct ode_params initialize_ode_params()
         errorexit("Could not allocate remnant_prescription");
 
     // Check validity
-    if (params.num_dim != 2 && params.num_dim != 3) 
+    if (params.num_dim != 2 && params.num_dim != 3)
         errorexit("Please specify a valid num_dim (must be 2 or 3)");
-    if (params.num_bodies_initial <= 0) 
+    if (params.num_bodies_initial <= 0)
         errorexit("Please specify a valid num_bodies (must be num_bodies > 0)");
     for (int i = 0; i < params.num_bodies_initial; i++) {
-        if (params.masses[i] < 0) 
+        if (params.masses[i] < 0)
             errorexit("Please specify valid masses (must be mass >= 0)");
     }
     for (int i = 0; i < NUM_PN_TERMS; i++) {
-        if (params.pn_terms[i] != 0 && params.pn_terms[i] != 1) 
+        if (params.pn_terms[i] != 0 && params.pn_terms[i] != 1)
             errorexit("Please set pn_terms to 0 (off) or 1 (on)");
     }
     if (params.num_dim != 3 && (params.pn_terms[2] == 1 || params.pn_terms[3] == 1))
@@ -402,38 +418,38 @@ struct ode_params initialize_ode_params()
         errorexit("Please set include_utt4 to 0 (off) or 1 (on)");
     if (params.use_impulse_method == 1 && params.include_utt4 == 0)
         errorexit("You cannot use the impulse method without also including UTT4!");
-    if (params.include_utt4 == 1 && params.utt4_mineval <= 0) 
-        errorexit("Please specify a valid utt4_mineval (must be utt4_mineval > 0)");
-    if (params.include_utt4 == 1 && params.utt4_maxeval <= 0) 
-        errorexit("Please specify a valid utt4_maxeval (must be utt4_maxeval > 0)");
-    if (params.include_utt4 == 1 && params.utt4_maxeval < params.utt4_mineval) 
-        errorexit("Please ensure utt4_maxeval >= utt4_mineval");
-    if (params.include_utt4 == 1 && params.utt4_epsrel <= 0) 
-        errorexit("Please specify a valid utt4_epsrel (must be utt4_epsrel > 0)");
-    if (params.include_utt4 == 1 && params.utt4_epsabs <= 0) 
-        errorexit("Please specify a valid utt4_epsabs (must be utt4_epsabs > 0)");
-    
-    if (params.merge_activate != 1 && params.merge_activate != 0) 
+    if (params.include_utt4 == 1 && params.utt4_ln_integral_epsrel <= 0)
+        errorexit("Please specify a valid utt4_ln_integral_epsrel (must be > 0)");
+    if (params.include_utt4 == 1 && params.utt4_ln_integral_epsabs <= 0)
+        errorexit("Please specify a valid utt4_ln_integral_epsabs (must be > 0)");
+    if (params.include_utt4 == 1 && params.utt4_ln_integral_min_order < 4)
+        errorexit("Please specify a valid utt4_ln_integral_min_order (must be >= 4)");
+    if (params.include_utt4 == 1
+            && params.utt4_ln_integral_max_order < params.utt4_ln_integral_min_order + 2)
+        errorexit("Please ensure utt4_ln_integral_max_order >= utt4_ln_integral_min_order + 2");
+    if (params.include_utt4 == 1
+            && params.utt4_ln_integral_adaptive != 0 && params.utt4_ln_integral_adaptive != 1)
+        errorexit("Please set utt4_ln_integral_adaptive to 0 (off) or 1 (on)");
+    if (params.include_utt4 == 1 && params.utt4_ln_integral_max_depth < 0)
+        errorexit("Please specify a valid utt4_ln_integral_max_depth (must be >= 0)");
+    if (params.include_utt4 == 1
+            && params.utt4_ln_integral_parallel != 0 && params.utt4_ln_integral_parallel != 1)
+        errorexit("Please set utt4_ln_integral_parallel to 0 (off) or 1 (on)");
+
+    if (params.merge_activate != 1 && params.merge_activate != 0)
         errorexit("Please set merge_activate to 0 (off) or 1 (on)");
-    if (params.merge_factor <= 0) 
+    if (params.merge_factor <= 0)
         errorexit("Please specify a valid merge_factor (must be > 0)");
-    if (strcmp(params.remnant_prescription, "simple") != 0 
+    if (strcmp(params.remnant_prescription, "simple") != 0
         && strcmp(params.remnant_prescription, "lz") != 0
         && strcmp(params.remnant_prescription, "barausse") != 0) {
         errorexit("Please specify a valid remnant_prescription (simple, lz, barausse)");
         }
 
-    #if !HAVE_CUBA
+    // UTT4 information
     if (params.include_utt4) {
-        errorexit("include_utt4 = 1, but this executable was compiled without CUBA.\n"
-            "The computation of UTT4 requires CUBA. Please recompile with CUBA!");
-    }
-    #endif
-    
-    // UTT4 Warning
-    if (params.include_utt4) {
-        printf("Warning: Including UTT4 is computationally very expensive! "
-            "Consider turning it off via include_utt4 = 0\n");
+        printf("Numerical evaluation of UTT4 enabled with target relative error %.3e\n",
+            params.utt4_ln_integral_epsrel);
     }
 
     params.pair_cache = pair_cache_create(&params);
@@ -448,10 +464,10 @@ struct ode_params initialize_ode_params()
  * Reads the orbital parameter set for binary i from the parameter database and returns a
  * fully-initialized binary_params struct. Unspecified values must be set to -1 in the database.
  * The function loads all supported orbital parameters, validates any user-specified values,
- * infers missing parameters from the specified ones, and verifies that the resulting set is 
- * self-consistent. At least two orbital parameters (in addition to f0) must be specified to 
+ * infers missing parameters from the specified ones, and verifies that the resulting set is
+ * self-consistent. At least two orbital parameters (in addition to f0) must be specified to
  * determine a unique orbit, otherwise the function aborts with an error.
- * 
+ *
  * @param[in]   i   Binary index (use 0 for the default/unindexed "binary_*" parameter set)
  * @return A fully initialized binary_params struct
  */
@@ -487,21 +503,21 @@ struct binary_params initialize_binary_params(int i)
     // --------------------------------------------------------------------------------------------
 
     // Check the user-specified values
-    if (is_set_double(params.a) && params.a <= 0.0) 
+    if (is_set_double(params.a) && params.a <= 0.0)
         errorexit("Please specify a valid a (must be > 0)");
-    if (is_set_double(params.e) && (params.e < 0.0 || params.e >= 1.0)) 
+    if (is_set_double(params.e) && (params.e < 0.0 || params.e >= 1.0))
         errorexit("Please specify a valid e (must be 0 <= e < 1 for an elliptical orbit)");
-    if (is_set_double(params.b) && params.b <= 0.0) 
+    if (is_set_double(params.b) && params.b <= 0.0)
         errorexit("Please specify a valid b (must be > 0)");
-    if (is_set_double(params.a) && is_set_double(params.b) && params.a < params.b) 
+    if (is_set_double(params.a) && is_set_double(params.b) && params.a < params.b)
         errorexit("Invalid a and b (must be a >= b)");
-    if (is_set_double(params.r_p) && params.r_p <= 0.0) 
+    if (is_set_double(params.r_p) && params.r_p <= 0.0)
         errorexit("Please specify a valid r_p (must be > 0)");
     if (is_set_double(params.r_a) && params.r_a <= 0.0)
         errorexit("Please specify a valid r_a (must be > 0)");
-    if (is_set_double(params.r_a) && is_set_double(params.r_p) && params.r_a < params.r_p) 
+    if (is_set_double(params.r_a) && is_set_double(params.r_p) && params.r_a < params.r_p)
         errorexit("Invalid r_a and r_p (must be r_a >= r_p)");
-    if (is_set_double(params.p) && params.p <= 0.0) 
+    if (is_set_double(params.p) && params.p <= 0.0)
         errorexit("Please specify a valid p (must be > 0)");
 
     // Iteratively infer missing values from whatever is known
@@ -510,7 +526,7 @@ struct binary_params initialize_binary_params(int i)
         changed = 0;
 
         // --- From (a, e) ---
-        if (is_set_double(params.a) && params.a > 0.0 && 
+        if (is_set_double(params.a) && params.a > 0.0 &&
             is_set_double(params.e) && params.e >= 0.0 && params.e < 1.0)
         {
             double one_minus_e2 = clamp0(1.0 - params.e*params.e);
@@ -521,7 +537,7 @@ struct binary_params initialize_binary_params(int i)
         }
 
         // --- From (a, b) ---
-        if (is_set_double(params.a) && params.a > 0.0 && 
+        if (is_set_double(params.a) && params.a > 0.0 &&
             is_set_double(params.b) && params.b > 0.0 && params.b <= params.a)
         {
             double e2 = clamp0(1.0 - (params.b*params.b)/(params.a*params.a));
@@ -530,7 +546,7 @@ struct binary_params initialize_binary_params(int i)
         }
 
         // --- From (a, p) ---
-        if (is_set_double(params.a) && params.a > 0.0 && 
+        if (is_set_double(params.a) && params.a > 0.0 &&
             is_set_double(params.p) && params.p > 0.0 && params.p <= params.a)
         {
             double e2 = clamp0(1.0 - params.p/params.a);
@@ -544,20 +560,20 @@ struct binary_params initialize_binary_params(int i)
         }
 
         // --- From (r_a, r_p) ---
-        if (is_set_double(params.r_a) && params.r_a > 0.0 && is_set_double(params.r_p) && 
+        if (is_set_double(params.r_a) && params.r_a > 0.0 && is_set_double(params.r_p) &&
             params.r_p > 0.0 && params.r_a >= params.r_p)
         {
             double aa = 0.5 * (params.r_a + params.r_p);
             double ee = (params.r_a - params.r_p) / (params.r_a + params.r_p);
             changed |= set_if_unset_double(&params.a, aa);
             changed |= set_if_unset_double(&params.e, ee);
-            changed |= set_if_unset_double(&params.p, (2.0 * params.r_a * params.r_p) / 
+            changed |= set_if_unset_double(&params.p, (2.0 * params.r_a * params.r_p) /
                 (params.r_a + params.r_p));
             changed |= set_if_unset_double(&params.b, sqrt(params.r_a * params.r_p));
         }
 
         // --- From (r_p, e) ---
-        if (is_set_double(params.r_p) && params.r_p > 0.0 && is_set_double(params.e) && 
+        if (is_set_double(params.r_p) && params.r_p > 0.0 && is_set_double(params.e) &&
             params.e >= 0.0 && params.e < 1.0)
         {
             double aa = params.r_p / (1.0 - params.e);
@@ -611,7 +627,7 @@ struct binary_params initialize_binary_params(int i)
         }
 
         // --- From (b, p) ---
-        if (is_set_double(params.b) && params.b > 0.0 && is_set_double(params.p) && 
+        if (is_set_double(params.b) && params.b > 0.0 && is_set_double(params.p) &&
             params.p > 0.0)
         {
             double aa = (params.b*params.b)/params.p;
@@ -648,13 +664,13 @@ struct binary_params initialize_binary_params(int i)
         double ra_expected = params.a * (1.0 + params.e);
         double p_expected  = params.a * (1.0 - params.e*params.e);
 
-        if (!almost_equal(params.b,   b_expected,  rel_eps)) 
+        if (!almost_equal(params.b,   b_expected,  rel_eps))
             errorexit("Inconsistent parameters (b doesn't match a,e)");
-        if (!almost_equal(params.r_p, rp_expected, rel_eps)) 
+        if (!almost_equal(params.r_p, rp_expected, rel_eps))
             errorexit("Inconsistent parameters (r_p doesn't match a,e)");
-        if (!almost_equal(params.r_a, ra_expected, rel_eps)) 
+        if (!almost_equal(params.r_a, ra_expected, rel_eps))
             errorexit("Inconsistent parameters (r_a doesn't match a,e)");
-        if (!almost_equal(params.p,   p_expected,  rel_eps)) 
+        if (!almost_equal(params.p,   p_expected,  rel_eps))
             errorexit("Inconsistent parameters (p doesn't match a,e)");
     }
 
@@ -783,9 +799,9 @@ static void validate_fixed_size_preset(const char *preset, int num_bodies)
 /**
  * @brief Build and return the initial state vector w0.
  *
- * Allocates and initializes the state vector w0 = [x_1, ..., x_N, p_1, ..., p_N] with 
+ * Allocates and initializes the state vector w0 = [x_1, ..., x_N, p_1, ..., p_N] with
  * N = ode_params->num_bodies and each x_i, p_i having dimension D = ode_params->num_dim.
- * The initialization is done either from an initial-condition preset (ic_preset), or from 
+ * The initialization is done either from an initial-condition preset (ic_preset), or from
  * user-specified per-body arrays ("pos" and "p") if no preset is selected.
  *
  * @param[in]   ode_params      Parameter struct containing general information about the system
@@ -808,7 +824,7 @@ double* initialize_state_vector(struct ode_params* ode_params)
     if (strcmp(preset, "-1") != 0) {
         if (strcmp(preset, "binary") == 0)
             initialize_binary(ode_params, w0);
-        
+
         else if (strcmp(preset, "hierarchical_triple") == 0)
             initialize_hierarchical_triple(ode_params, w0);
 
@@ -820,16 +836,16 @@ double* initialize_state_vector(struct ode_params* ode_params)
 
         else if (strcmp(preset, "binary_binary_scattering") == 0)
             initialize_binary_binary_scattering(ode_params, w0);
-        
+
         else if (strcmp(preset, "binary_binary_scattering_circ") == 0)
             initialize_binary_binary_scattering_circ(ode_params, w0);
 
         else if (strcmp(preset, "figure_eight") == 0)
             initialize_figure_eight(ode_params, w0);
-        
+
         else if (strcmp(preset, "virialized_cluster") == 0)
             initialize_virialized_cluster(ode_params, w0);
-        
+
         else if (strcmp(preset, "relativistic_monoenergetic_cluster") == 0)
             initialize_relativistic_monoenergetic_cluster(ode_params, w0);
 
@@ -852,7 +868,7 @@ double* initialize_state_vector(struct ode_params* ode_params)
             }
             free_vector(pos);
             free_vector(p);
-        }  
+        }
     }
 
     // Set spin
@@ -879,10 +895,10 @@ double* initialize_state_vector(struct ode_params* ode_params)
 
 /**
  * @brief Initializes the state vector for a binary.
- * 
+ *
  * Initializes the state vector for a binary and checks the consistency and validity of
  * the involved parameters.
- * 
+ *
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
@@ -903,10 +919,10 @@ void initialize_binary(struct ode_params* ode_params, double* w0)
 
 /**
  * @brief Initializes the state vector for a hierarchical triple.
- * 
+ *
  * Initializes the state vector for a hierarchical triple and checks the consistency and validity of
  * the involved parameters.
- * 
+ *
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
@@ -925,10 +941,10 @@ void initialize_hierarchical_triple(struct ode_params* ode_params, double* w0)
 
 /**
  * @brief Initializes the state vector for a binary-single scattering.
- * 
- * Initializes the state vector for a binary-single scattering and checks the 
+ *
+ * Initializes the state vector for a binary-single scattering and checks the
  * consistency and validity of the involved parameters.
- * 
+ *
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
@@ -955,12 +971,12 @@ void initialize_binary_single_scattering(struct ode_params* ode_params, double* 
 /**
  * @brief Initializes the state vector for a circular binary-single scattering with
  * low-eccentricity tangential and radial momenta.
- * 
+ *
  * Initializes the state vector for a circular binary-single scattering using r0, pt0 and pr0
- * (the initial separation, tangential and radial momentum), which are commonly quoted as 
+ * (the initial separation, tangential and radial momentum), which are commonly quoted as
  * relativistic low-eccentricity binary initial parameters, and checks the consistency and validity
  * of all the involved parameters.
- * 
+ *
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
@@ -994,7 +1010,7 @@ void initialize_binary_single_scattering_circ(struct ode_params* ode_params, dou
     if (ode_params->masses[0] != ode_params->masses[1])
         errorexit("Currently only equal-mass binaries supported in rel. binary-single scattering");
 
-    ic_binary_single_scattering_circ(d0, p0_rel, b, binary_phi0, binary_r0, binary_pt0, 
+    ic_binary_single_scattering_circ(d0, p0_rel, b, binary_phi0, binary_r0, binary_pt0,
         binary_pr0, orientation, w0);
 
     free_vector(orientation);
@@ -1003,10 +1019,10 @@ void initialize_binary_single_scattering_circ(struct ode_params* ode_params, dou
 
 /**
  * @brief Initializes the state vector for a binary-binary scattering.
- * 
- * Initializes the state vector for a binary-binary scattering and checks the 
+ *
+ * Initializes the state vector for a binary-binary scattering and checks the
  * consistency and validity of the involved parameters.
- * 
+ *
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
@@ -1033,10 +1049,10 @@ void initialize_binary_binary_scattering(struct ode_params* ode_params, double* 
 
 /**
  * @brief Initializes the state vector for a relativistic binary-binary scattering
- * 
- * Initializes the state vector for a relativistic binary-binary scattering and checks the 
+ *
+ * Initializes the state vector for a relativistic binary-binary scattering and checks the
  * consistency and validity of the involved parameters.
- * 
+ *
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
@@ -1081,12 +1097,12 @@ void initialize_binary_binary_scattering_circ(struct ode_params* ode_params, dou
     if (binary2_pt0 < 0) errorexit("Please specify a valid binary2_pt0 (must be binary2_pt0 >= 0)");
     if (binary2_pr0 < 0) errorexit("Please specify a valid binary2_pr0 (must be binary2_pr0 >= 0)");
     if (binary2_phi0 < 0) errorexit("Please specify a valid binary2_phi0 (must be binary2_phi0 >= 0)");
-    if (ode_params->masses[0] != ode_params->masses[1] || 
+    if (ode_params->masses[0] != ode_params->masses[1] ||
         ode_params->masses[2] != ode_params->masses[3])
         errorexit("Currently only equal-mass binaries supported in rel. binary-binary scattering");
 
     ic_binary_binary_scattering_circ(d0, p0_rel, b, binary1_phi0, binary1_r0, binary1_pt0,
-        binary1_pr0, orientation_1, binary2_phi0, binary2_r0, binary2_pt0, binary2_pr0, 
+        binary1_pr0, orientation_1, binary2_phi0, binary2_r0, binary2_pt0, binary2_pr0,
         orientation_2, w0);
 
     free_vector(orientation_1);
@@ -1096,10 +1112,10 @@ void initialize_binary_binary_scattering_circ(struct ode_params* ode_params, dou
 
 /**
  * @brief Initializes the state vector for a figure-eight orbit
- * 
+ *
  * Initializes the state vector for a figure-eight orbit and checks the consistency and validity
  * of the involved parameters.
- * 
+ *
  * @param[in]   ode_params      Parameter struct containing general information about the system
  * @param[out]  w0              Initialized state vector, w0 = [positions, momenta]
  */
@@ -1109,13 +1125,13 @@ void initialize_figure_eight(struct ode_params* ode_params, double* w0)
     print_divider();
 
     // Check specified values for validity
-    if (ode_params->masses[0] != ode_params->masses[1] || 
+    if (ode_params->masses[0] != ode_params->masses[1] ||
         ode_params->masses[0] != ode_params->masses[2] ||
         ode_params->masses[1] != ode_params->masses[2])
         errorexit("The figure-eight orbit requires all three masses to be equal!");
 
     double width = get_parameter_double("figure_eight_width");
-    if ((width > 10000 || width < 100) && (ode_params->pn_terms[1] == 1 || 
+    if ((width > 10000 || width < 100) && (ode_params->pn_terms[1] == 1 ||
         ode_params->pn_terms[2] == 1))
         printf("Warning: figure_eight_width = %lf, post-Newtonian figure-eight orbit "
             "only accurate for 100 < width < 100000!\n", width);

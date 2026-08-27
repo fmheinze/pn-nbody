@@ -22,12 +22,42 @@ enum PairCacheLevel {
 
 
 /**
+ * @brief Cached logarithmic UTT4 value and gradient for one exact position state.
+ *
+ * The cache key stores active-body positions and masses, the active set, and all numerical
+ * integral settings that can affect the result. The cached value and gradient are the complete
+ * mass-weighted logarithmic UTT4 contribution, including the Hamiltonian symmetry factor 1/4.
+ */
+typedef struct {
+    int valid;
+
+    // Exact key for the position-only, mass-weighted logarithmic UTT4 contribution.
+    double *positions;      // [N*D], only active-body entries are relevant
+    double *masses;         // [N]
+    int *active;            // [N]
+
+    // Numerical-integral settings are part of the key because they can change the result.
+    double epsrel;
+    double epsabs;
+    int min_order;
+    int max_order;
+    int adaptive;
+    int max_depth;
+    int parallel;
+
+    double value;
+    double *grad;           // [N*D]
+} UTT4LnCache;
+
+
+/**
  * @brief Persistent RHS workspace for pair geometry and momentum invariants.
  *
  * Owned arrays are allocated once by pair_cache_create and refreshed in place. The masses and
  * current momenta are references to ode_params->masses and the momentum half of the current state
- * vector, respectively. A single ode_params instance must not be evaluated concurrently by
- * multiple threads because refreshes intentionally reuse this mutable workspace.
+ * vector, respectively. The workspace also owns a position-keyed logarithmic UTT4 result cache
+ * shared by Hamiltonian and force evaluations. A single ode_params instance must not be evaluated
+ * concurrently by multiple threads because refreshes intentionally reuse this mutable workspace.
  */
 typedef struct PairCache {
     int num_bodies;
@@ -50,6 +80,9 @@ typedef struct PairCache {
 
     double *n_dot_p_a;     // [N*N], n_ab . p_a
     double *n_dot_p_b;     // [N*N], n_ab . p_b
+
+    // Expensive position-only logarithmic UTT4 value/gradient cache.
+    UTT4LnCache utt4_ln;
 } PairCache;
 
 

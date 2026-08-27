@@ -6,8 +6,10 @@
  * workspace. The cache stores a compact list of active bodies and derived quantities for
  * the current phase-space state, including inverse masses, momentum norms and scalar products,
  * pair separations, inverse separations, unit separation vectors, and pair-endpoint momentum
- * contractions. Its storage is allocated once and subsequently refreshed in place, with only
- * the levels required by the enabled post-Newtonian terms being recomputed. Masses and momenta
+ * contractions. It also owns a small cache for the expensive position-only logarithmic UTT4
+ * value and gradient so energy and force evaluations at the same positions can share one numerical
+ * quadrature. Its storage is allocated once and subsequently refreshed in place, with only the
+ * levels required by the enabled post-Newtonian terms being recomputed. Masses and momenta
  * are retained as non-owning references to the existing parameter and state arrays.
  * Pair symmetries are used to avoid redundant calculations, while arbitrary triple contractions
  * are evaluated on demand instead of being stored in an (O(N^3)) array. The resulting mutable
@@ -80,6 +82,12 @@ PairCache *pair_cache_create(const struct ode_params *ode_params)
     cache->n_dot_p_a = (double *)xcalloc(N2, sizeof(*cache->n_dot_p_a));
     cache->n_dot_p_b = (double *)xcalloc(N2, sizeof(*cache->n_dot_p_b));
 
+    cache->utt4_ln.positions = (double *)xcalloc(N * D, sizeof(*cache->utt4_ln.positions));
+    cache->utt4_ln.masses = (double *)xcalloc(N, sizeof(*cache->utt4_ln.masses));
+    cache->utt4_ln.active = (int *)xcalloc(N, sizeof(*cache->utt4_ln.active));
+    cache->utt4_ln.grad = (double *)xcalloc(N * D, sizeof(*cache->utt4_ln.grad));
+    cache->utt4_ln.valid = 0;
+
     cache->m = ode_params->masses;
     return cache;
 }
@@ -100,6 +108,10 @@ void pair_cache_destroy(PairCache *cache)
     free(cache->n);
     free(cache->n_dot_p_a);
     free(cache->n_dot_p_b);
+    free(cache->utt4_ln.positions);
+    free(cache->utt4_ln.masses);
+    free(cache->utt4_ln.active);
+    free(cache->utt4_ln.grad);
     free(cache);
 }
 

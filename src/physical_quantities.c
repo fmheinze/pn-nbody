@@ -12,14 +12,14 @@
 
 /**
  * @brief Computes the total energy of a system.
- * 
+ *
  * Computes the total energy of a system based on the specified post-Newtonian approximation.
- * 
+ *
  * @param[in]   w              Full state vector, w = [positions, momenta]
  * @param[in]   ode_params     Parameter struct containing general information about the system
  * @returns Total energy of the system.
  */
-double total_energy_conservative(double* w, struct ode_params* ode_params) 
+double total_energy_conservative(double* w, struct ode_params* ode_params)
 {
     unsigned int levels = PAIR_CACHE_LEVEL_NONE;
 
@@ -38,7 +38,7 @@ double total_energy_conservative(double* w, struct ode_params* ode_params)
 
     if (ode_params->pn_terms[1] == 1)
         H += H1PN_cached(cache);
-        
+
     if (ode_params->pn_terms[2] == 1) {
         if (ode_params->include_utt4)
             H += H2PN_cached(w, ode_params, cache, 1);

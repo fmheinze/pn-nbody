@@ -118,8 +118,8 @@ static void init_simple_remnant(lz_remnant *rem, double mass)
  * @param[in]   j            Index of the second body
  * @param[out]  L            Orbital angular momentum vector
  */
-void compute_pair_orbital_angular_momentum(struct ode_params *params, double *w, int i, int j, 
-    double L[3]) 
+void compute_pair_orbital_angular_momentum(struct ode_params *params, double *w, int i, int j,
+    double L[3])
 {
     const int num_dim = params->num_dim;
     const int num_bodies = params->num_bodies_initial;
@@ -207,7 +207,7 @@ double pair_newtonian_binding_energy(struct ode_params *params, double *w, int i
 
 /**
  * @brief Evaluates whether a pair of bodies is gravitationally bound.
- * 
+ *
  * To test whether the pair is bound the function checks whether the Newtonian binding energy is
  * negative. In relativistic settings this is only an approximation.
  *
@@ -246,7 +246,7 @@ double barausse_E_ISCO(double a)
 
 /**
  * @brief Computes NR-informed remnant mass for the merger of bodies i and j.
- * 
+ *
  * Based on Barausse et al. 2012.
  *
  * @param[in]   params     Parameter struct containing general information about the system
@@ -321,7 +321,7 @@ double barausse_remnant_mass(struct ode_params *ode_params, double *w, int i, in
 
 /**
  * @brief Computes the binary data necessary for the Lousto - Zlochower remnant prescription.
- * 
+ *
  * The function fills the binary data struct from information in the ode_params and state vector w.
  *
  * @param[in]   params     Parameter struct containing general information about the system
@@ -495,7 +495,7 @@ void lz_J_ISCO_tilde_vector(lz_binary_data *bd, double Jvec[3])
 
 /**
  * @brief Computes NR-informed radiated energy fraction for the merger of a binary.
- * 
+ *
  * Based on Lousto et al. 2012.
  *
  * @param[in]   bd         Data of the merging binary
@@ -560,7 +560,7 @@ double lz_radiated_energy_fraction(const lz_binary_data *bd)
 
 /**
  * @brief Computes NR-informed spin for the merger remnant of a binary.
- * 
+ *
  * Based on Lousto et al. 2012.
  *
  * @param[in]   bd         Data of the merging binary
@@ -612,7 +612,7 @@ void lz_final_spin(lz_binary_data *bd, double erad_frac, double chi_final[3])
 
 /**
  * @brief Computes NR-informed recoil/kick velocity for the merger remnant of a binary.
- * 
+ *
  * Based on Lousto et al. 2012 (see Blecha et al. 2016 for formulas closer to this implementation).
  * The phase of the out-of-plane superkick term is not determined robustly by this simple
  * prescription. Here we approximate it using the instantaneous direction of Delta_perp relative
@@ -644,14 +644,14 @@ void lz_kick_velocity(lz_binary_data *bd, double v_kick[3], double v_kick_kms[3]
         / ((1.0 + q) * (1.0 + q));
 
     // Mass-asymmetry kick
-    const double v_m_kms = LZ_KICK_A_KMS * eta * eta * (1.0 - q) / (1.0 + q) 
+    const double v_m_kms = LZ_KICK_A_KMS * eta * eta * (1.0 - q) / (1.0 + q)
         * (1.0 + LZ_KICK_B * eta);
 
     // In-plane spin kick from spin components parallel to L
     const double v_perp_kms = LZ_KICK_H_KMS * eta * eta / (1.0 + q)
         * (alpha2_parallel - q * alpha1_parallel);
 
-    // Phase convention (the most model-dependent part) 
+    // Phase convention (the most model-dependent part)
     // Approximate cos(phi_Delta - phi_1) using the instantaneous in-plane separation direction e1
     double cos_phase = 0.0;
 
@@ -679,7 +679,7 @@ void lz_kick_velocity(lz_binary_data *bd, double v_kick[3], double v_kick_kms[3]
 
 /**
  * @brief Computes NR-informed remnant parameters for the merger of bodies i and j.
- * 
+ *
  * Based on Lousto et al. 2012.
  *
  * @param[in]   params     Parameter struct containing general information about the system
@@ -778,7 +778,7 @@ int find_merger_pair(struct ode_params *params, double *w, int *i_merge, int *j_
 
 /**
  * @brief Merges active bodies i and j.
- * 
+ *
  * @param   params        Parameter struct containing general information about the system
  * @param   w             State vector w = [positions, momenta, spins]
  * @param   i             Index of the first merger object
@@ -959,7 +959,7 @@ void merge_pair(struct ode_params *params, double *w, int i, int j, double t, FI
  *
  * This handles triple/quadruple situations by merging one pair, then re-running the search on the
  * updated system.
- * 
+ *
  * @param   params       Parameter struct containing general information about the system
  * @param   w            State vector w = [positions, momenta, spins]
  * @param   t            Current time

@@ -69,7 +69,7 @@ void allocate_3d_array(double**** ptr, int num_arrays, int num_vectors, int num_
 }
 
 
-void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors, 
+void allocate_4d_array(double***** ptr, int num_3d_arrays, int num_arrays, int num_vectors,
     int num_elements)
 {
     // Allocate memory for the array of 2D arrays
@@ -327,8 +327,8 @@ double sign_double(double x) {
 
 
 double clamp0(double x)
-{ 
-    return (x < 0.0) ? 0.0 : x; 
+{
+    return (x < 0.0) ? 0.0 : x;
 }
 
 
@@ -426,7 +426,7 @@ void choose_perpendicular_reference_vector(double h_hat[3], double e_hat[3])
 }
 
 
-void orientation_vectors_from_angles(double inc, double Omega, double omega, 
+void orientation_vectors_from_angles(double inc, double Omega, double omega,
     double h_hat[3], double e_hat[3])
 {
     const double si = sin(inc);
@@ -505,7 +505,7 @@ void angles_from_orientation_vectors(double h_input[3], double e_input[3],
 }
 
 
-void normalize_and_project_orientation_vectors(double h_hat[3], double e_hat[3], 
+void normalize_and_project_orientation_vectors(double h_hat[3], double e_hat[3],
     double eccentricity)
 {
     if (!isfinite(h_hat[0]) || !isfinite(h_hat[1]) || !isfinite(h_hat[2]))

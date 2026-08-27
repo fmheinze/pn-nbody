@@ -39,13 +39,13 @@ double clamp_double(double x, double xmin, double xmax);
 int almost_equal(double a, double b, double rel_eps);
 double wrap_to_2pi(double x);
 double angle_difference_abs(double a, double b);
-void map_from_orbital_basis(const double v_old[3], 
+void map_from_orbital_basis(const double v_old[3],
     const double e_hat[3], const double q_hat[3], const double h_hat[3], double v_new[3]);
-void orientation_vectors_from_angles(double inc, double Omega, double omega, 
-    double h_hat[3], double e_hat[3]);   
+void orientation_vectors_from_angles(double inc, double Omega, double omega,
+    double h_hat[3], double e_hat[3]);
 void angles_from_orientation_vectors(double h_input[3], double e_input[3],
     double *inc_out, double *Omega_out, double *omega_out);
-void normalize_and_project_orientation_vectors(double h_hat[3], double e_hat[3], 
+void normalize_and_project_orientation_vectors(double h_hat[3], double e_hat[3],
     double eccentricity);
 
 double rng_uniform(unsigned long long *state);

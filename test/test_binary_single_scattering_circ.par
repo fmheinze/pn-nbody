@@ -44,7 +44,7 @@ mass3                = 0.5                             # Mass of body 3
 d0                   = 100.0                           # Initial distance for the scattering
 p0_rel               = 0.05                            # Initial momentum for the scattering
 b                    = 34.0                            # Scattering impact parameter
-orientation          = -0.2 -0.5 1.0                   # Orientation of binary	
+orientation          = -0.2 -0.5 1.0                   # Orientation of binary
 
 binary_r0            = 5.5                             # Initial radius of the binary
 binary_pt0           = 0.087364                        # Initial tangential momentum of the binary

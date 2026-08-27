@@ -4,7 +4,7 @@
 #include "initial_configurations.h"
 
 
-struct ode_params;  
+struct ode_params;
 
 
 void initialize_parameters(void);

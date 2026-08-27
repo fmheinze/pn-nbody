@@ -28,7 +28,7 @@ int npdb, npdbmax = 1000;
 
 // Find parameter in the parameter database
 static tParameter* find_parameter(const char* name, const int fatal) {
-    if (!name) 
+    if (!name)
         errorexit("find_parameter: called without parameter name");
 
     for (int i = 0; i < npdb; i++)
@@ -65,7 +65,7 @@ static void make_parameter(const char *name, const char *value, const char *desc
         p->value = (char *) calloc(strlen(value)+1, sizeof(char));
         strcpy(p->name, name);
         strcpy(p->value, value);
-    } 
+    }
     // If it is already there, update the description
     else {
         free(p->description);
@@ -99,11 +99,11 @@ static void set_parameter(const char* name, const char* value) {
 
 /**
  * @brief Parses a given parameter file.
- * 
+ *
  * Parses a given parameter file and writes the parameter values to the parameter database.
  * If a line starts with a #, it is seen as a comment. Multiple white spaces and " are collapsed
  * to a single space.
- * 
+ *
  * @param[in]   parfile     Path to the parameter file
  */
 void parse_parameter_file(const char *parfile)
@@ -122,7 +122,7 @@ void parse_parameter_file(const char *parfile)
     buffer = 0;
     for (i = nbuffer = 0;; i++) {
         if (i >= nbuffer-2) {
-            if (nbuffer > 1000000) 
+            if (nbuffer > 1000000)
                 errorexit("Sanity forbids parameter files bigger than 1MB");
             buffer = (char *) realloc(buffer, sizeof(char)*(nbuffer += 1000));
             if (!buffer) errorexit("Out of memory while reading parameter file.");
@@ -137,8 +137,8 @@ void parse_parameter_file(const char *parfile)
     nbuffer = strlen(buffer);
 
     // Replace comments and quotes with white spaces
-    for (i = 0; i < nbuffer; i++) { 
-        if (buffer[i] == '#') 
+    for (i = 0; i < nbuffer; i++) {
+        if (buffer[i] == '#')
             while (i < nbuffer && buffer[i] != '\n')
                 buffer[i++] = ' ';
         if (buffer[i] == '"')
@@ -155,7 +155,7 @@ void parse_parameter_file(const char *parfile)
 
     // Remove spaces around "="
     for (i = j = 1; i < nbuffer; i++) {
-        if (buffer[i] != ' ' || (buffer[i-1] != '=' && buffer[i+1] != '=')) 
+        if (buffer[i] != ' ' || (buffer[i-1] != '=' && buffer[i+1] != '='))
             buffer[j++] = buffer[i];
     }
     buffer[j-1] = '\0';
@@ -170,7 +170,7 @@ void parse_parameter_file(const char *parfile)
             buffer[j-1] = '\0';
         }
     }
-    
+
     // Loop over all parameter/value pairs and make/set the parameter values
     for (i = 1; i < nbuffer; i += lpar + lval + 2) {
         par = buffer+i;
@@ -182,7 +182,7 @@ void parse_parameter_file(const char *parfile)
             make_parameter(par, val, "not in library of initialized parameters");
         else
             set_parameter(par, val);
-    }  
+    }
     free(buffer);
 }
 
@@ -281,14 +281,14 @@ int set_if_unset_double(double *dst, double val) {
 
 /* --- Query functions --- */
 
-int is_set_double(double x) { 
-    return x >= 0.0; 
+int is_set_double(double x) {
+    return x >= 0.0;
 }
 
 
 char *get_parameter_string(const char* name) {
     tParameter* p = find_parameter(name, 1);
-    return p->value; 
+    return p->value;
 }
 
 
@@ -424,7 +424,7 @@ double* get_parameter_double_array_i_checked(const char* name, int i, int expect
     return get_parameter_double_array_checked(key, expected_count);
 }
 
-double get_parameter_double_array_entry(const char* name, int index) 
+double get_parameter_double_array_entry(const char* name, int index)
 {
     int count = get_parameter_array_count(name);
     double *array = get_parameter_double_array(name);
@@ -443,7 +443,7 @@ double get_parameter_double_array_entry(const char* name, int index)
 }
 
 
-double get_binary_parameter_double_i(const char *name, int i) 
+double get_binary_parameter_double_i(const char *name, int i)
 {
     char key[64];
     if (i == 0)
@@ -454,7 +454,7 @@ double get_binary_parameter_double_i(const char *name, int i)
 }
 
 
-double* get_binary_parameter_double_array_i(const char* name, const int i) 
+double* get_binary_parameter_double_array_i(const char* name, const int i)
 {
     char key[64];
     if (i == 0)

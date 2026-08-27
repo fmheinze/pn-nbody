@@ -4,7 +4,7 @@
  *
  * Functions for the output of physical quantities, such as the initialization of the output files
  * and writing output values as specified times.
- * 
+ *
  * TODO: Allow the user to specify which quantities he wants to output. Also add more possible
  * output quantities (angular momentum, eccentricity, ...).
  */
@@ -19,9 +19,9 @@
 
 /**
  * @brief Initializes the output files.
- * 
+ *
  * Initializes the output files, by creating the files, opening them, and writing the column names.
- * 
+ *
  * @param[in]   file_mass      Pointer to the file containing the masses
  * @param[in]   file_pos       Pointer to the file containing the particle positions
  * @param[in]   file_mom       Pointer to the file containing the particle momenta
@@ -29,8 +29,8 @@
  * @param[in]   file_merger    Pointer to the file containing the merger information
  * @param[in]   ode_params     Parameter struct containing general information about the system
  */
-void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_spin, 
-    FILE** file_energy, FILE** file_merger, struct ode_params* ode_params) 
+void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_spin,
+    FILE** file_energy, FILE** file_merger, struct ode_params* ode_params)
 {
     // Create and open files
     char* outdir = get_parameter_string("outdir");
@@ -49,7 +49,7 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
     *file_merger = fopen(path_merger, "w");
 
     if (!*file_mass || !*file_pos || !*file_mom || !*file_spin || !*file_energy || !*file_merger) {
-        free(path_masses); free(path_pos); free(path_mom); free(path_spin); 
+        free(path_masses); free(path_pos); free(path_mom); free(path_spin);
         free(path_energy); free(path_merger);
         errorexit("One or more of the output files could not be created");
     }
@@ -107,7 +107,7 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
 
     for (int n = 0; n < ode_params->num_dim; n++)
         fprintf(*file_merger, "p_rem_%d ", n);
-    
+
     for (int n = 0; n < 3; n++)
         fprintf(*file_merger, "s_i_%d ", n);
 
@@ -116,7 +116,7 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
 
     for (int n = 0; n < 3; n++)
         fprintf(*file_merger, "s_rem_%d ", n);
-    
+
     for (int n = 0; n < ode_params->num_dim; n++)
         fprintf(*file_merger, "v_kick_%d ", n);
 
@@ -129,6 +129,7 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
     free(path_mom);
     free(path_energy);
     free(path_merger);
+    free(path_spin);
 }
 
 
@@ -151,7 +152,7 @@ static int component_is_active(int idx, struct ode_params *ode_params)
 
 /**
  * @brief Writes output quantities to a file for a given timestep.
- * 
+ *
  * @param[in]   file_pos       Pointer to the file containing the particle positions
  * @param[in]   file_mom       Pointer to the file containing the particle momenta
  * @param[in]   file_spin      Pointer to the file containing the particle spins
@@ -160,8 +161,8 @@ static int component_is_active(int idx, struct ode_params *ode_params)
  * @param[in]   w              Current state of the full system, w = [positions, momenta]
  * @param[in]   t              Current time
  */
-void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE* file_energy, 
-    struct ode_params* ode_params, double* w, double t) 
+void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE* file_energy,
+    struct ode_params* ode_params, double* w, double t)
 {
     int array_half = ode_params->num_dim * ode_params->num_bodies_initial;
     int spin_offset = 2 * array_half;
@@ -271,7 +272,7 @@ void output_write_merger_event(
 
     for (int n = 0; n < 3; n++)
         fprintf(file_merger, "%.16e ", s_rem[n]);
-    
+
     for (int n = 0; n < num_dim; n++)
         fprintf(file_merger, "%.16e ", v_kick_kms[n]);
 

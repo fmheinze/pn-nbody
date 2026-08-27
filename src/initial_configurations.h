@@ -1,7 +1,7 @@
 #ifndef INITIAL_CONFIGURATIONS_H
 #define INITIAL_CONFIGURATIONS_H
 
-struct ode_params; 
+struct ode_params;
 
 
 // Binary struct
@@ -46,7 +46,7 @@ void position_binary(double com_pos[3], double h_input[3], double e_input[3], do
 void ic_binary(struct ode_params* ode_params, struct binary_params* binary_params,
     double m1, double m2, double* w0);
 
-void ic_hierarchical_triple(struct ode_params* ode_params, 
+void ic_hierarchical_triple(struct ode_params* ode_params,
     struct binary_params* inner_binary_params, struct binary_params* outer_binary_params,
     double* w0);
 
@@ -56,15 +56,15 @@ void ic_binary_single_scattering(struct ode_params* ode_params,
 void ic_binary_single_scattering_circ(double d0, double p0_rel, double b, double binary_phi0,
     double binary_r0, double binary_pt0, double binary_pr0, double* orientation, double* w0);
 
-void ic_binary_binary_scattering(struct ode_params* ode_params, 
-    struct binary_params* binary1_params, struct binary_params* binary2_params, double d0, 
+void ic_binary_binary_scattering(struct ode_params* ode_params,
+    struct binary_params* binary1_params, struct binary_params* binary2_params, double d0,
     double p0_rel, double b, double* w0);
 
-void ic_binary_binary_scattering_circ(double d0, double p0_rel, double b, double binary1_phi0, 
-    double binary1_r0, double binary1_pt0, double binary1_pr0, double* orientation_1, 
-    double binary_phi0_2, double binary2_r0, double binary2_pt0, double binary2_pr0, 
+void ic_binary_binary_scattering_circ(double d0, double p0_rel, double b, double binary1_phi0,
+    double binary1_r0, double binary1_pt0, double binary1_pr0, double* orientation_1,
+    double binary_phi0_2, double binary2_r0, double binary2_pt0, double binary2_pr0,
     double* orientation_2, double* w0);
-    
+
 void ic_figure_eight_orbit(struct ode_params* params, double width, double* w0);
 
 void ic_newtonian_plummer_cluster(struct ode_params* params, double compactness,

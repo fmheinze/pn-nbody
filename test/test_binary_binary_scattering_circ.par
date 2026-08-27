@@ -23,7 +23,11 @@ dt                   = 0.1                             # Timestep
 # -------------------------------------------------------------------------------------------------
 ode_integrator       = cash-karp                       # ODE integration method
 rtol                 = 1e-14                           # Error tolerance for the Cash-Karp method
-include_utt4         = 0
+
+include_utt4         = 1                               # Whether to include the expensive UTT4 term
+impulse_method       = 1                               # Whether to use the impulse method
+impulse_method_n     = 1                               # Number of substeps in the impulse method
+
 
 
 # -------------------------------------------------------------------------------------------------
@@ -48,12 +52,12 @@ p0_rel               = 0.1                             # Initial momentum for th
 b                    = 34.0                            # Scattering impact parameter
 
 binary1_r0           = 5.5                             # Initial radius of the binary 1
-binary1_pt0          = 0.087364                        # Initial tangential momentum of the binary 1
+binary1_pt0          = 0.087364                        # Initial tangential momentum of binary 1
 binary1_pr0          = 0.00060110	               # Initial radial momentum of the binary 1
 binary1_phi0         = 0.4                             # Initial phase of binary 1
 
 binary2_r0           = 5.5                             # Initial radius of the binary 2
-binary2_pt0          = 0.087364                        # Initial tangential momentum of the binary 2
+binary2_pt0          = 0.087364                        # Initial tangential momentum of binary 2
 binary2_pr0          = 0.00060110	               # Initial radial momentum of the binary 2
 binary2_phi0         = 1.8                             # Initial phase of binary 2
 

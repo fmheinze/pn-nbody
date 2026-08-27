@@ -1,5 +1,5 @@
 /**
- * @file integration.c
+ * @file ode_integration.c
  * @brief Routines for the numerical integration of ODEs
  *
  * Routines for the numerical integration of ODEs, including single-step methods, method drivers,
@@ -11,7 +11,7 @@
 #include <string.h>
 #include <math.h>
 #include "utils.h"
-#include "integration.h"
+#include "ode_integration.h"
 #include "eom.h"
 #include "output.h"
 #include "parameters.h"
@@ -21,31 +21,6 @@
 static inline int time_reached(double t, double target, double direction)
 {
     return (direction > 0.0) ? (t >= target) : (t <= target);
-}
-
-
-// ODE workspace functions to avoid allocating and freeing memory at each ODE integration step
-
-static void ode_ws_init(struct ode_ws* ws, int y_size) {
-    if (ws->buf) free_vector(ws->buf);
-    ws->y_size = y_size;
-    ws->buf = NULL;
-    allocate_vector(&ws->buf, ODE_WS_MAXSIZE * y_size);
-}
-
-static void ode_ws_free(struct ode_ws* ws) {
-    free_vector(ws->buf);
-    ws->buf = NULL;
-    ws->y_size = 0;
-}
-
-static inline double* ws_vec(struct ode_ws* ws, int idx) {
-    return ws->buf + (size_t)idx * (size_t)ws->y_size;
-}
-
-static inline void ws_check(const struct ode_ws* ws, int y_size) {
-    if (!ws || !ws->buf || ws->y_size != y_size)
-        errorexit("ode_ws not initialized or size mismatch");
 }
 
 
@@ -67,7 +42,7 @@ static void check_integration_parameter_validity()
 
         if (t_end < 0.0)
             errorexit("Backward integration is not currently supported by the Cash-Karp method");
-        if(rtol <= 0.0) 
+        if(rtol <= 0.0)
             errorexit("Please specify a valid rtol of the Cash-Karp method (must be rtol > 0)");
         if (is_set_double(dt_max) && dt_max <= 0.0)
             errorexit("Please specify a valid dt_max of the Cash-Karp method (must be dt_max > 0)");
@@ -84,12 +59,46 @@ static void check_integration_parameter_validity()
 }
 
 
+// ------------------------------------------------------------------------------------------------
+// ODE workspace functions to avoid allocating and freeing memory at each ODE integration step
+// ------------------------------------------------------------------------------------------------
+
+static void ode_ws_init(struct ode_ws* ws, int y_size) {
+    if (ws->buf) free_vector(ws->buf);
+    ws->y_size = y_size;
+    ws->buf = NULL;
+    allocate_vector(&ws->buf, ODE_WS_MAXSIZE * y_size);
+}
+
+
+static void ode_ws_free(struct ode_ws* ws) {
+    free_vector(ws->buf);
+    ws->buf = NULL;
+    ws->y_size = 0;
+}
+
+
+static inline double* ws_vec(struct ode_ws* ws, int idx) {
+    return ws->buf + (size_t)idx * (size_t)ws->y_size;
+}
+
+
+static inline void ws_check(const struct ode_ws* ws, int y_size) {
+    if (!ws || !ws->buf || ws->y_size != y_size)
+        errorexit("ode_ws not initialized or size mismatch");
+}
+
+
+// ------------------------------------------------------------------------------------------------
+// ODE integration methods
+// ------------------------------------------------------------------------------------------------
+
 /**
  * @brief Performs a fourth-order Runge-Kutta timestep.
  *
  * Performs a fourth-order Runge-Kutta timestep, updating the state w according to the ODE
  * w'(t) = ode_rhs(t, w).
- * 
+ *
  * @param[in,out]   w           Input state (gets updated)
  * @param[in]       w_size      Number of values in state w
  * @param[in]       t           Current time
@@ -98,8 +107,8 @@ static void check_integration_parameter_validity()
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * @param[in]       ws          ODE workspace for storing intermediate results
  */
-static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs rhs, 
-    struct ode_params* ode_params, struct ode_ws* ws) 
+static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs rhs,
+    struct ode_params* ode_params, struct ode_ws* ws)
 {
     // ODE workspace setup
     ws_check(ws, w_size);
@@ -146,7 +155,7 @@ static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs rhs,
  * and symplectic. The implicit equation is solved using fixed-point iterations with a convergence
  * criterion that is based on the magnitude of the iteration update. The result of the fixed-point
  * iteration is returned (0 converged, 1 failed).
- * 
+ *
  * @param[in,out]   w           State (gets updated)
  * @param[in]       w_size      Number of values in state w
  * @param[in]       t           Current time
@@ -157,10 +166,10 @@ static void rk4_update(double* w, int w_size, double t, double dt, ode_rhs rhs,
  * @param[in]       max_iter    Maximum number of iterations in the fixed-point iteration
  * @param[in]       ws          ODE workspace for storing intermediate results
  * @return Result for the convergence of the fixed-point iteration (0 converged, 1 failed)
- * 
+ *
  * TODO: Implement a residual-based convergence criterion
  */
-static int implicit_midpoint_update(double* w, int w_size, double t, double dt, ode_rhs rhs, 
+static int implicit_midpoint_update(double* w, int w_size, double t, double dt, ode_rhs rhs,
     struct ode_params* ode_params, double tol, int max_iter, struct ode_ws* ws)
 {
     // ODE workspace setup
@@ -220,12 +229,12 @@ static int implicit_midpoint_update(double* w, int w_size, double t, double dt, 
 /**
  * @brief Performs a timestep with the Cash-Karp method (embedded 5th-order Runge-Kutta method).
  *
- * Performs a timestep with the Cash-Karp method (embedded 5th-order Runge-Kutta method) from a 
+ * Performs a timestep with the Cash-Karp method (embedded 5th-order Runge-Kutta method) from a
  * state w to a new state w_new, according to the ODE w'(t) = ode_rhs(t, w). The result is computed
  * using a fifth-order Runge-Kutta method and the error is estimated with the difference to the
  * result that uses a fourth-order Runge-Kutta method. For this, the RK4 result is not explicitly
  * computed but the differences in the coefficients are used to compute the error estimate.
- * 
+ *
  * @param[in]   w           Input state
  * @param[out]  w_new       Updated state
  * @param[out]  w_err       Estimated error
@@ -237,7 +246,7 @@ static int implicit_midpoint_update(double* w, int w_size, double t, double dt, 
  * @param[in]   k1          Pointer to k1/dt (doesn't need to be computed multiple times)
  * @param[in]   ws          ODE workspace for storing intermediate results
  */
-static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size, double t, 
+static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size, double t,
     double dt, ode_rhs rhs, struct ode_params* ode_params, double* k1, struct ode_ws* ws)
 {
     // ODE workspace setup
@@ -252,13 +261,13 @@ static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size
     // Coefficients for the Cash-Karp method
     static const double a2 = 0.2, a3 = 0.3, a4 = 0.6, a5 = 1.0, a6 = 0.875,
                         b21 = 0.2,
-                        b31 = 0.075, b32 = 0.225, 
+                        b31 = 0.075, b32 = 0.225,
                         b41 = 0.3, b42 = -0.9, b43 = 1.2,
                         b51 = -11.0/54.0, b52 = 2.5, b53 = -70.0/27.0, b54 = 35.0/27.0,
-                        b61 = 1631.0/55296.0, b62 = 175.0/512.0, b63 = 575.0/13824.0, 
+                        b61 = 1631.0/55296.0, b62 = 175.0/512.0, b63 = 575.0/13824.0,
                         b64 = 44275.0/110592.0, b65 = 253.0/4096.0,
                         c1 = 37.0/378.0, c3 = 250.0/621.0, c4 = 125.0/594.0, c6 = 512.0/1771.0,
-    
+
     // Differences in the c-coefficients for computing the error estimate
                         dc1 = -277.0/64512.0, dc3 = 6925.0/370944.0, dc4 = -6925.0/202752.0,
                         dc5 = -277.0/14336.0, dc6 = 277.0/7084.0;
@@ -291,7 +300,7 @@ static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size
     // Update y (c2 and c5 are zero for RK5)
     for (int i = 0; i < w_size; i++)
         w_new[i] = w[i] + dt * (c1 * k1[i] + c3 * k3[i] + c4 * k4[i] + c6 * k6[i]);
-    
+
     // Compute the error estimates (c2 is also zero for RK4)
     for (int i = 0; i < w_size; i++)
         w_err[i] = dt * (dc1 * k1[i] + dc3 * k3[i] + dc4 * k4[i] + dc5 * k5[i] + dc6 * k6[i]);
@@ -303,11 +312,11 @@ static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size
  *
  * Driver for the Cash-Karp method (embedded 5th-order Runge-Kutta method). It performs a timestep,
  * updating the state w according to the ODE w'(t) = ode_rhs(t, w). The timestepping is adaptive -
- * the timestep gets reduced until the estimated error from the Cash-Karp method is below a 
+ * the timestep gets reduced until the estimated error from the Cash-Karp method is below a
  * specified error tolerance. In case the estimated error is below the error tolerance, the
  * timestep gets increased for the next call. The design and tuning constants are largely inspired
  * by the book "Numerical Recipes in C".
- * 
+ *
  * @param[in,out]   w           State (gets updated)
  * @param[in]       w_size      Number of values in state w
  * @param[in,out]   t           Time (gets updated)
@@ -319,7 +328,7 @@ static void cash_karp_update(double* w, double* w_new, double* w_err, int w_size
  * @param[in]       ws          ODE workspace for storing intermediate results
  * @return Outcome of the Cash-Karp step (0 success, 1 failed)
  */
-static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double dt_max, 
+static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double dt_max,
     double rtol, ode_rhs rhs, struct ode_params* ode_params, struct ode_ws *ws)
 {
     if (!(rtol > 0.0) || !(*dt > 0.0) || !(dt_max > 0.0)) return 1;
@@ -373,18 +382,22 @@ static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double
                 dt_temp = 5.0 * (*dt);
             *dt = fmin(dt_temp, dt_max);
             return 0;
-        }   
+        }
 
         // Otherwise, reject step and retry with smaller step size (maximum factor 10 decrease)
         dt_temp = SAFETY * (*dt) * pow(max_error, PSHRNK);
         *dt = fmax(dt_temp, 0.1 * (*dt));
-        
+
         // Check if the step size is too small (underflow)
         if (*t + *dt == *t) return 1;
     }
     return 1;
 }
 
+
+// ------------------------------------------------------------------------------------------------
+// ODE integration drivers
+// ------------------------------------------------------------------------------------------------
 
 /**
  * @brief Numerically integrates the ODE w'(t) = ode_rhs(t, w) and writes output to files.
@@ -393,23 +406,23 @@ static int cash_karp_driver(double* w, int w_size, double* t, double *dt, double
  * and integration method are read from the user-specified parameters in the parameter file. If the
  * user-specified integration method cannot be found it uses a 4th-order Runge-Kutta method. Output
  * is written to files at user-specified intervals.
- * 
+ *
  * @param[in,out]   w           State vector (on input initial state, on output final state)
  * @param[in]       rhs         Pointer to the function that specifies the ODE right-hand side
  * @param[in]       ode_params  Parameter struct containing general information about the system
- * 
+ *
  * TODO: Add interpolator for writing outputs at exactly the right times
  */
 void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 {
-    // Determine integration method 
+    // Determine integration method
     ode_method m = M_UNKNOWN;
     char *method = get_parameter_string("ode_integrator");
     if (strcmp(method, "cash-karp") == 0) m = M_CASH_KARP;
     else if (strcmp(method, "rk4") == 0) m = M_RK4;
     else if (strcmp(method, "implicit-midpoint") == 0) m = M_IMPLICIT_MIDPOINT;
-    if (m == M_UNKNOWN) 
-        fprintf(stderr, "Warning: The specified method %s is not implemented; using RK4.\n", 
+    if (m == M_UNKNOWN)
+        fprintf(stderr, "Warning: The specified method %s is not implemented; using RK4.\n",
             method);
 
     // Load the specified parameters from the parameter database
@@ -432,9 +445,9 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
         dt_max = get_parameter_double("dt_max");
         if (!is_set_double(dt_max)) dt_max = dt;
     }
-    if (m == M_IMPLICIT_MIDPOINT) { 
-        tol = get_parameter_double("tol"); 
-        max_iter = get_parameter_int("max_iter"); 
+    if (m == M_IMPLICIT_MIDPOINT) {
+        tol = get_parameter_double("tol");
+        max_iter = get_parameter_int("max_iter");
     }
 
     int w_size = 2 * ode_params->num_dim * ode_params->num_bodies_initial;
@@ -457,7 +470,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 
     // Iterate until the final time
     while (!time_reached(t_current, t_end, direction)) {
-    
+
         double remaining = t_end - t_current;
         if (fabs(dt_signed) > fabs(remaining))
             dt_signed = remaining;
@@ -476,7 +489,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
                 // Use RK4 if the Cash-Karp method is stuck
                 if (failure) {
                     progress_bar_break_line();
-                    fprintf(stderr, "Warning: The Cash-Karp method is stuck at " 
+                    fprintf(stderr, "Warning: The Cash-Karp method is stuck at "
                         "t = %.7g, using RK4 for this timestep instead.\n", t_current);
                     if (t_current + dt == t_current)
                         errorexit("Stepsize underflow in ode_integrator");
@@ -550,7 +563,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 
 
 // Apply a kick generated by a potential U(x): p <- p - h * dU/dx, x remains unchanged
-static void impulse_apply_kick(double* w, int num_bodies, int num_dim, double h, 
+static void impulse_apply_kick(double* w, int num_bodies, int num_dim, double h,
     const double* dUdx)
 {
     int array_half = num_bodies * num_dim;
@@ -566,7 +579,7 @@ static void impulse_apply_kick(double* w, int num_bodies, int num_dim, double h,
  * can be any of the regular ODE integration methods. In case the method is an adaptive method, the
  * integrator integrates adaptively until t advances by h. For non-adaptive methods the integrator
  * performs n fixed substeps of size h/n.
- * 
+ *
  * @param[in,out]   w           State vector (on input initial state, on output final state)
  * @param[in]       w_size      Number of values in state w
  * @param[in]       t_start     Start time
@@ -579,8 +592,8 @@ static void impulse_apply_kick(double* w, int num_bodies, int num_dim, double h,
  * @param[in]       ode_params  Parameter struct containing general information about the system
  * @param[in]       ws          ODE workspace for storing intermediate results
  */
-static void impulse_advance_middle(double* w, int w_size, double t_start, double h, int n, 
-    ode_method m, double err_tol, int max_iter, ode_rhs rhs_mid, struct ode_params* ode_params, 
+static void impulse_advance_middle(double* w, int w_size, double t_start, double h, int n,
+    ode_method m, double err_tol, int max_iter, ode_rhs rhs_mid, struct ode_params* ode_params,
     struct ode_ws* ws)
 {
     ws_check(ws, w_size);
@@ -609,13 +622,13 @@ static void impulse_advance_middle(double* w, int w_size, double t_start, double
                 // Limit max step to remaining as well (keeps the driver well-behaved).
                 double dt_max = remaining;
 
-                failure = cash_karp_driver(w, w_size, &t, &dt, dt_max, err_tol, rhs_mid, 
+                failure = cash_karp_driver(w, w_size, &t, &dt, dt_max, err_tol, rhs_mid,
                     ode_params, ws);
 
                 // Use RK4 if the Cash-Karp method fails
                 if (failure) {
                     progress_bar_break_line();
-                    fprintf(stderr, "Warning: The Cash-Karp failed at " 
+                    fprintf(stderr, "Warning: The Cash-Karp failed at "
                         "t = %.7g, using RK4 for this timestep instead.\n", t);
                     dt = h/n;
                     if (dt > remaining) dt = remaining;
@@ -623,7 +636,7 @@ static void impulse_advance_middle(double* w, int w_size, double t_start, double
                         errorexit("Stepsize underflow in impulse_advance_middle");
                     }
                     rk4_update(w, w_size, t, dt, rhs_mid, ode_params, ws);
-                    t += dt; 
+                    t += dt;
                 }
             }
             return;
@@ -632,7 +645,7 @@ static void impulse_advance_middle(double* w, int w_size, double t_start, double
             for (int k = 0; k < n; ++k) {
                 failure = implicit_midpoint_update(w, w_size, t, dt, rhs_mid, ode_params, err_tol,
                     max_iter, ws);
-                
+
                 // Use RK4 if the fixed-point iteration did not converge
                 if (failure) {
                     progress_bar_break_line();
@@ -660,36 +673,36 @@ static void impulse_advance_middle(double* w, int w_size, double t_start, double
  * Numerically integrates the ODE w'(t) = ode_rhs(t, w) using the impulse method:
  * \Psi_h = \Phi^(TT4)_{h/2} o (\Phi^(0)_{h/n})^n o \Phi^(TT4)_{h/2},
  * where n is the number of substeps for the method associated with H0, h is the outer timestep of
- * the full composition method \Psi_h, h/n is the inner (effective) timestep, and \Phi^(0)_{h/n} 
- * and \Phi^(TT4)_{h/2} are numerical integrators consistent with the Hamiltonians H0 and UTT4, 
+ * the full composition method \Psi_h, h/n is the inner (effective) timestep, and \Phi^(0)_{h/n}
+ * and \Phi^(TT4)_{h/2} are numerical integrators consistent with the Hamiltonians H0 and UTT4,
  * respectively (see Heinze, Schäfer and Brügmann 2026).
  * The evaluation of the gradient of UTT4 is very expensive and therefore \Phi^(TT4)_{h/2} is
- * performed only twice per outer timestep (grad_utt4 only needs to be computed once per outer 
- * timestep). The final time, timestep, error tolerances and integration method are read from the 
+ * performed only twice per outer timestep (grad_utt4 only needs to be computed once per outer
+ * timestep). The final time, timestep, error tolerances and integration method are read from the
  * user-specified parameters in the parameter file. If the user-specified integration method cannot
- * be found it uses a 4th-order Runge-Kutta method. Output is written to files at user-specified 
+ * be found it uses a 4th-order Runge-Kutta method. Output is written to files at user-specified
  * intervals.
- * 
+ *
  * @param[in,out]   w           State vector (on input initial state, on output final state)
  * @param[in]       rhs_mid     Pointer to the ODE right-hand side corresponding to H0 without UTT4
  * @param[in]       grad_utt4   Pointer to the function that computes the gradient of UTT4
  * @param[in]       ode_params  Parameter struct containing general information about the system
- * 
+ *
  * TODO: Add interpolator for writing outputs at exactly the right times
  */
-void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4, 
+void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4,
     struct ode_params* ode_params)
 {
-    // Determine integration method 
+    // Determine integration method
     ode_method m = M_UNKNOWN;
     char *middle_method = get_parameter_string("ode_integrator");
     if (strcmp(middle_method, "cash-karp") == 0) m = M_CASH_KARP;
     else if (strcmp(middle_method, "rk4") == 0) m = M_RK4;
     else if (strcmp(middle_method, "implicit-midpoint") == 0) m = M_IMPLICIT_MIDPOINT;
     if (m == M_UNKNOWN)
-        fprintf(stderr, "Warning: The specified method %s is not implemented; using RK4.\n", 
+        fprintf(stderr, "Warning: The specified method %s is not implemented; using RK4.\n",
             middle_method);
-    
+
     // Load the specified parameters from the parameter database
     check_integration_parameter_validity();
     double t_end     = get_parameter_double("t_end");
@@ -699,11 +712,11 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     int n = get_parameter_int("impulse_method_n");
     double err_tol = 0.0;
     int max_iter = 0;
-    if (m == M_CASH_KARP) 
+    if (m == M_CASH_KARP)
         err_tol = get_parameter_double("rtol");
-    if (m == M_IMPLICIT_MIDPOINT) { 
-        err_tol = get_parameter_double("tol"); 
-        max_iter = get_parameter_int("max_iter"); 
+    if (m == M_IMPLICIT_MIDPOINT) {
+        err_tol = get_parameter_double("tol");
+        max_iter = get_parameter_int("max_iter");
     }
 
     int num_bodies = ode_params->num_bodies_initial;

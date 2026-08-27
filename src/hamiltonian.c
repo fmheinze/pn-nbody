@@ -4,502 +4,377 @@
  *
  * Functions for the computation of the post-Newtonian N-body Hamiltonian.
  * A complicated part of the N-body 2PN Hamiltonian is the four-point correlation function UTT4,
- * which contains an integral that can currently only be computed numerically, which is very
- * computationally expensive (see Heinze, Schäfer and Brügmann 2026 for more details). The first
- * set of functions in this file are for a separate computation of UTT4 and the integral, and they
- * are not compiled if the user doesn't compile pn-nbody with the Cuba library.
+ * which contains a nontrivial four-point logarithmic integral. The logarithmic part is evaluated
+ * with a two-dimensional parameter-space quadrature implemented in integrals.c.
  */
 
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <complex.h>
 #include "eom.h"
 #include "hamiltonian.h"
 #include "utils.h"
 #include "pair_cache.h"
+#include "integrals.h"
 
-#define PI 3.1415926535897932384626433832795
-#define INVPI 0.31830988618379067153776752674503
-
-#if HAVE_CUBA
-#include "cuba.h" 
-
-// Integration parameters
-#define NVEC 1
-#define VERBOSE 0
-#define SEED 42
-#define KEY 11
-#define NUM_LOCAL_BODIES 4
-#define NCOMP_H_DERIV 72
-#define NUM_PERMS 6    // 4!/4 = 6 unique permutations due to symmetry factor 4
-
-typedef struct {
-    double pos[NUM_LOCAL_BODIES][3];
-} IntegralParams;
-
-// Unique permutation representatives for the 2PN ln-integral
-static const int perms[NUM_PERMS][NUM_LOCAL_BODIES] = {
-    {0,1,2,3},
-    {0,1,3,2},
-    {0,2,1,3},
-    {0,2,3,1},
-    {0,3,1,2},
-    {0,3,2,1}
-};
-
-static inline int role_of_body(int p, int body) {
-    for (int r = 0; r < 4; ++r)
-        if (perms[p][r] == body) return r;
-    return -1;
-}
-
-
-// Numerically computes the value of the ln-integral occurring in UTT4
-static int ln_integral(const int *ndim, const cubareal xx[], const int *ncomp, cubareal ff[], 
-    void *userdata) 
-{
-    (void)ncomp;    // Unused
-    if (*ndim != 3)
-        errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
-
-    // Userdata
-    IntegralParams *params = (IntegralParams*)userdata;
-
-    // Variables and Jacobian determinant for transformation to integral over unit hypercube
-    double x_trans[3];
-    cubareal rho = xx[0];
-    cubareal u = xx[1];
-    cubareal v = xx[2];
-    if (rho > 1 - 1e-10) rho = 1 - 1e-10;
-
-    cubareal PIu = PI * u;
-    cubareal twoPIv = 2.0 * PI * v;
-    cubareal rho2 = rho * rho;
-    cubareal one_minus_rho2 = 1.0 - rho2;
-    cubareal factor = rho / one_minus_rho2;
-    x_trans[0] = factor * sin(PIu) * cos(twoPIv);
-    x_trans[1] = factor * sin(PIu) * sin(twoPIv);
-    x_trans[2] = factor * cos(PIu);
-
-    cubareal jacobian = (1.0 + rho2) / 
-        (one_minus_rho2 * one_minus_rho2 * one_minus_rho2 * one_minus_rho2) 
-        * 2.0 * PI * PI * rho2 * sin(PIu);
-
-    // Compute integrand for unique permutations of abcd (others are obtained via symmetries)
-    for (int p = 0; p < 6; p++) {
-        int A_idx, B_idx, C_idx, D_idx;
-        A_idx = perms[p][0];
-        B_idx = perms[p][1];
-        C_idx = perms[p][2];
-        D_idx = perms[p][3];
-
-        double *A = params->pos[A_idx];
-        double *B = params->pos[B_idx];
-        double *C = params->pos[C_idx];
-        double *D = params->pos[D_idx];
-
-        // Quantities occurring in the integrand
-        double dx_a[3], dx_b[3], dx_c[3], dx_d[3], ab[3];
-        double n_a[3], n_b[3], n_c[3], n_d[3], n_ab[3];
-        double r_a, r_b, r_c, r_d, r_ab, s_ab;
-        double n_c_dot_n_ab = 0.0;
-        double n_c_dot_n_d  = 0.0;
-        double n_a_dot_n_c  = 0.0;
-        double n_d_dot_n_ab = 0.0;
-        double n_b_dot_n_d  = 0.0;
-
-        for (int i = 0; i < 3; ++i) {
-            dx_a[i] = x_trans[i] - A[i];
-            dx_b[i] = x_trans[i] - B[i];
-            dx_c[i] = x_trans[i] - C[i];
-            dx_d[i] = x_trans[i] - D[i];
-            ab[i] = A[i] - B[i];
-        }
-        r_a = norm(dx_a, 3);
-        r_b = norm(dx_b, 3);
-        r_c = norm(dx_c, 3);
-        r_d = norm(dx_d, 3);
-        r_ab = norm(ab, 3);
-        s_ab = r_a + r_b + r_ab;
-        for (int i = 0; i < 3; ++i) {
-            n_a[i]  = dx_a[i] / r_a;
-            n_b[i]  = dx_b[i] / r_b;
-            n_c[i]  = dx_c[i] / r_c;
-            n_d[i]  = dx_d[i] / r_d;
-            n_ab[i] = ab[i]   / r_ab;
-
-            n_c_dot_n_ab += n_c[i] * n_ab[i];
-            n_c_dot_n_d  += n_c[i] * n_d[i];
-            n_a_dot_n_c  += n_a[i] * n_c[i];
-            n_d_dot_n_ab += n_d[i] * n_ab[i];
-            n_b_dot_n_d  += n_b[i] * n_d[i];
-        }
-
-        ff[p] = 1.0 / (r_c*r_c * r_d*r_d) *
-            ( (n_c_dot_n_ab - n_a_dot_n_c) * (n_d_dot_n_ab + n_b_dot_n_d) / (s_ab*s_ab)
-            - (n_c_dot_n_d - n_c_dot_n_ab * n_d_dot_n_ab) / (r_ab * s_ab) );
-        ff[p] *= jacobian;
-    }
-    return 0;
-}
-
-
-// Computes the value of the gradient of the ln-integral using complex-step differentiation
-static int ln_integral_gradient(const int *ndim, const cubareal xx[], const int *ncomp, 
-    cubareal ff[], void *userdata)
-{
-    (void)ncomp;    // Unused
-    if (*ndim != 3)
-        errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
-
-    IntegralParams *params = (IntegralParams*)userdata;
-    const double h = 1e-30;  // Step size for complex-step differentiation
-
-    // Variables and Jacobian determinant for transformation to integral over unit hypercube
-    cubareal rho = xx[0];
-    cubareal u   = xx[1];
-    cubareal v   = xx[2];
-    if (rho > 1 - 1e-10) rho = 1 - 1e-10;
-
-    cubareal PIu = PI * u;
-    cubareal twoPIv = 2.0 * PI * v;
-    cubareal rho2 = rho * rho;
-    cubareal one_minus_rho2 = 1.0 - rho2;
-    cubareal factor = rho / one_minus_rho2;
-    cubareal x_trans[3];
-    x_trans[0] = factor * sin(PIu) * cos(twoPIv);
-    x_trans[1] = factor * sin(PIu) * sin(twoPIv);
-    x_trans[2] = factor * cos(PIu);
-
-    cubareal jacobian = (1.0 + rho2) / 
-        (one_minus_rho2 * one_minus_rho2 * one_minus_rho2 * one_minus_rho2) 
-        * 2.0 * PI * PI * rho2 * sin(PIu);
-
-    // Make a complex copy of all positions (will re-initialize per derivative)
-    double complex pos_cmplx[3 * NUM_LOCAL_BODIES];
-    #define BODY(i) (&pos_cmplx[3*(i)])
-
-    for (int a = 0; a < NUM_LOCAL_BODIES; a++)
-        for (int i = 0; i < 3; ++i)
-            pos_cmplx[3 * a + i] = (double complex)params->pos[a][i];
-
-    // Loop over the 6 unique permutations
-    for (int p = 0; p < NUM_PERMS; ++p) {
-        for (int body = 0; body < NUM_LOCAL_BODIES; ++body) {
-            // r = role of body in permutation p, tells us whether to use I_{ab;cd} or I_{cd;ab}
-            // (mitigates problems with the singularities of the integrand)
-            int r = role_of_body(p, body);
-            for (int axis = 0; axis < 3; ++axis) {
-
-                // Complex-step perturbation for this derivative
-                int coord_index = 3 * body + axis;
-                pos_cmplx[coord_index] += I * h;
-
-                // Decide which bodies are A,B,C,D in this eval
-                int A_idx, B_idx, C_idx, D_idx;
-                if (r == 0 || r == 1) {
-                    // Body is in first pair: use I_{ab;cd}
-                    A_idx = perms[p][0];
-                    B_idx = perms[p][1];
-                    C_idx = perms[p][2];
-                    D_idx = perms[p][3];
-                } else {
-                    // Body is in second pair: use I_{cd;ab}
-                    A_idx = perms[p][2];
-                    B_idx = perms[p][3];
-                    C_idx = perms[p][0];
-                    D_idx = perms[p][1];
-                }
-                double complex *A = BODY(A_idx);
-                double complex *B = BODY(B_idx);
-                double complex *C = BODY(C_idx);
-                double complex *D = BODY(D_idx);
-
-                // Quantities occurring in the integrand
-                double complex dx_a[3], dx_b[3], dx_c[3], dx_d[3], ab[3];
-                double complex n_a[3], n_b[3], n_c[3], n_d[3], n_ab[3];
-                double complex r_a, r_b, r_c, r_d, r_ab, s_ab;
-                double complex n_c_dot_n_ab = 0.0;
-                double complex n_c_dot_n_d  = 0.0;
-                double complex n_a_dot_n_c  = 0.0;
-                double complex n_d_dot_n_ab = 0.0;
-                double complex n_b_dot_n_d  = 0.0;
-
-                for (int i = 0; i < 3; ++i) {
-                    dx_a[i] = x_trans[i] - A[i];
-                    dx_b[i] = x_trans[i] - B[i];
-                    dx_c[i] = x_trans[i] - C[i];
-                    dx_d[i] = x_trans[i] - D[i];
-                    ab[i] = A[i] - B[i];
-                }
-
-                r_a  = csqrt(dx_a[0]*dx_a[0] + dx_a[1]*dx_a[1] + dx_a[2]*dx_a[2]);
-                r_b  = csqrt(dx_b[0]*dx_b[0] + dx_b[1]*dx_b[1] + dx_b[2]*dx_b[2]);
-                r_c  = csqrt(dx_c[0]*dx_c[0] + dx_c[1]*dx_c[1] + dx_c[2]*dx_c[2]);
-                r_d  = csqrt(dx_d[0]*dx_d[0] + dx_d[1]*dx_d[1] + dx_d[2]*dx_d[2]);
-                r_ab = csqrt(ab[0]*ab[0] + ab[1]*ab[1] + ab[2]*ab[2]);
-                s_ab = r_a + r_b + r_ab;
-
-                for (int i = 0; i < 3; ++i) {
-                    n_a[i]  = dx_a[i] / r_a;
-                    n_b[i]  = dx_b[i] / r_b;
-                    n_c[i]  = dx_c[i] / r_c;
-                    n_d[i]  = dx_d[i] / r_d;
-                    n_ab[i] = ab[i]   / r_ab;
-
-                    n_c_dot_n_ab += n_c[i] * n_ab[i];
-                    n_c_dot_n_d  += n_c[i] * n_d[i];
-                    n_a_dot_n_c  += n_a[i] * n_c[i];
-                    n_d_dot_n_ab += n_d[i] * n_ab[i];
-                    n_b_dot_n_d  += n_b[i] * n_d[i];
-                }
-
-                // Compute the integrand and multiply by Jacobian determinant
-                double complex F = 1.0 / (r_c*r_c * r_d*r_d) *
-                    ( (n_c_dot_n_ab - n_a_dot_n_c) * (n_d_dot_n_ab + n_b_dot_n_d) / (s_ab*s_ab)
-                    - (n_c_dot_n_d - n_c_dot_n_ab * n_d_dot_n_ab) / (r_ab * s_ab) );
-                F *= jacobian;
-
-                // Undo complex step in the given direction
-                pos_cmplx[coord_index] -= I * h;
-
-                // Store derivative
-                int outIndex = NUM_LOCAL_BODIES * 3 * p + 3 * body + axis;
-                ff[outIndex] = (cubareal)(cimag(F) / h);
-            }
-        }
-    }
-    return 0;
-}
-
-
-// Computes the sum of ln-integral over all bodies appearing in UTT4
-static double ln_integral_sum(double* w, struct ode_params* ode_params) 
-{
-    IntegralParams integral_params;
-    cubareal integral[6], error[6], prob[6];
-    int num_bodies = ode_params->num_bodies_initial;
-    int num_dim = ode_params->num_dim;
-    double integral_sum_value = 0.0;
-    int neval, fail, nregions;
-
-    if (num_dim != 3)
-        errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
-
-    // Loop over unordered quadruples a<b<c<d
-    for (int a = 0; a < num_bodies; ++a) {
-        if (!ode_params->active[a]) continue;
-        for (int b = a+1; b < num_bodies; ++b) {
-            if (!ode_params->active[b]) continue;
-            for (int c = b+1; c < num_bodies; ++c) {
-                if (!ode_params->active[c]) continue;
-                for (int d = c+1; d < num_bodies; ++d) {
-                    if (!ode_params->active[d]) continue;
-
-                    // Prepare local positions for this quadruple
-                    for (int j = 0; j < 3; ++j) {
-                        integral_params.pos[0][j] = w[3 * a + j];
-                        integral_params.pos[1][j] = w[3 * b + j];
-                        integral_params.pos[2][j] = w[3 * c + j];
-                        integral_params.pos[3][j] = w[3 * d + j];
-                    }
-
-                    // Integrate 6 symmetry-inequivalent terms
-                    Cuhre(num_dim, 6, ln_integral, &integral_params, NVEC,
-                          ode_params->utt4_epsrel, ode_params->utt4_epsabs, 0,
-                          ode_params->utt4_mineval, ode_params->utt4_maxeval, KEY,
-                          NULL, NULL,
-                          &nregions, &neval, &fail,
-                          integral, error, prob);
-
-                    // Accumulate contributions to full quadruple sum
-                    // Each value should be multiplied by the symmetry factor 4, 
-                    // but in the Hamiltonian there is a factor 1/4, so they cancel
-                    for (int i = 0; i < 6; ++i)
-                        integral_sum_value += ode_params->masses[a] * ode_params->masses[b] 
-                            * ode_params->masses[c] * ode_params->masses[d] * integral[i];
-                }
-            }
-        }
-    }
-    return integral_sum_value;
-}
-
-
-// Computes UTT4 without the ln-integral (with complex numbers for complex-step differentiation)
-static complex double UTT4_without_ln_integral_complex(complex double* w, 
-    struct ode_params* ode_params) 
-{
-    int num_bodies = ode_params->num_bodies_initial;
-    int num_dim = ode_params->num_dim;
-    complex double temp0, temp1, temp2, temp3;
-
-    // Masses
-    double m[num_bodies];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        m[a] = ode_params->masses[a];
-    }
-    
-    // Relative positions and distances
-    complex double x_rel[num_bodies][num_bodies][num_dim]; 
-    complex double n[num_bodies][num_bodies][num_dim];
-    complex double r[num_bodies][num_bodies];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        for (int b = a; b < num_bodies; b++) {
-            if (!ode_params->active[b]) continue;
-            for (int i = 0; i < num_dim; i++){
-                x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
-                x_rel[b][a][i] = -x_rel[a][b][i];
-            } 
-            r[a][b] = norm_c(x_rel[a][b], num_dim);
-            r[b][a] = r[a][b];
-            for (int i = 0; i < num_dim; i++){
-                if (a == b){
-                        n[a][b][i] = 0.0;
-                        n[b][a][i] = 0.0;
-                } else {
-                        n[a][b][i] = x_rel[a][b][i] / r[a][b];
-                        n[b][a][i] = -n[a][b][i];
-                }
-            }
-        }
-    }
-
-    // Compute UTT4 without the ln-integral
-    complex double UTT4 = 0.0;
-    for (int a = 0; a < num_bodies; ++a) {
-        if (!ode_params->active[a]) continue;
-        for (int b = 0; b < num_bodies; ++b) {
-            if (!ode_params->active[b]) continue;
-            for (int c = 0; c < num_bodies; ++c) {
-                if (!ode_params->active[c]) continue;
-                for (int d = 0; d < num_bodies; ++d) {
-                    if (!ode_params->active[d]) continue;
-                    if (b != a && c != a && c != b && d != a && d != b && d != c) {
-                        temp0 = r[a][b] * r[a][b];
-                        temp1 = r[b][c] * r[b][c];
-                        temp2 = r[c][d] * r[c][d];
-                        temp3 = r[a][d] * r[a][d];
-                        UTT4 += - 0.015625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp2*r[c][d] * temp3*r[a][d] * temp1*r[b][c]) * (
-                                16 * temp0*r[a][b] * temp1*r[b][c] * temp2 * temp3 / r[b][d]
-                                - 24 * temp1*r[b][c] * temp3 * temp0 * temp2 
-                                - 30 * temp3 * temp3 * temp1*r[b][c] * (temp3 + temp1 - r[a][c]*r[a][c] - r[b][d]*r[b][d])
-                                + temp0 * (r[b][d]*r[b][d] - temp1 - temp2) * 
-                                    (-8 * temp3 * r[a][d] * temp1 + 16 * r[a][b] * temp3*r[a][d] * temp1 / (r[a][c] + r[b][c] + r[a][b]) 
-                                        + r[a][b] * temp2 * (r[a][c]*r[a][c] - temp3 - temp2)) 
-                                );
-                    }
-                }
-            }
-        }
-    }
-    return UTT4;
-}
-
-
-// Computes the gradient of UTT4 using complex-step differentiation
-void compute_dUTT4_dx(double*w, struct ode_params* ode_params, double *dUdx) 
-{
-    IntegralParams integral_params;
-    int num_bodies = ode_params->num_bodies_initial;
-    int num_dim = ode_params->num_dim;
-    int array_half = num_dim * num_bodies;
-    complex double w_c[array_half];
-    complex double UTT4_cs_val;
-
-    const double h = 1e-30;
-
-    if (num_dim != 3)
-        errorexit("The 2PN ln-integral can only be computed in 3D! Please use num_dim = 3");
-
-    for (int i = 0; i < array_half; ++i)
-        dUdx[i] = 0.0;
-
-    // UTT4 part without the ln-integral
-    // Copy position part of the original array to w_c
-    for (int i = 0; i < array_half; ++i)
-        w_c[i] = (complex double)w[i];
-
-    for (int i = 0; i < array_half; ++i) {
-        // Add tiny imaginary step in coordinate i
-        w_c[i] += I * h; 
-
-        // Compute derivative
-        UTT4_cs_val = UTT4_without_ln_integral_complex(w_c, ode_params);
-        dUdx[i] = cimag(UTT4_cs_val) / h;
-
-        // Restore original value
-        w_c[i] = (complex double)w[i];
-    }
-
-    // Add the ln-integral part
-    cubareal integral[NCOMP_H_DERIV], error[NCOMP_H_DERIV], prob[NCOMP_H_DERIV];
-    int neval, fail, nregions;
-
-    // Loop over unordered quadruples a<b<c<d
-    for (int a = 0; a < num_bodies; ++a) {
-        if (!ode_params->active[a]) continue;
-        for (int b = a+1; b < num_bodies; ++b) {
-            if (!ode_params->active[b]) continue;
-            for (int c = b+1; c < num_bodies; ++c) {
-                if (!ode_params->active[c]) continue;
-                for (int d = c+1; d < num_bodies; ++d) {
-                    if (!ode_params->active[d]) continue;
-
-                    double mass_fac = ode_params->masses[a] * ode_params->masses[b] 
-                        * ode_params->masses[c] * ode_params->masses[d];
-
-                    // Local -> global index mapping
-                    int slot2global[4] = { a, b, c, d };
-
-                    // Prepare local positions for this quadruple
-                    for (int j = 0; j < 3; ++j) {
-                        integral_params.pos[0][j] = w[3 * a + j];
-                        integral_params.pos[1][j] = w[3 * b + j];
-                        integral_params.pos[2][j] = w[3 * c + j];
-                        integral_params.pos[3][j] = w[3 * d + j];
-                    }
-
-                    // Integrate: one call, 72 outputs
-                    Cuhre(num_dim, NCOMP_H_DERIV, ln_integral_gradient, &integral_params, NVEC,
-                          ode_params->utt4_epsrel, ode_params->utt4_epsabs, 0,
-                          ode_params->utt4_mineval, ode_params->utt4_maxeval, KEY,
-                          NULL, NULL,
-                          &nregions, &neval, &fail,
-                          integral, error, prob);
-                    
-                    if (fail) {
-                        static int warned = 0;
-                        if (!warned) {
-                            progress_bar_break_line();
-                            printf("Warning: CUBA was not able to achieve the specified error "
-                                "tolerance! Please consider increasing utt4_maxeval\n");
-                            warned = 1;
-                        }
-                    }
-
-                    // Accumulate derivatives into global gradient
-                    for (int p = 0; p < 6; ++p) {
-                        for (int body = 0; body < 4; ++body) {
-                            int global_idx = slot2global[body];
-                            for (int axis = 0; axis < 3; ++axis) {
-                                int local_comp = 12*p + 3*body + axis;
-                                // Each value should be multiplied by the symmetry factor 4, 
-                                // but in the Hamiltonian there is a factor 1/4, so they cancel
-                                dUdx[3*global_idx + axis] += INVPI*mass_fac * integral[local_comp];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
+#ifdef _OPENMP
+#include <omp.h>
 #endif
+
+#define NUM_LOCAL_BODIES 4
+
+
+// ------------------------------------------------------------------------------------------------
+// Cached UTT4 logarithmic integral
+// ------------------------------------------------------------------------------------------------
+
+// Convert the runtime parameter structure to the numerical-integral settings.
+static NumericalIntegralSettings utt4_ln_integral_settings_from_ode(const struct ode_params *ode_params)
+{
+    NumericalIntegralSettings settings;
+    settings.rel_tol = (long double)ode_params->utt4_ln_integral_epsrel;
+    settings.abs_tol = (long double)ode_params->utt4_ln_integral_epsabs;
+    settings.min_order = ode_params->utt4_ln_integral_min_order;
+    settings.max_order = ode_params->utt4_ln_integral_max_order;
+    settings.adaptive = ode_params->utt4_ln_integral_adaptive;
+    settings.max_depth = ode_params->utt4_ln_integral_max_depth;
+    settings.use_openmp = ode_params->utt4_ln_integral_parallel;
+    return settings;
+}
+
+
+// Report a failed logarithmic-integral accuracy target only once during a run.
+static void utt4_ln_integral_warning(const UTT4LnIntegralResult *result,
+    const struct ode_params *ode_params)
+{
+    if (result->diagnostics.target_met)
+        return;
+
+    static int warned = 0;
+    if (!warned) {
+        progress_bar_break_line();
+        printf("Warning: the UTT4 logarithmic integral did not reach the requested tolerance "
+               "(epsrel=%.3e, last fixed orders %d/%d, worst tolerance ratio %.3Le). "
+               "Consider increasing utt4_ln_integral_max_order or utt4_ln_integral_max_depth.\n",
+               ode_params->utt4_ln_integral_epsrel, result->diagnostics.low_order,
+               result->diagnostics.high_order,
+               result->diagnostics.worst_tolerance_ratio);
+        warned = 1;
+    }
+}
+
+
+// Check whether the cached logarithmic UTT4 result is valid for the current position state.
+static int utt4_ln_cache_matches(const PairCache *cache, const double *w,
+    const struct ode_params *ode_params)
+{
+    const UTT4LnCache *utt4_cache = &cache->utt4_ln;
+    if (!utt4_cache->valid)
+        return 0;
+
+    if (utt4_cache->epsrel != ode_params->utt4_ln_integral_epsrel
+        || utt4_cache->epsabs != ode_params->utt4_ln_integral_epsabs
+        || utt4_cache->min_order != ode_params->utt4_ln_integral_min_order
+        || utt4_cache->max_order != ode_params->utt4_ln_integral_max_order
+        || utt4_cache->adaptive != ode_params->utt4_ln_integral_adaptive
+        || utt4_cache->max_depth != ode_params->utt4_ln_integral_max_depth
+        || utt4_cache->parallel != ode_params->utt4_ln_integral_parallel)
+        return 0;
+
+    const int num_bodies = cache->num_bodies;
+    const int num_dim = cache->num_dim;
+
+    for (int a = 0; a < num_bodies; ++a) {
+        if (utt4_cache->active[a] != ode_params->active[a])
+            return 0;
+
+        if (!ode_params->active[a])
+            continue;
+
+        if (utt4_cache->masses[a] != ode_params->masses[a])
+            return 0;
+
+        for (int axis = 0; axis < num_dim; ++axis) {
+            const int idx = a * num_dim + axis;
+            if (utt4_cache->positions[idx] != w[idx])
+                return 0;
+        }
+    }
+
+    return 1;
+}
+
+
+// Store the exact position/mass/active-set/settings key for a freshly evaluated UTT4 cache entry.
+static void utt4_ln_cache_store_key(PairCache *cache, const double *w,
+    const struct ode_params *ode_params)
+{
+    UTT4LnCache *utt4_cache = &cache->utt4_ln;
+    const int num_bodies = cache->num_bodies;
+    const int num_dim = cache->num_dim;
+
+    for (int a = 0; a < num_bodies; ++a) {
+        utt4_cache->active[a] = ode_params->active[a];
+        utt4_cache->masses[a] = ode_params->masses[a];
+
+        for (int axis = 0; axis < num_dim; ++axis) {
+            const int idx = a * num_dim + axis;
+            utt4_cache->positions[idx] = w[idx];
+        }
+    }
+
+    utt4_cache->epsrel = ode_params->utt4_ln_integral_epsrel;
+    utt4_cache->epsabs = ode_params->utt4_ln_integral_epsabs;
+    utt4_cache->min_order = ode_params->utt4_ln_integral_min_order;
+    utt4_cache->max_order = ode_params->utt4_ln_integral_max_order;
+    utt4_cache->adaptive = ode_params->utt4_ln_integral_adaptive;
+    utt4_cache->max_depth = ode_params->utt4_ln_integral_max_depth;
+    utt4_cache->parallel = ode_params->utt4_ln_integral_parallel;
+    utt4_cache->valid = 1;
+}
+
+
+// Number of unordered four-body subsets of an active list.
+static size_t utt4_ln_num_quadruples(int num_active)
+{
+    if (num_active < NUM_LOCAL_BODIES)
+        return 0;
+
+    const size_t n = (size_t)num_active;
+    return n*(n - 1)*(n - 2)*(n - 3)/24;
+}
+
+
+// Decode a lexicographic unordered-quadruple index without materializing a quadruple list.
+static void utt4_ln_quadruple_from_index(const ActiveList *active, size_t index,
+    int body[NUM_LOCAL_BODIES])
+{
+    const int n = active->num_active;
+    size_t remaining = index;
+
+    int ia = 0;
+    for (; ia < n - 3; ++ia) {
+        const size_t m = (size_t)(n - ia - 1);
+        const size_t count = m*(m - 1)*(m - 2)/6;
+        if (remaining < count)
+            break;
+        remaining -= count;
+    }
+
+    int ib = ia + 1;
+    for (; ib < n - 2; ++ib) {
+        const size_t m = (size_t)(n - ib - 1);
+        const size_t count = m*(m - 1)/2;
+        if (remaining < count)
+            break;
+        remaining -= count;
+    }
+
+    int ic = ib + 1;
+    for (; ic < n - 1; ++ic) {
+        const size_t count = (size_t)(n - ic - 1);
+        if (remaining < count)
+            break;
+        remaining -= count;
+    }
+
+    const int id = ic + 1 + (int)remaining;
+    body[0] = active->ids[ia];
+    body[1] = active->ids[ib];
+    body[2] = active->ids[ic];
+    body[3] = active->ids[id];
+}
+
+
+// Evaluate one unordered quadruple. The caller decides whether the integral may use inner OpenMP.
+static int utt4_ln_evaluate_quadruple(const double *w, const struct ode_params *ode_params,
+    const int body[NUM_LOCAL_BODIES], const NumericalIntegralSettings *settings,
+    UTT4LnIntegralResult *result)
+{
+    double pos[NUM_LOCAL_BODIES][3];
+    for (int local = 0; local < NUM_LOCAL_BODIES; ++local)
+        for (int axis = 0; axis < 3; ++axis)
+            pos[local][axis] = w[ode_params->num_dim*body[local] + axis];
+
+    return utt4_ln_integral_evaluate(pos, settings, result);
+}
+
+
+// Accumulate one mass-weighted quadruple result into a scalar and system gradient.
+static void utt4_ln_accumulate_quadruple(const struct ode_params *ode_params,
+    const int body[NUM_LOCAL_BODIES], const UTT4LnIntegralResult *result,
+    long double *value, long double *grad)
+{
+    const long double mass_fac =
+        (long double)ode_params->masses[body[0]] * ode_params->masses[body[1]]
+      * (long double)ode_params->masses[body[2]] * ode_params->masses[body[3]];
+    const long double prefactor = 0.25L*mass_fac;
+
+    *value += prefactor*result->value;
+
+    for (int local = 0; local < NUM_LOCAL_BODIES; ++local) {
+        const int global = body[local];
+        for (int axis = 0; axis < 3; ++axis) {
+            const int idx = ode_params->num_dim*global + axis;
+            grad[idx] += prefactor*result->grad[local][axis];
+        }
+    }
+}
+
+
+// Evaluate the complete mass-weighted logarithmic UTT4 value and gradient for one position state.
+static void utt4_ln_cache_refresh(PairCache *cache, double *w, struct ode_params *ode_params)
+{
+    const int num_dim = ode_params->num_dim;
+    const int array_half = cache->array_half;
+    const NumericalIntegralSettings settings = utt4_ln_integral_settings_from_ode(ode_params);
+    const ActiveList *active = &cache->active;
+    UTT4LnCache *utt4_cache = &cache->utt4_ln;
+    const size_t num_quadruples = utt4_ln_num_quadruples(active->num_active);
+
+    if (num_dim != 3)
+        errorexit("The UTT4 logarithmic integral can only be computed in 3D! Use num_dim = 3");
+
+    for (int i = 0; i < array_half; ++i)
+        utt4_cache->grad[i] = 0.0;
+
+    long double sum = 0.0L;
+
+#ifdef _OPENMP
+    /*
+     * For N > 4, parallelize over independent unordered quadruples rather than inside each
+     * two-dimensional quadrature. This gives coarser tasks, avoids repeated nested parallel
+     * regions, and scales better as C(N,4) grows. N = 4 retains the inner quadrature parallelism.
+     */
+    const int use_quadruple_parallelism =
+        settings.use_openmp && num_quadruples > 1 && omp_get_max_threads() > 1
+        && !omp_in_parallel();
+
+    if (use_quadruple_parallelism) {
+        const int max_threads = omp_get_max_threads();
+        long double *thread_sum = calloc((size_t)max_threads, sizeof(*thread_sum));
+        long double *thread_grad = calloc((size_t)max_threads*(size_t)array_half,
+            sizeof(*thread_grad));
+        int *thread_failed = calloc((size_t)max_threads, sizeof(*thread_failed));
+        int *thread_warn = calloc((size_t)max_threads, sizeof(*thread_warn));
+        UTT4LnIntegralResult *warning_result =
+            calloc((size_t)max_threads, sizeof(*warning_result));
+
+        if (!thread_sum || !thread_grad || !thread_failed || !thread_warn || !warning_result)
+            errorexit("Failed to allocate UTT4 quadruple-parallel workspace");
+
+        NumericalIntegralSettings serial_settings = settings;
+        serial_settings.use_openmp = 0;
+
+        #pragma omp parallel
+        {
+            const int tid = omp_get_thread_num();
+            long double *local_grad = thread_grad + (size_t)tid*(size_t)array_half;
+
+            #pragma omp for schedule(static)
+            for (size_t q = 0; q < num_quadruples; ++q) {
+                int body[NUM_LOCAL_BODIES];
+                UTT4LnIntegralResult result;
+                utt4_ln_quadruple_from_index(active, q, body);
+
+                if (utt4_ln_evaluate_quadruple(w, ode_params, body, &serial_settings, &result) != 0) {
+                    thread_failed[tid] = 1;
+                    continue;
+                }
+
+                if (!result.diagnostics.target_met && !thread_warn[tid]) {
+                    warning_result[tid] = result;
+                    thread_warn[tid] = 1;
+                }
+
+                utt4_ln_accumulate_quadruple(ode_params, body, &result,
+                    &thread_sum[tid], local_grad);
+            }
+        }
+
+        int failed = 0;
+        int warned = 0;
+        for (int tid = 0; tid < max_threads; ++tid) {
+            failed |= thread_failed[tid];
+            sum += thread_sum[tid];
+
+            if (!warned && thread_warn[tid]) {
+                utt4_ln_integral_warning(&warning_result[tid], ode_params);
+                warned = 1;
+            }
+        }
+
+        for (int i = 0; i < array_half; ++i) {
+            long double component = 0.0L;
+            for (int tid = 0; tid < max_threads; ++tid)
+                component += thread_grad[(size_t)tid*(size_t)array_half + i];
+            utt4_cache->grad[i] = (double)component;
+        }
+
+        free(thread_sum);
+        free(thread_grad);
+        free(thread_failed);
+        free(thread_warn);
+        free(warning_result);
+
+        if (failed)
+            errorexit("UTT4 logarithmic integral evaluation failed");
+    } else
+#endif
+    {
+        long double serial_grad[cache->array_half];
+        for (int i = 0; i < array_half; ++i)
+            serial_grad[i] = 0.0L;
+
+        for (size_t q = 0; q < num_quadruples; ++q) {
+            int body[NUM_LOCAL_BODIES];
+            UTT4LnIntegralResult result;
+            utt4_ln_quadruple_from_index(active, q, body);
+
+            if (utt4_ln_evaluate_quadruple(w, ode_params, body, &settings, &result) != 0)
+                errorexit("UTT4 logarithmic integral evaluation failed");
+            utt4_ln_integral_warning(&result, ode_params);
+            utt4_ln_accumulate_quadruple(ode_params, body, &result, &sum, serial_grad);
+        }
+
+        for (int i = 0; i < array_half; ++i)
+            utt4_cache->grad[i] = (double)serial_grad[i];
+    }
+
+    utt4_cache->value = (double)sum;
+    utt4_ln_cache_store_key(cache, w, ode_params);
+}
+
+
+/**
+ * @brief Return the cached logarithmic UTT4 value and/or gradient for the current positions.
+ *
+ * The expensive numerical quadrature is performed only when the active-body positions, masses,
+ * active set, or logarithmic-integral settings differ from the cached state. Either output may be
+ * NULL. The returned value and gradient already include the four-mass products and the Hamiltonian
+ * symmetry factor 1/4.
+ */
+void utt4_ln_integral_cached(double *w, struct ode_params *ode_params, double *value, double *grad)
+{
+    if (w == NULL || ode_params == NULL)
+        errorexit("utt4_ln_integral_cached received a NULL input");
+
+    PairCache *cache = pair_cache_get_workspace(ode_params);
+    active_list_refresh(&cache->active, ode_params);
+
+    if (!utt4_ln_cache_matches(cache, w, ode_params))
+        utt4_ln_cache_refresh(cache, w, ode_params);
+
+    if (value != NULL)
+        *value = cache->utt4_ln.value;
+
+    if (grad != NULL) {
+        for (int i = 0; i < cache->array_half; ++i)
+            grad[i] = cache->utt4_ln.grad[i];
+    }
+}
 
 
 // ------------------------------------------------------------------------------------------------
@@ -542,7 +417,6 @@ double H0PN(double* w, struct ode_params* ode_params)
 // Computes the 1PN Hamiltonian part from an already-refreshed cache.
 double H1PN_cached(const PairCache *cache)
 {
-
     double H = 0.0;
 
     // Compute kinetic and potential energy
@@ -564,7 +438,7 @@ double H1PN_cached(const PairCache *cache)
             double na_dot_pa = pair_cache_n_dot_p(cache, a, b, a);
             double na_dot_pb = pair_cache_n_dot_p(cache, a, b, b);
 
-            H += -0.25 * m_a * m_b / r_ab * (6.0 * pa_dot_pa / (m_a * m_a) 
+            H += -0.25 * m_a * m_b / r_ab * (6.0 * pa_dot_pa / (m_a * m_a)
                 - 7.0 * pa_dot_pb / (m_a * m_b) - (na_dot_pa * na_dot_pb) / (m_a * m_b));
 
             for (int ic = 0; ic < cache->active.num_active; ic++) {
@@ -587,27 +461,23 @@ double H1PN_cached(const PairCache *cache)
 double H1PN(double* w, struct ode_params* ode_params)
 {
     PairCache *cache = pair_cache_get_workspace(ode_params);
-    const unsigned int levels = PAIR_CACHE_LEVEL_GEOMETRY | PAIR_CACHE_LEVEL_P2 | PAIR_CACHE_LEVEL_PAIR_DOTS;
+    const unsigned int levels = PAIR_CACHE_LEVEL_GEOMETRY | PAIR_CACHE_LEVEL_P2
+        | PAIR_CACHE_LEVEL_PAIR_DOTS;
     pair_cache_refresh(cache, w, ode_params, levels);
     return H1PN_cached(cache);
 }
 
 
 // Computes the 2PN Hamiltonian part from an already-refreshed cache.
-double H2PN_cached(
-    double* w,
-    struct ode_params* ode_params,
-    const PairCache *cache,
-    int utt4_flag)
+double H2PN_cached(double* w, struct ode_params* ode_params, const PairCache *cache, int utt4_flag)
 {
-    (void)w;  // Used by the optional CUBA integral when HAVE_CUBA is enabled.
     int num_bodies = ode_params->num_bodies_initial;
     int num_dim = ode_params->num_dim;
-    double temp, temp0, temp1, temp2, temp3, temp4, temp5, temp6, 
+    const ActiveList *active = &cache->active;
+    double temp, temp0, temp1, temp2, temp3, temp4, temp5, temp6,
         temp7, temp8, temp9, temp10, temp11, temp12, temp13;
     double ma_inv, mb_inv, mc_inv;
 
-    /* Non-owning VLA views of the shared flat cache storage. */
     const double *m = cache->m;
     const double (*p)[num_dim] = (const double (*)[num_dim])cache->p;
     const double (*n)[num_bodies][num_dim] = (const double (*)[num_bodies][num_dim])cache->n;
@@ -618,16 +488,16 @@ double H2PN_cached(
 
     // Compute H
     double H = 0.0;
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
+    for (int ia = 0; ia < active->num_active; ++ia) {
+        const int a = active->ids[ia];
         ma_inv = 1/m[a];
         temp = cache->p2[a];
         temp2 = temp * ma_inv * ma_inv;
 
         H += 0.0625 * m[a] * temp2 * temp2 * temp2;
 
-        for (int b = 0; b < num_bodies; b++) {
-            if (!ode_params->active[b]) continue;
+        for (int ib = 0; ib < active->num_active; ++ib) {
+            const int b = active->ids[ib];
             mb_inv = 1/m[b];
             temp0 = r[a][b] * r[a][b];
             temp1 = m[a] * m[b];
@@ -649,8 +519,8 @@ double H2PN_cached(
                     - 2 * temp7);
                 H += -0.25 * temp1 * temp1 / (temp0 * r[a][b]);
             }
-            for (int c = 0; c < num_bodies; c++) {
-                if (!ode_params->active[c]) continue;
+            for (int ic = 0; ic < active->num_active; ++ic) {
+                const int c = active->ids[ic];
                 mc_inv = 1/m[c];
                 temp8 = pair_cache_n_dot_p(cache, a, c, c);
                 temp9 = dot_product(n[a][b], n[a][c], num_dim);
@@ -658,7 +528,7 @@ double H2PN_cached(
                 temp11 = r[b][c] * r[b][c];
 
                 if (b != a && c != a) {
-                    H += 0.125 * temp1 * m[c] / (r[a][b] * r[a][c]) * (18 * temp2 
+                    H += 0.125 * temp1 * m[c] / (r[a][b] * r[a][c]) * (18 * temp2
                         + 14 * temp6 * mb_inv * mb_inv
                         - 2 * temp4 * temp4 * mb_inv * mb_inv
                         - 50 * temp7
@@ -666,11 +536,13 @@ double H2PN_cached(
                         - 14 * temp5 * temp4 * ma_inv * mb_inv
                         + 14 * temp4 * temp10 * mb_inv * mc_inv
                         + temp9 * temp4 * temp8 * mb_inv * mc_inv);
-                    H += 0.125 * temp1 * m[c] / (r[a][b] * r[a][b]) * (2 * temp5 * temp8 * ma_inv * mc_inv
+                    H += 0.125 * temp1 * m[c] / (r[a][b] * r[a][b]) * (
+                        2 * temp5 * temp8 * ma_inv * mc_inv
                         + 2 * temp4 * temp8 * ma_inv * mc_inv
                         + 5 * temp9 * cache->p2[c] * mc_inv * mc_inv
                         - temp9 * temp8 * temp8 * mc_inv * mc_inv
-                        - 14 * temp10 * temp8 * mc_inv * mc_inv);
+                        - 14 * temp10 * temp8 * mc_inv * mc_inv
+                        );
                 }
                 if (b != a && c != a && c != b) {
                     for (int i = 0; i < num_dim; i++) {
@@ -685,7 +557,7 @@ double H2PN_cached(
                         + dot_product(n_ab_ac, p[a], num_dim) * dot_product(n_ab_cb, p[a], num_dim) * ma_inv * ma_inv);
                     H += 0.5 * temp1 * m[c] / ((r[a][b] + r[b][c] + r[c][a]) * r[a][b]) * (
                         8 * (pair_cache_p_dot(cache, a, c) - temp5 * temp10) * ma_inv * mc_inv
-                        - 3 * (temp7 - temp5 * temp4 * ma_inv * mb_inv) 
+                        - 3 * (temp7 - temp5 * temp4 * ma_inv * mb_inv)
                         - 4 * (cache->p2[c] - temp10 * temp10) * mc_inv * mc_inv
                         - (temp - temp5 * temp5) * ma_inv * ma_inv);
                     H += -0.015625 * m[a] * temp1 * m[c] / (temp0 * r[a][b] * r[a][c] * r[a][c] * r[a][c] * r[b][c]) * (
@@ -695,8 +567,8 @@ double H2PN_cached(
                         - 72 * r[a][b] * r[b][c] * temp11 + 35 * temp11 * temp11 + 6 * temp0 * temp0);
                 }
                 // G^3 quadruple sum terms
-                for (int d = 0; d < num_bodies; d++) {
-                    if (!ode_params->active[d]) continue;
+                for (int id = 0; id < active->num_active; ++id) {
+                    const int d = active->ids[id];
                     temp12 = r[c][d]*r[c][d];
                     temp13 = r[a][d]*r[a][d];
 
@@ -710,22 +582,23 @@ double H2PN_cached(
                         if (b != a && c != a && c != b && d != a && d != b && d != c) {
                             H += - 0.015625 * m[a] * m[b] * m[c] * m[d] / (temp0*r[a][b] * temp12*r[c][d] * temp13*r[a][d] * temp11*r[b][c]) * (
                                 16 * temp0*r[a][b] * temp11*r[b][c] * temp12 * temp13 / r[b][d]
-                                - 24 * temp11*r[b][c] * temp13 * temp0 * temp12 
+                                - 24 * temp11*r[b][c] * temp13 * temp0 * temp12
                                 - 30 * temp13 * temp13 * temp11*r[b][c] * (temp13 + temp11 - r[a][c]*r[a][c] - r[b][d]*r[b][d])
                                 + temp0 * (r[b][d]*r[b][d] - temp11 - temp12) * (
-                                    -8 * temp13 * r[a][d] * temp11 + 16 * r[a][b] * temp13*r[a][d] * temp11 / (r[a][c] + r[b][c] + r[a][b]) 
+                                    -8 * temp13 * r[a][d] * temp11 + 16 * r[a][b] * temp13*r[a][d] * temp11 / (r[a][c] + r[b][c] + r[a][b])
                                         + r[a][b] * temp12 * (r[a][c]*r[a][c] - temp13 - temp12)) );
                         }
                     }
                 }
             }
-        } 
+        }
     }
-    // ln-integral sum of UTT4 (the masses are included in ln_integral_sum, 
-    // the factor 1/4 cancels the symmetry factor 4)
-    #if HAVE_CUBA
-    if (utt4_flag) H += INVPI * ln_integral_sum(w, ode_params);
-    #endif
+    // Logarithmic integral part of UTT4
+    if (utt4_flag) {
+        double utt4_ln_value;
+        utt4_ln_integral_cached(w, ode_params, &utt4_ln_value, NULL);
+        H += utt4_ln_value;
+    }
     return H;
 }
 
@@ -737,155 +610,4 @@ double H2PN(double* w, struct ode_params* ode_params, int utt4_flag)
     const unsigned int levels = PAIR_CACHE_LEVEL_GEOMETRY | PAIR_CACHE_LEVEL_P2 | PAIR_CACHE_LEVEL_PAIR_DOTS;
     pair_cache_refresh(cache, w, ode_params, levels);
     return H2PN_cached(w, ode_params, cache, utt4_flag);
-}
-
-
-// Complex version of the 2PN part of the N-body Hamiltonian without UTT4
-// used for obtaining the derivatives via complex-step differentiation for the equations of motion
-complex double H2PN_base_complex(complex double* w, struct ode_params* ode_params, int p_flag) 
-{
-    int num_bodies = ode_params->num_bodies_initial;
-    int num_dim = ode_params->num_dim;
-    int array_half = num_bodies * num_dim; 
-    complex double temp, temp0, temp1, temp2, temp3, temp4, temp5, temp6,
-        temp7, temp8, temp9, temp10, temp11;
-    double ma_inv, mb_inv, mc_inv;
-
-    // Masses
-    double m[num_bodies];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        m[a] = ode_params->masses[a];
-    }
-    
-    // Momenta
-    complex double p[num_bodies][num_dim];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        for (int i = 0; i < num_dim; i++)
-            p[a][i] = w[array_half + a * num_dim + i];
-    }
-    
-    // Relative positions and distances
-    complex double x_rel[num_bodies][num_bodies][num_dim]; 
-    complex double n[num_bodies][num_bodies][num_dim];
-    complex double r[num_bodies][num_bodies];
-    complex double n_ab_ac[num_dim];
-    complex double n_ab_cb[num_dim];
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        for (int b = a; b < num_bodies; b++) {
-            if (!ode_params->active[b]) continue;
-            for (int i = 0; i < num_dim; i++){
-                x_rel[a][b][i] = w[a * num_dim + i] - w[b * num_dim + i];
-                x_rel[b][a][i] = -x_rel[a][b][i];
-            } 
-            r[a][b] = norm_c(x_rel[a][b], num_dim);
-            r[b][a] = r[a][b];
-            for (int i = 0; i < num_dim; i++){
-                if (a == b){
-                        n[a][b][i] = 0.0;
-                        n[b][a][i] = 0.0;
-                } else {
-                        n[a][b][i] = x_rel[a][b][i] / r[a][b];
-                        n[b][a][i] = -n[a][b][i];
-                }
-            }
-        }
-    }
-
-    // Compute H
-    complex double H = 0.0;
-    for (int a = 0; a < num_bodies; a++) {
-        if (!ode_params->active[a]) continue;
-        ma_inv = 1/m[a];
-        temp = dot_product_c(p[a], p[a], num_dim);
-        temp2 = temp * ma_inv * ma_inv;
-
-        H += 0.0625 * m[a] * temp2 * temp2 * temp2;
-
-        for (int b = 0; b < num_bodies; b++) {
-            if (!ode_params->active[b]) continue;
-            mb_inv = 1/m[b];
-            temp0 = r[a][b] * r[a][b];
-            temp1 = m[a] * m[b];
-            temp3 = temp * ma_inv * mb_inv;
-            temp4 = dot_product_c(n[a][b], p[b], num_dim);
-            temp5 = dot_product_c(n[a][b], p[a], num_dim);
-            temp6 = dot_product_c(p[b], p[b], num_dim);
-            temp7 = dot_product_c(p[a], p[b], num_dim) * ma_inv * mb_inv;
-
-            if (b != a){
-                H += 0.0625 * 1 / r[a][b] * (10 * temp1 * temp2 * temp2
-                    - 11 * temp3 * temp6
-                    - 2 * dot_product_c(p[a], p[b], num_dim) * temp7
-                    + 10 * temp3 * temp4 * temp4
-                    - 12 * temp7 * temp5 * temp4
-                    - 3 * temp5 * temp5 * temp4 * temp4 * ma_inv * mb_inv);
-                H += 0.25 * m[a] * temp1 / temp0 * (temp2
-                    + temp6 * mb_inv * mb_inv
-                    - 2 * temp7);
-                if (!p_flag)
-                    H += -0.25 * temp1 * temp1 / (temp0 * r[a][b]);
-            }
-            for (int c = 0; c < num_bodies; c++) {
-                if (!ode_params->active[c]) continue;
-                mc_inv = 1/m[c];
-                temp8 = dot_product_c(n[a][c], p[c], num_dim);
-                temp9 = dot_product_c(n[a][b], n[a][c], num_dim);
-                temp10 = dot_product_c(n[a][b], p[c], num_dim);
-                temp11 = r[b][c] * r[b][c];
-
-                if (b != a && c != a) {
-                    H += 0.125 * temp1 * m[c] / (r[a][b] * r[a][c]) * (18 * temp2 
-                        + 14 * temp6 * mb_inv * mb_inv
-                        - 2 * temp4 * temp4 * mb_inv * mb_inv
-                        - 50 * temp7
-                        + 17 * dot_product_c(p[b], p[c], num_dim) * mb_inv * mc_inv
-                        - 14 * temp5 * temp4 * ma_inv * mb_inv
-                        + 14 * temp4 * temp10 * mb_inv * mc_inv
-                        + temp9 * temp4 * temp8 * mb_inv * mc_inv);
-                    H += 0.125 * temp1 * m[c] / (r[a][b] * r[a][b]) * (2 * temp5 * temp8 * ma_inv * mc_inv
-                        + 2 * temp4 * temp8 * ma_inv * mc_inv
-                        + 5 * temp9 * dot_product_c(p[c], p[c], num_dim) * mc_inv * mc_inv
-                        - temp9 * temp8 * temp8 * mc_inv * mc_inv
-                        - 14 * temp10 * temp8 * mc_inv * mc_inv);
-                }
-                if (b != a && c != a && c != b) {
-                    for (int i = 0; i < num_dim; i++) {
-                        n_ab_ac[i] = n[a][b][i] + n[a][c][i];
-                        n_ab_cb[i] = n[a][b][i] + n[c][b][i];
-                    }
-                    H += 0.5 * temp1 * m[c] / ((r[a][b] + r[b][c] + r[c][a]) * (r[a][b] + r[b][c] + r[c][a])) * (
-                        8 * dot_product_c(n_ab_ac, p[a], num_dim) * dot_product_c(n_ab_cb, p[c], num_dim) * ma_inv * mc_inv
-                        - 16 * dot_product_c(n_ab_ac, p[c], num_dim) * dot_product_c(n_ab_cb, p[a], num_dim) * ma_inv * mc_inv
-                        + 3 * dot_product_c(n_ab_ac, p[a], num_dim) * dot_product_c(n_ab_cb, p[b], num_dim) * ma_inv * mb_inv
-                        + 4 * dot_product_c(n_ab_ac, p[c], num_dim) * dot_product_c(n_ab_cb, p[c], num_dim) * mc_inv * mc_inv
-                        + dot_product_c(n_ab_ac, p[a], num_dim) * dot_product_c(n_ab_cb, p[a], num_dim) * ma_inv * ma_inv);
-                    H += 0.5 * temp1 * m[c] / ((r[a][b] + r[b][c] + r[c][a]) * r[a][b]) * (
-                        8 * (dot_product_c(p[a], p[c], num_dim) - temp5 * temp10) * ma_inv * mc_inv
-                        - 3 * (temp7 - temp5 * temp4 * ma_inv * mb_inv) 
-                        - 4 * (dot_product_c(p[c], p[c], num_dim) - temp10 * temp10) * mc_inv * mc_inv
-                        - (temp - temp5 * temp5) * ma_inv * ma_inv);
-                    if (!p_flag)
-                        H += -0.015625 * m[a] * temp1 * m[c] / (temp0 * r[a][b] * r[a][c] * r[a][c] * r[a][c] * r[b][c]) * (
-                            18 * temp0 * r[a][c] * r[a][c] - 60 * temp0 * temp11
-                            - 24 * temp0 * r[a][c] * (r[a][b] + r[b][c])
-                            + 60 * r[a][b] * r[a][c] * temp11 + 56 * temp0 * r[a][b] * r[b][c]
-                            - 72 * r[a][b] * r[b][c] * temp11 + 35 * temp11 * temp11 + 6 * temp0 * temp0);
-                }
-                // G^3 quadruple sum terms
-                if (!p_flag) {
-                    for (int d = 0; d < num_bodies; d++) {
-                        if (!ode_params->active[d]) continue;
-                        if (b != a && c != b && d != c)
-                            H += - 0.375 * temp1 * m[c] * m[d] / (r[a][b] * r[b][c] * r[c][d]);
-                        if (b != a && c != a && d != a)
-                            H += - 0.25 * temp1 * m[c] * m[d] / (r[a][b] * r[a][c] * r[a][d]);
-                    }
-                }
-            }
-        } 
-    }
-    return H;
 }
