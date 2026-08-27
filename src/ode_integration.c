@@ -548,12 +548,12 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 
     // Cleanup
     ode_ws_free(&ws);
-    fclose(file_mass);
-    fclose(file_pos);
-    fclose(file_mom);
-    fclose(file_energy);
-    fclose(file_merger);
-    fclose(file_spin);
+    if (file_mass) fclose(file_mass);
+    if (file_pos) fclose(file_pos);
+    if (file_mom) fclose(file_mom);
+    if (file_energy) fclose(file_energy);
+    if (file_merger) fclose(file_merger);
+    if (file_spin) fclose(file_spin);
 }
 
 
@@ -787,12 +787,12 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     }
 
     // Cleanup
-    fclose(file_mass);
-    fclose(file_pos);
-    fclose(file_mom);
-    fclose(file_energy);
-    fclose(file_merger);
-    fclose(file_spin);
+    if (file_mass) fclose(file_mass);
+    if (file_pos) fclose(file_pos);
+    if (file_mom) fclose(file_mom);
+    if (file_energy) fclose(file_energy);
+    if (file_merger) fclose(file_merger);
+    if (file_spin) fclose(file_spin);
     free_vector(dUdx);
     ode_ws_free(&ws);
 }

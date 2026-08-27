@@ -5,16 +5,81 @@
  * Functions for the output of physical quantities, such as the initialization of the output files
  * and writing output values as specified times.
  *
- * TODO: Allow the user to specify which quantities he wants to output. Also add more possible
- * output quantities (angular momentum, eccentricity, ...).
+ * TODO: Add more possible output quantities (angular momentum, eccentricity, ...).
  */
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "utils.h"
 #include "parameters.h"
 #include "physical_quantities.h"
 #include "eom.h"
+
+
+enum output_quantity {
+    OUTPUT_MASS     = 1 << 0,
+    OUTPUT_POSITION = 1 << 1,
+    OUTPUT_MOMENTUM = 1 << 2,
+    OUTPUT_SPIN     = 1 << 3,
+    OUTPUT_ENERGY   = 1 << 4,
+    OUTPUT_MERGER   = 1 << 5
+};
+
+
+static unsigned int get_output_quantities(void)
+{
+    const char *value = get_parameter_string("output");
+    char *copy = strdup(value);
+    if (!copy)
+        errorexit("Could not allocate memory while parsing parameter \"output\"");
+
+    unsigned int quantities = 0;
+    char *token = strtok(copy, " \t");
+    while (token) {
+        if (strcmp(token, "mass") == 0)
+            quantities |= OUTPUT_MASS;
+        else if (strcmp(token, "position") == 0)
+            quantities |= OUTPUT_POSITION;
+        else if (strcmp(token, "momentum") == 0)
+            quantities |= OUTPUT_MOMENTUM;
+        else if (strcmp(token, "spin") == 0)
+            quantities |= OUTPUT_SPIN;
+        else if (strcmp(token, "energy") == 0)
+            quantities |= OUTPUT_ENERGY;
+        else if (strcmp(token, "merger") == 0)
+            quantities |= OUTPUT_MERGER;
+        else {
+            char message[256];
+            snprintf(message, sizeof(message),
+                "Unknown output quantity \"%s\"; choose from mass position momentum spin energy "
+                "merger (separated by spaces)", token);
+            free(copy);
+            errorexit(message);
+        }
+        token = strtok(NULL, " \t");
+    }
+
+    free(copy);
+    if (quantities == 0)
+        errorexit("Parameter \"output\" must contain at least one output quantity");
+    return quantities;
+}
+
+
+static FILE *open_output_file(const char *outdir, const char *filename)
+{
+    char *path = make_filepath(outdir, filename);
+    FILE *file = fopen(path, "w");
+    if (!file) {
+        char message[256];
+        snprintf(message, sizeof(message), "Output file \"%s\" could not be created", path);
+        free(path);
+        errorexit(message);
+    }
+    free(path);
+    return file;
+}
 
 
 /**
@@ -32,104 +97,106 @@
 void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_spin,
     FILE** file_energy, FILE** file_merger, struct ode_params* ode_params)
 {
-    // Create and open files
-    char* outdir = get_parameter_string("outdir");
-    char* path_masses  = make_filepath(outdir, "output_mass.dat");
-    char* path_pos     = make_filepath(outdir, "output_pos.dat");
-    char* path_mom     = make_filepath(outdir, "output_mom.dat");
-    char* path_spin    = make_filepath(outdir, "output_spin.dat");
-    char* path_energy  = make_filepath(outdir, "output_energy.dat");
-    char* path_merger  = make_filepath(outdir, "output_merger.dat");
+    const unsigned int quantities = get_output_quantities();
+    const char *outdir = get_parameter_string("outdir");
 
-    *file_mass   = fopen(path_masses, "w");
-    *file_pos    = fopen(path_pos, "w");
-    *file_mom    = fopen(path_mom, "w");
-    *file_spin   = fopen(path_spin, "w");
-    *file_energy = fopen(path_energy, "w");
-    *file_merger = fopen(path_merger, "w");
+    *file_mass = NULL;
+    *file_pos = NULL;
+    *file_mom = NULL;
+    *file_spin = NULL;
+    *file_energy = NULL;
+    *file_merger = NULL;
 
-    if (!*file_mass || !*file_pos || !*file_mom || !*file_spin || !*file_energy || !*file_merger) {
-        free(path_masses); free(path_pos); free(path_mom); free(path_spin);
-        free(path_energy); free(path_merger);
-        errorexit("One or more of the output files could not be created");
-    }
+    if (quantities & OUTPUT_MASS)
+        *file_mass = open_output_file(outdir, "output_mass.dat");
+    if (quantities & OUTPUT_POSITION)
+        *file_pos = open_output_file(outdir, "output_pos.dat");
+    if (quantities & OUTPUT_MOMENTUM)
+        *file_mom = open_output_file(outdir, "output_mom.dat");
+    if (quantities & OUTPUT_SPIN)
+        *file_spin = open_output_file(outdir, "output_spin.dat");
+    if (quantities & OUTPUT_ENERGY)
+        *file_energy = open_output_file(outdir, "output_energy.dat");
+    if (quantities & OUTPUT_MERGER)
+        *file_merger = open_output_file(outdir, "output_merger.dat");
 
     // Write masses into the corresponding file
-    for (int i = 0; i < ode_params->num_bodies_initial; i++)
-        fprintf(*file_mass, "m%d = %lf\n", i, ode_params->masses[i]);
+    if (*file_mass) {
+        for (int i = 0; i < ode_params->num_bodies_initial; i++)
+            fprintf(*file_mass, "m%d = %lf\n", i, ode_params->masses[i]);
+    }
 
     // Write position column names into the corresponding file
-    fprintf(*file_pos, "t\t");
-    for (int i = 0; i < ode_params->num_bodies_initial; i++) {
-        fprintf(*file_pos, "x%d\ty%d\t", i, i);
-        if (ode_params->num_dim == 3) fprintf(*file_pos, "z%d\t", i);
+    if (*file_pos) {
+        fprintf(*file_pos, "t\t");
+        for (int i = 0; i < ode_params->num_bodies_initial; i++) {
+            fprintf(*file_pos, "x%d\ty%d\t", i, i);
+            if (ode_params->num_dim == 3) fprintf(*file_pos, "z%d\t", i);
+        }
     }
 
     // Write momentum column names into the corresponding file
-    fprintf(*file_mom, "t\t");
-    for (int i = 0; i < ode_params->num_bodies_initial; i++) {
-        fprintf(*file_mom, "px%d\tpy%d\t", i, i);
-        if (ode_params->num_dim == 3) fprintf(*file_mom, "pz%d\t", i);
+    if (*file_mom) {
+        fprintf(*file_mom, "t\t");
+        for (int i = 0; i < ode_params->num_bodies_initial; i++) {
+            fprintf(*file_mom, "px%d\tpy%d\t", i, i);
+            if (ode_params->num_dim == 3) fprintf(*file_mom, "pz%d\t", i);
+        }
     }
 
     // Write spin column names into the corresponding file
-    fprintf(*file_spin, "t\t");
-    for (int i = 0; i < ode_params->num_bodies_initial; i++) {
-        fprintf(*file_spin, "sx%d\tsy%d\tsz%d\t", i, i, i);
+    if (*file_spin) {
+        fprintf(*file_spin, "t\t");
+        for (int i = 0; i < ode_params->num_bodies_initial; i++)
+            fprintf(*file_spin, "sx%d\tsy%d\tsz%d\t", i, i, i);
     }
 
     // Write energy column names into the corresponding file
-    fprintf(*file_energy, "t\tH");
+    if (*file_energy)
+        fprintf(*file_energy, "t\tH");
 
     // Write merger column names into the corresponding file
-    fprintf(*file_merger,
-        "t "
-        "slot_i slot_j slot_remnant "
-        "id_i id_j id_remnant "
-        "gen_i gen_j gen_remnant "
-        "m_i m_j m_remnant "
-    );
+    if (*file_merger) {
+        fprintf(*file_merger,
+            "t "
+            "slot_i slot_j slot_remnant "
+            "id_i id_j id_remnant "
+            "gen_i gen_j gen_remnant "
+            "m_i m_j m_remnant "
+        );
 
-    for (int n = 0; n < ode_params->num_dim; n++)
-        fprintf(*file_merger, "x_i_%d ", n);
+        for (int n = 0; n < ode_params->num_dim; n++)
+            fprintf(*file_merger, "x_i_%d ", n);
 
-    for (int n = 0; n < ode_params->num_dim; n++)
-        fprintf(*file_merger, "x_j_%d ", n);
+        for (int n = 0; n < ode_params->num_dim; n++)
+            fprintf(*file_merger, "x_j_%d ", n);
 
-    for (int n = 0; n < ode_params->num_dim; n++)
-        fprintf(*file_merger, "x_rem_%d ", n);
+        for (int n = 0; n < ode_params->num_dim; n++)
+            fprintf(*file_merger, "x_rem_%d ", n);
 
-    for (int n = 0; n < ode_params->num_dim; n++)
-        fprintf(*file_merger, "p_i_%d ", n);
+        for (int n = 0; n < ode_params->num_dim; n++)
+            fprintf(*file_merger, "p_i_%d ", n);
 
-    for (int n = 0; n < ode_params->num_dim; n++)
-        fprintf(*file_merger, "p_j_%d ", n);
+        for (int n = 0; n < ode_params->num_dim; n++)
+            fprintf(*file_merger, "p_j_%d ", n);
 
-    for (int n = 0; n < ode_params->num_dim; n++)
-        fprintf(*file_merger, "p_rem_%d ", n);
+        for (int n = 0; n < ode_params->num_dim; n++)
+            fprintf(*file_merger, "p_rem_%d ", n);
 
-    for (int n = 0; n < 3; n++)
-        fprintf(*file_merger, "s_i_%d ", n);
+        for (int n = 0; n < 3; n++)
+            fprintf(*file_merger, "s_i_%d ", n);
 
-    for (int n = 0; n < 3; n++)
-        fprintf(*file_merger, "s_j_%d ", n);
+        for (int n = 0; n < 3; n++)
+            fprintf(*file_merger, "s_j_%d ", n);
 
-    for (int n = 0; n < 3; n++)
-        fprintf(*file_merger, "s_rem_%d ", n);
+        for (int n = 0; n < 3; n++)
+            fprintf(*file_merger, "s_rem_%d ", n);
 
-    for (int n = 0; n < ode_params->num_dim; n++)
-        fprintf(*file_merger, "v_kick_%d ", n);
+        for (int n = 0; n < ode_params->num_dim; n++)
+            fprintf(*file_merger, "v_kick_%d ", n);
 
-
-    fprintf(*file_merger, "r_ij\n");
-
-    // Clean up
-    free(path_masses);
-    free(path_pos);
-    free(path_mom);
-    free(path_energy);
-    free(path_merger);
-    free(path_spin);
+        fprintf(*file_merger, "r_ij\n");
+    }
 }
 
 
@@ -168,38 +235,43 @@ void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE
     int spin_offset = 2 * array_half;
     int num_spin_components = 3 * ode_params->num_bodies_initial;
 
-    // Write time
-    fprintf(file_pos, "\n%.20e\t", t);
-    fprintf(file_mom, "\n%.20e\t", t);
-    fprintf(file_spin, "\n%.20e\t", t);
-    fprintf(file_energy, "\n%.20e\t", t);
-
     // Write positions
-    for (int i = 0; i < array_half; i++) {
-        if (component_is_active(i, ode_params))
-            fprintf(file_pos, "%.20e\t", w[i]);
-        else
-            fprintf(file_pos, "nan\t");
+    if (file_pos) {
+        fprintf(file_pos, "\n%.20e\t", t);
+        for (int i = 0; i < array_half; i++) {
+            if (component_is_active(i, ode_params))
+                fprintf(file_pos, "%.20e\t", w[i]);
+            else
+                fprintf(file_pos, "nan\t");
+        }
     }
 
     // Write momenta
-    for (int i = 0; i < array_half; i++) {
-        if (component_is_active(i, ode_params))
-            fprintf(file_mom, "%.20e\t", w[array_half + i]);
-        else
-            fprintf(file_mom, "nan\t");
+    if (file_mom) {
+        fprintf(file_mom, "\n%.20e\t", t);
+        for (int i = 0; i < array_half; i++) {
+            if (component_is_active(i, ode_params))
+                fprintf(file_mom, "%.20e\t", w[array_half + i]);
+            else
+                fprintf(file_mom, "nan\t");
+        }
     }
 
     // Write spins
-    for (int i = 0; i < num_spin_components; i++) {
-        if (ode_params->active[i / 3])
-            fprintf(file_spin, "%.20e\t", w[spin_offset + i]);
-        else
-            fprintf(file_spin, "nan\t");
+    if (file_spin) {
+        fprintf(file_spin, "\n%.20e\t", t);
+        for (int i = 0; i < num_spin_components; i++) {
+            if (ode_params->active[i / 3])
+                fprintf(file_spin, "%.20e\t", w[spin_offset + i]);
+            else
+                fprintf(file_spin, "nan\t");
+        }
     }
 
     // Write energy
-    fprintf(file_energy, "%.20e\t", total_energy_conservative(w, ode_params));
+    if (file_energy)
+        fprintf(file_energy, "\n%.20e\t%.20e\t", t,
+            total_energy_conservative(w, ode_params));
 }
 
 
@@ -231,6 +303,9 @@ void output_write_merger_event(
     const double *v_kick_kms,
     double r_ij
 ) {
+    if (!file_merger)
+        return;
+
     const int num_dim = params->num_dim;
 
     fprintf(file_merger,

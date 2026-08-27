@@ -96,6 +96,7 @@ void initialize_parameters()
     // Output parameters
     // --------------------------------------------------------------------------------------------
     add_parameter("dt_save", "-1", "times at which quantities are written to a file [>= 0]");
+    add_parameter("output", "mass position momentum spin energy merger", "quantities to output");
 
     // --------------------------------------------------------------------------------------------
     // Initial configuration presets

@@ -44,4 +44,4 @@ binary_omega         = 3.1                             # Argument of periapsis
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-
+output = position momentum energy merger

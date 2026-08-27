@@ -75,6 +75,20 @@ python3 ./viz/trajectory_anim.py ./output/test_figure_eight/output_pos.dat
 
 3. You can check out the other files in the `./test` directory to see more examples of what is possible.
 
+### Selecting output
+
+Use the `output` parameter to select which output files are created. The available quantities are
+`mass`, `position`, `momentum`, `spin`, `energy`, and `merger`; separate multiple quantities with
+spaces:
+
+```text
+output = position energy merger
+```
+
+Only `output_pos.dat`, `output_energy.dat`, and `output_merger.dat` are written in this example.
+When `output` is omitted, all quantities are written for compatibility with existing parameter
+files.
+
 ## License
 
 Copyright (c) 2026, Felix M. Heinze

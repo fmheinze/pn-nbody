@@ -69,4 +69,4 @@ cluster_seed                  = 5283
 # Output parameters
 # ---------------------------------------------------------------------------------------------------------------
 dt_save                       = 1.0                             # Output times
-
+output = position momentum energy merger

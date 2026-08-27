@@ -48,4 +48,4 @@ b                    = 100.0                           # Scattering impact param
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-
+output = position momentum energy merger

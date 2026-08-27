@@ -67,4 +67,4 @@ binary2_phi0         = 1.8                             # Initial phase of binary
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-
+output = position momentum energy merger

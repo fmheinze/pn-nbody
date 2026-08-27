@@ -14,7 +14,7 @@ num_bodies           = 3                               # Number of bodies
 # -------------------------------------------------------------------------------------------------
 # Time parameters
 # -------------------------------------------------------------------------------------------------
-t_end                = 20000.0                          # Final time
+t_end                = 20000.0                         # Final time
 dt                   = 0.1                             # Timestep
 
 
@@ -39,4 +39,4 @@ figure_eight_width   = 150.0                           # Figure-eight width
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-
+output = position momentum energy merger spin
