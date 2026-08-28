@@ -188,7 +188,7 @@ void parse_parameter_file(const char *parfile)
 
 
 // Free parameter database memory
-void free_parameters() {
+void free_parameters(void) {
     if (!pdb) return;
 
     for (int i = 0; i < npdb; i++) {

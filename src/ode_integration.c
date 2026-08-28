@@ -25,7 +25,7 @@ static inline int time_reached(double t, double target, double direction)
 
 
 // Checks the validity of the user-specified parameters for the numerical ODE integration
-static void check_integration_parameter_validity()
+static void check_integration_parameter_validity(void)
 {
     double t_end = get_parameter_double("t_end");
     double dt = get_parameter_double("dt");
@@ -464,9 +464,11 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_spin, *file_energy, *file_merger;
-    output_init(&file_mass, &file_pos, &file_mom, &file_spin, &file_energy, &file_merger, ode_params);
-    output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
+    FILE *file_mass, *file_pos, *file_mom, *file_vel, *file_spin, *file_energy, *file_merger;
+    output_init(&file_mass, &file_pos, &file_mom, &file_vel, &file_spin, &file_energy,
+        &file_merger, ode_params);
+    output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
+        ode_params, w, t_current);
 
     // Iterate until the final time
     while (!time_reached(t_current, t_end, direction)) {
@@ -533,7 +535,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
             should_save = (t_current - eps_time <= next_save);
 
         if (should_save) {
-            output_write_timestep(file_pos, file_mom, file_spin, file_energy,
+            output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
                 ode_params, w, t_current);
 
             print_progress_bar((int)(100.0 * fabs(t_current) / fabs(t_end)));
@@ -551,6 +553,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     if (file_mass) fclose(file_mass);
     if (file_pos) fclose(file_pos);
     if (file_mom) fclose(file_mom);
+    if (file_vel) fclose(file_vel);
     if (file_energy) fclose(file_energy);
     if (file_merger) fclose(file_merger);
     if (file_spin) fclose(file_spin);
@@ -734,9 +737,11 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_spin, *file_energy, *file_merger;
-    output_init(&file_mass, &file_pos, &file_mom, &file_spin, &file_energy, &file_merger, ode_params);
-    output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
+    FILE *file_mass, *file_pos, *file_mom, *file_vel, *file_spin, *file_energy, *file_merger;
+    output_init(&file_mass, &file_pos, &file_mom, &file_vel, &file_spin, &file_energy,
+        &file_merger, ode_params);
+    output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
+        ode_params, w, t_current);
 
     // Cache gradient to reuse between steps:
     // After finishing a step, positions do not change before the next step's first half-kick,
@@ -775,7 +780,8 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
 
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
-            output_write_timestep(file_pos, file_mom, file_spin, file_energy, ode_params, w, t_current);
+            output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
+                ode_params, w, t_current);
             print_progress_bar((int)(100.0 * t_current / t_end));
 
             // Advance output schedule robustly
@@ -790,6 +796,7 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     if (file_mass) fclose(file_mass);
     if (file_pos) fclose(file_pos);
     if (file_mom) fclose(file_mom);
+    if (file_vel) fclose(file_vel);
     if (file_energy) fclose(file_energy);
     if (file_merger) fclose(file_merger);
     if (file_spin) fclose(file_spin);

@@ -31,7 +31,7 @@
  * parameters only updates the description. Parameters that are not included in the parameter file
  * will be added to the parameter database with their default value.
  */
-void initialize_parameters()
+void initialize_parameters(void)
 {
     // --------------------------------------------------------------------------------------------
     // General parameters
@@ -99,7 +99,8 @@ void initialize_parameters()
     // Output parameters
     // --------------------------------------------------------------------------------------------
     add_parameter("dt_save", "-1", "times at which quantities are written to a file [>= 0]");
-    add_parameter("output", "mass position momentum spin energy merger", "quantities to output");
+    add_parameter("output", "mass position momentum velocity spin energy merger",
+        "quantities to output");
 
     // --------------------------------------------------------------------------------------------
     // Initial configuration presets
@@ -311,18 +312,23 @@ static int preset_requires_3d(const char *preset)
  * @brief Construct and return an ode_params struct from the parameter database.
  *
  * The returned structure owns its masses, PN-term flags, merger-history arrays,
- * remnant-prescription string, and persistent pair-cache workspace. The caller must release these
- * resources with free_ode_params().
+ * remnant-prescription string and evaluation caches. The pair cache and optional UTT4 cache are
+ * created here; the shared state key and dynamics cache are created on first use. The caller must
+ * release all resources with free_ode_params().
  *
  * @return Fully initialized ode_params structure.
  */
-struct ode_params initialize_ode_params()
+struct ode_params initialize_ode_params(void)
 {
     struct ode_params params = {0};
 
     // General parameters
     params.num_dim = get_parameter_int("num_dim");
     params.num_bodies_initial = get_parameter_int("num_bodies");
+    if (params.num_dim != 2 && params.num_dim != 3)
+        errorexit("Please specify a valid num_dim (must be 2 or 3)");
+    if (params.num_bodies_initial <= 0)
+        errorexit("Please specify a valid num_bodies (must be num_bodies > 0)");
 
     // Masses
     allocate_vector(&params.masses, params.num_bodies_initial);
@@ -395,13 +401,9 @@ struct ode_params initialize_ode_params()
         errorexit("Could not allocate remnant_prescription");
 
     // Check validity
-    if (params.num_dim != 2 && params.num_dim != 3)
-        errorexit("Please specify a valid num_dim (must be 2 or 3)");
-    if (params.num_bodies_initial <= 0)
-        errorexit("Please specify a valid num_bodies (must be num_bodies > 0)");
     for (int i = 0; i < params.num_bodies_initial; i++) {
-        if (params.masses[i] < 0)
-            errorexit("Please specify valid masses (must be mass >= 0)");
+        if (params.masses[i] <= 0)
+            errorexit("Please specify valid masses (must be mass > 0)");
     }
     for (int i = 0; i < NUM_PN_TERMS; i++) {
         if (params.pn_terms[i] != 0 && params.pn_terms[i] != 1)
@@ -449,7 +451,7 @@ struct ode_params initialize_ode_params()
         && strcmp(params.remnant_prescription, "lz") != 0
         && strcmp(params.remnant_prescription, "barausse") != 0) {
         errorexit("Please specify a valid remnant_prescription (simple, lz, barausse)");
-        }
+    }
 
     // UTT4 information
     if (params.include_utt4) {

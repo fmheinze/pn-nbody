@@ -132,6 +132,12 @@ void free_ode_params(struct ode_params* params)
     utt4_cache_destroy(params->utt4_cache);
     params->utt4_cache = NULL;
 
+    dynamics_cache_destroy(params->dynamics_cache);
+    params->dynamics_cache = NULL;
+
+    state_key_destroy(params->state_key);
+    params->state_key = NULL;
+
     free_vector(params->masses);
     params->masses = NULL;
 
@@ -564,7 +570,7 @@ void random_unit_vector(unsigned long long *rng, double n[3])
 // Print output
 // ------------------------------------------------------------------------------------------------
 
-void print_divider()
+void print_divider(void)
 {
     printf("----------------------------------------------------------------------------------\n");
 }
@@ -609,7 +615,7 @@ void print_progress_bar(int percent)
 }
 
 
-void progress_bar_break_line()
+void progress_bar_break_line(void)
 {
     printf("\r\033[2K\n");
     fflush(stdout);

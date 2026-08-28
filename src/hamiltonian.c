@@ -63,28 +63,18 @@ static NumericalIntegralSettings utt4_ln_integral_settings_from_ode(const struct
  * quadruple that no longer exists. This runs once per refresh and is O(N) against the O(N^4) 
  * integrals it guards.
  */
-static void utt4_order_memory_sync(UTT4Cache *cache, const struct ode_params *ode_params)
+static void utt4_order_memory_sync(UTT4Cache *cache, const StateKey *key)
 {
     UTT4OrderMemory *mem = &cache->order;
     if (!mem->enabled)
         return;
 
-    int changed = 0;
-    for (int a = 0; a < cache->num_bodies; ++a) {
-        if (mem->active[a] != ode_params->active[a]) {
-            changed = 1;
-            break;
-        }
-    }
-
-    if (!changed)
+    if (mem->active_generation == key->active_generation)
         return;
 
     memset(mem->order, 0, mem->count*sizeof(*mem->order));
     memset(mem->age, 0, mem->count*sizeof(*mem->age));
-
-    for (int a = 0; a < cache->num_bodies; ++a)
-        mem->active[a] = ode_params->active[a];
+    mem->active_generation = key->active_generation;
 }
 
 
@@ -172,72 +162,17 @@ static void utt4_ln_integral_warning(const UTT4LnIntegralResult *result,
 
 
 // Check whether the cached logarithmic UTT4 result is valid for the current position state.
-static int utt4_ln_cache_matches(const UTT4Cache *cache, const double *w,
-    const struct ode_params *ode_params)
+static int utt4_ln_cache_matches(const UTT4Cache *cache, const StateKey *key)
 {
-    const UTT4LnCache *ln = &cache->ln;
-    if (!ln->valid)
-        return 0;
-
-    if (ln->epsrel != ode_params->utt4_epsrel
-        || ln->epsabs != ode_params->utt4_epsabs
-        || ln->min_order != ode_params->utt4_min_order
-        || ln->max_order != ode_params->utt4_max_order
-        || ln->adaptive != ode_params->utt4_adaptive
-        || ln->max_depth != ode_params->utt4_max_depth
-        || ln->parallel != ode_params->utt4_parallel)
-        return 0;
-
-    const int num_bodies = cache->num_bodies;
-    const int num_dim = cache->num_dim;
-
-    for (int a = 0; a < num_bodies; ++a) {
-        if (ln->active[a] != ode_params->active[a])
-            return 0;
-
-        if (!ode_params->active[a])
-            continue;
-
-        if (ln->masses[a] != ode_params->masses[a])
-            return 0;
-
-        for (int axis = 0; axis < num_dim; ++axis) {
-            const int idx = a * num_dim + axis;
-            if (ln->positions[idx] != w[idx])
-                return 0;
-        }
-    }
-
-    return 1;
+    return cache->ln.valid && cache->ln.position_generation == key->position_generation;
 }
 
 
-// Store the exact position/mass/active-set/settings key for a freshly evaluated UTT4 cache entry.
-static void utt4_ln_cache_store_key(UTT4Cache *cache, const double *w,
-    const struct ode_params *ode_params)
+// Record which position state a freshly evaluated logarithmic UTT4 result belongs to.
+static void utt4_ln_cache_store_key(UTT4Cache *cache, const StateKey *key)
 {
-    UTT4LnCache *ln = &cache->ln;
-    const int num_bodies = cache->num_bodies;
-    const int num_dim = cache->num_dim;
-
-    for (int a = 0; a < num_bodies; ++a) {
-        ln->active[a] = ode_params->active[a];
-        ln->masses[a] = ode_params->masses[a];
-
-        for (int axis = 0; axis < num_dim; ++axis) {
-            const int idx = a * num_dim + axis;
-            ln->positions[idx] = w[idx];
-        }
-    }
-
-    ln->epsrel = ode_params->utt4_epsrel;
-    ln->epsabs = ode_params->utt4_epsabs;
-    ln->min_order = ode_params->utt4_min_order;
-    ln->max_order = ode_params->utt4_max_order;
-    ln->adaptive = ode_params->utt4_adaptive;
-    ln->max_depth = ode_params->utt4_max_depth;
-    ln->parallel = ode_params->utt4_parallel;
-    ln->valid = 1;
+    cache->ln.position_generation = key->position_generation;
+    cache->ln.valid = 1;
 }
 
 
@@ -342,7 +277,7 @@ static void utt4_ln_cache_refresh(UTT4Cache *cache, double *w, struct ode_params
     if (num_dim != 3)
         errorexit("The UTT4 logarithmic integral can only be computed in 3D! Use num_dim = 3");
 
-    utt4_order_memory_sync(cache, ode_params);
+    utt4_order_memory_sync(cache, state_key_sync(ode_params, w));
 
     for (int i = 0; i < array_half; ++i)
         ln->grad[i] = 0.0;
@@ -464,7 +399,7 @@ static void utt4_ln_cache_refresh(UTT4Cache *cache, double *w, struct ode_params
     }
 
     ln->value = (double)sum;
-    utt4_ln_cache_store_key(cache, w, ode_params);
+    utt4_ln_cache_store_key(cache, state_key_sync(ode_params, w));
 }
 
 
@@ -482,9 +417,10 @@ void utt4_ln_integral_cached(double *w, struct ode_params *ode_params, double *v
         errorexit("utt4_ln_integral_cached received a NULL input");
 
     UTT4Cache *cache = utt4_cache_get_workspace(ode_params);
+    const StateKey *key = state_key_sync(ode_params, w);
     active_list_refresh(&cache->active, ode_params);
 
-    if (!utt4_ln_cache_matches(cache, w, ode_params))
+    if (!utt4_ln_cache_matches(cache, key))
         utt4_ln_cache_refresh(cache, w, ode_params);
 
     if (value != NULL)

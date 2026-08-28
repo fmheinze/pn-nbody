@@ -1,0 +1,343 @@
+#!/usr/bin/env python3
+"""Differentiate the symbolic 2PN triple Hamiltonian and emit momentum-only C kernels.
+
+Edit the Hamiltonian in pn_expressions.py, not in this differentiation/emission engine. Translation
+invariance supplies the final body's force and makes every generated contribution momentum
+balanced by construction.
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+from typing import Iterable
+
+import sympy as sp
+from sympy.codegen.rewriting import create_expand_pow_optimization
+
+from pn_expressions import (
+    UNIT_VECTOR_GRADIENTS,
+    dot,
+    inv_perimeter,
+    irab,
+    irac,
+    irbc,
+    nab,
+    nac,
+    ncb,
+    ordered_triple_2pn_distinct_hamiltonian,
+    ordered_triple_2pn_reducible_hamiltonian,
+    perimeter,
+    rab,
+    rac,
+    rbc,
+)
+
+
+BEGIN_MARKER = "// BEGIN GENERATED 2PN TRIPLE MOMENTUM"
+END_MARKER = "// END GENERATED 2PN TRIPLE MOMENTUM"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_OUTPUT = REPOSITORY_ROOT / "src/eom/eom_conservative.c"
+EXPAND_SMALL_POWERS = create_expand_pow_optimization(4)
+
+
+def project_unit_vector_gradient(
+    radial_derivative: sp.Expr,
+    unit_derivative: tuple[sp.Expr, sp.Expr, sp.Expr],
+    unit: tuple[sp.Symbol, sp.Symbol, sp.Symbol],
+    inv_radius: sp.Symbol,
+) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
+    radial_unit_derivative = dot(unit, unit_derivative)
+    return tuple(
+        radial_derivative*unit[i]
+        + inv_radius*(unit_derivative[i] - unit[i]*radial_unit_derivative)
+        for i in range(3)
+    )
+
+
+def unit_vector_derivative(
+    hamiltonian: sp.Expr,
+    unit: tuple[sp.Symbol, sp.Symbol, sp.Symbol],
+) -> tuple[sp.Expr, sp.Expr, sp.Expr]:
+    """Apply every registered scalar-invariant chain rule for one unit vector."""
+    gradients = UNIT_VECTOR_GRADIENTS[unit]
+    return tuple(
+        sum(
+            (sp.diff(hamiltonian, invariant) * gradient[axis]
+             for invariant, gradient in gradients.items()),
+            sp.S.Zero,
+        )
+        for axis in range(3)
+    )
+
+
+def replace_inverse_powers(expr: sp.Expr) -> sp.Expr:
+    radius_inverse = {rab: irab, rac: irac, rbc: irbc, perimeter: inv_perimeter}
+
+    def is_inverse_power(node: sp.Expr) -> bool:
+        return (
+            isinstance(node, sp.Pow)
+            and node.base in radius_inverse
+            and node.exp.is_Integer
+            and node.exp < 0
+        )
+
+    return expr.replace(
+        is_inverse_power,
+        lambda node: radius_inverse[node.base]**(-node.exp),
+    )
+
+
+def normalize_for_codegen(expressions: Iterable[sp.Expr]) -> list[sp.Expr]:
+    result = []
+    perimeter_expression = rab + rac + rbc
+    for expression in expressions:
+        expression = expression.xreplace({perimeter_expression: perimeter})
+        expression = replace_inverse_powers(expression)
+        result.append(expression)
+    return result
+
+
+def reducible_forces() -> tuple[sp.Expr, sp.Expr, sp.Expr]:
+    hamiltonian = ordered_triple_2pn_reducible_hamiltonian()
+    d_h_d_n = unit_vector_derivative(hamiltonian, nab)
+    gradient = project_unit_vector_gradient(
+        sp.diff(hamiltonian, rab), d_h_d_n, nab, irab
+    )
+    return tuple(-component for component in gradient)
+
+
+def distinct_forces() -> tuple[sp.Expr, ...]:
+    hamiltonian = ordered_triple_2pn_distinct_hamiltonian()
+
+    d_h_d_nab = unit_vector_derivative(hamiltonian, nab)
+    d_h_d_nac = unit_vector_derivative(hamiltonian, nac)
+    d_h_d_ncb = unit_vector_derivative(hamiltonian, ncb)
+
+    gradient_ab = project_unit_vector_gradient(
+        sp.diff(hamiltonian, rab), d_h_d_nab, nab, irab
+    )
+    gradient_ac = project_unit_vector_gradient(
+        sp.diff(hamiltonian, rac), d_h_d_nac, nac, irac
+    )
+    gradient_cb = project_unit_vector_gradient(
+        sp.diff(hamiltonian, rbc), d_h_d_ncb, ncb, irbc
+    )
+
+    force_a = tuple(-gradient_ab[i] - gradient_ac[i] for i in range(3))
+    force_b = tuple(gradient_ab[i] + gradient_cb[i] for i in range(3))
+    return force_a + force_b
+
+
+def c_expression(expression: sp.Expr) -> str:
+    # Explicit products keep debug builds independent of compiler pow lowering.
+    return sp.ccode(EXPAND_SMALL_POWERS(expression), standard="C99")
+
+
+def emit_cse(expressions: Iterable[sp.Expr], output_names: Iterable[str], indent: str) -> list[str]:
+    replacements, reduced = sp.cse(
+        normalize_for_codegen(expressions), symbols=sp.numbered_symbols("z"), order="canonical"
+    )
+    lines = [f"{indent}const double {symbol} = {c_expression(value)};" for symbol, value in replacements]
+    if lines:
+        lines.append("")
+    lines.extend(
+        f"{indent}const double {name} = {c_expression(value)};"
+        for name, value in zip(output_names, reduced)
+    )
+    return lines
+
+
+def generated_region() -> str:
+    reducible = reducible_forces()
+    distinct = distinct_forces()
+
+    lines = [
+        BEGIN_MARKER,
+        "/*",
+        " * Generated by tools/codegen/generate_2pn_triple_momentum.py from the symbolic",
+        " * Hamiltonian in tools/codegen/pn_expressions.py and the ordered-triple terms in",
+        " * H2PN_cached(). Do not edit this region by hand.",
+        " */",
+        "",
+        "// Add the reducible b = c ordered-triple 2PN contribution to dp/dt.",
+        "static void add_momentum_2pn_triple_reducible_pair_analytic(const PairCache *cache,",
+        "    double *momentum)",
+        "{",
+        "    const int D = cache->num_dim;",
+        "",
+        "    for (int ia = 0; ia < cache->active.num_active; ++ia) {",
+        "        const int a = cache->active.ids[ia];",
+        "        const double ma = cache->m[a];",
+        "        const double inv_ma = cache->inv_m[a];",
+        "        const double pa_sq = cache->p2[a];",
+        "        const double pa0 = pair_cache_p(cache, a, 0);",
+        "        const double pa1 = pair_cache_p(cache, a, 1);",
+        "        const double pa2_component = pair_cache_p(cache, a, 2);",
+        "",
+        "        for (int ib = 0; ib < cache->active.num_active; ++ib) {",
+        "            const int b = cache->active.ids[ib];",
+        "            if (b == a)",
+        "                continue;",
+        "",
+        "            const double mb = cache->m[b];",
+        "            const double inv_mb = cache->inv_m[b];",
+        "            const double pb_sq = cache->p2[b];",
+        "            const double papb = pair_cache_p_dot(cache, a, b);",
+        "            const double Na = pair_cache_n_dot_p(cache, a, b, a);",
+        "            const double Nb = pair_cache_n_dot_p(cache, a, b, b);",
+        "            const double inv_r_ab = pair_cache_inv_r(cache, a, b);",
+        "            const double nab0 = pair_cache_n(cache, a, b, 0);",
+        "            const double nab1 = pair_cache_n(cache, a, b, 1);",
+        "            const double nab2 = pair_cache_n(cache, a, b, 2);",
+        "            const double pb0 = pair_cache_p(cache, b, 0);",
+        "            const double pb1 = pair_cache_p(cache, b, 1);",
+        "            const double pb2_component = pair_cache_p(cache, b, 2);",
+        "",
+    ]
+
+    lines.extend(emit_cse(reducible, ("force0", "force1", "force2"), "            "))
+    lines.extend(
+        [
+            "",
+            "            momentum[a * D + 0] += force0;",
+            "            momentum[a * D + 1] += force1;",
+            "            momentum[a * D + 2] += force2;",
+            "            momentum[b * D + 0] -= force0;",
+            "            momentum[b * D + 1] -= force1;",
+            "            momentum[b * D + 2] -= force2;",
+            "        }",
+            "    }",
+            "}",
+            "",
+            "",
+            "// Add the complete pairwise-distinct ordered-triple 2PN contribution to dp/dt.",
+            "static void add_momentum_2pn_triple_distinct_one(const PairCache *cache, int a, int b,",
+            "    int c, double *momentum)",
+            "{",
+            "    const int D = cache->num_dim;",
+            "    const double ma = cache->m[a];",
+            "    const double mb = cache->m[b];",
+            "    const double mc = cache->m[c];",
+            "    const double inv_ma = cache->inv_m[a];",
+            "    const double inv_mb = cache->inv_m[b];",
+            "    const double inv_mc = cache->inv_m[c];",
+            "    const double r_ab = pair_cache_r(cache, a, b);",
+            "    const double r_ac = pair_cache_r(cache, a, c);",
+            "    const double r_bc = pair_cache_r(cache, b, c);",
+            "    const double inv_r_ab = pair_cache_inv_r(cache, a, b);",
+            "    const double inv_r_ac = pair_cache_inv_r(cache, a, c);",
+            "    const double inv_r_bc = pair_cache_inv_r(cache, b, c);",
+            "    const double perimeter = r_ab + r_ac + r_bc;",
+            "    const double inv_perimeter = 1.0 / perimeter;",
+            "    const double pa_sq = cache->p2[a];",
+            "    const double pb_sq = cache->p2[b];",
+            "    const double pc_sq = cache->p2[c];",
+            "    const double papb = pair_cache_p_dot(cache, a, b);",
+            "    const double papc = pair_cache_p_dot(cache, a, c);",
+            "    const double pbpc = pair_cache_p_dot(cache, b, c);",
+            "    const double Na = pair_cache_n_dot_p(cache, a, b, a);",
+            "    const double Nb = pair_cache_n_dot_p(cache, a, b, b);",
+            "    const double Gc = pair_cache_n_dot_p(cache, a, b, c);",
+            "    const double Ec = pair_cache_n_dot_p(cache, a, c, c);",
+            "    const double upa = Na + pair_cache_n_dot_p(cache, a, c, a);",
+            "    const double upc = Gc + Ec;",
+            "    const double vpa = Na + pair_cache_n_dot_p(cache, c, b, a);",
+            "    const double vpb = Nb + pair_cache_n_dot_p(cache, c, b, b);",
+            "    const double vpc = Gc + pair_cache_n_dot_p(cache, c, b, c);",
+            "",
+            "    double q = 0.0;",
+            "    for (int i = 0; i < D; ++i)",
+            "        q += pair_cache_n(cache, a, b, i) * pair_cache_n(cache, a, c, i);",
+            "",
+            "    const double pa0 = pair_cache_p(cache, a, 0);",
+            "    const double pa1 = pair_cache_p(cache, a, 1);",
+            "    const double pa2_component = pair_cache_p(cache, a, 2);",
+            "    const double pb0 = pair_cache_p(cache, b, 0);",
+            "    const double pb1 = pair_cache_p(cache, b, 1);",
+            "    const double pb2_component = pair_cache_p(cache, b, 2);",
+            "    const double pc0 = pair_cache_p(cache, c, 0);",
+            "    const double pc1 = pair_cache_p(cache, c, 1);",
+            "    const double pc2_component = pair_cache_p(cache, c, 2);",
+            "    const double nab0 = pair_cache_n(cache, a, b, 0);",
+            "    const double nab1 = pair_cache_n(cache, a, b, 1);",
+            "    const double nab2 = pair_cache_n(cache, a, b, 2);",
+            "    const double nac0 = pair_cache_n(cache, a, c, 0);",
+            "    const double nac1 = pair_cache_n(cache, a, c, 1);",
+            "    const double nac2 = pair_cache_n(cache, a, c, 2);",
+            "    const double ncb0 = pair_cache_n(cache, c, b, 0);",
+            "    const double ncb1 = pair_cache_n(cache, c, b, 1);",
+            "    const double ncb2 = pair_cache_n(cache, c, b, 2);",
+            "",
+        ]
+    )
+
+    lines.extend(
+        emit_cse(
+            distinct,
+            ("force_a0", "force_a1", "force_a2", "force_b0", "force_b1", "force_b2"),
+            "    ",
+        )
+    )
+    lines.extend(
+        [
+            "",
+            "    momentum[a * D + 0] += force_a0;",
+            "    momentum[a * D + 1] += force_a1;",
+            "    momentum[a * D + 2] += force_a2;",
+            "    momentum[b * D + 0] += force_b0;",
+            "    momentum[b * D + 1] += force_b1;",
+            "    momentum[b * D + 2] += force_b2;",
+            "    momentum[c * D + 0] -= force_a0 + force_b0;",
+            "    momentum[c * D + 1] -= force_a1 + force_b1;",
+            "    momentum[c * D + 2] -= force_a2 + force_b2;",
+            "}",
+            END_MARKER,
+        ]
+    )
+    return "\n".join(lines)
+
+
+def replace_region(source: str, generated: str) -> str:
+    if BEGIN_MARKER in source:
+        begin = source.index(BEGIN_MARKER)
+        end = source.index(END_MARKER, begin) + len(END_MARKER)
+    else:
+        begin = source.index("// Add the reducible b = c ordered-triple 2PN contribution")
+        end = source.index("// Add the analytic combined ordered-triple 2PN Hamiltonian contribution")
+        while end > begin and source[end - 1] == "\n":
+            end -= 1
+    return source[:begin] + generated + source[end:]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    action = parser.add_mutually_exclusive_group()
+    action.add_argument("--write", action="store_true", help="update the generated C region")
+    action.add_argument(
+        "--check", action="store_true", help="fail if the checked-in generated region is stale"
+    )
+    parser.add_argument(
+        "--output", type=Path, default=DEFAULT_OUTPUT,
+        help=f"C source containing the generated region (default: {DEFAULT_OUTPUT})",
+    )
+    args = parser.parse_args()
+
+    generated = generated_region()
+    if not args.write and not args.check:
+        print(generated)
+        return
+
+    source = args.output.read_text()
+    updated = replace_region(source, generated)
+
+    if args.check:
+        if updated != source:
+            parser.error("generated EOM code is stale; run 'make regenerate-eom'")
+        return
+
+    args.output.write_text(updated)
+
+
+if __name__ == "__main__":
+    main()

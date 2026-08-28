@@ -3,7 +3,7 @@
  * @brief Functions for the output of physical quantities
  *
  * Functions for the output of physical quantities, such as the initialization of the output files
- * and writing output values as specified times.
+ * and writing output values at specified times.
  *
  * TODO: Add more possible output quantities (angular momentum, eccentricity, ...).
  */
@@ -21,9 +21,10 @@ enum output_quantity {
     OUTPUT_MASS     = 1 << 0,
     OUTPUT_POSITION = 1 << 1,
     OUTPUT_MOMENTUM = 1 << 2,
-    OUTPUT_SPIN     = 1 << 3,
-    OUTPUT_ENERGY   = 1 << 4,
-    OUTPUT_MERGER   = 1 << 5
+    OUTPUT_VELOCITY = 1 << 3,
+    OUTPUT_SPIN     = 1 << 4,
+    OUTPUT_ENERGY   = 1 << 5,
+    OUTPUT_MERGER   = 1 << 6
 };
 
 
@@ -43,6 +44,8 @@ static unsigned int get_output_quantities(void)
             quantities |= OUTPUT_POSITION;
         else if (strcmp(token, "momentum") == 0)
             quantities |= OUTPUT_MOMENTUM;
+        else if (strcmp(token, "velocity") == 0)
+            quantities |= OUTPUT_VELOCITY;
         else if (strcmp(token, "spin") == 0)
             quantities |= OUTPUT_SPIN;
         else if (strcmp(token, "energy") == 0)
@@ -52,8 +55,8 @@ static unsigned int get_output_quantities(void)
         else {
             char message[256];
             snprintf(message, sizeof(message),
-                "Unknown output quantity \"%s\"; choose from mass position momentum spin energy "
-                "merger (separated by spaces)", token);
+                "Unknown output quantity \"%s\"; choose from mass position momentum velocity "
+                "spin energy merger (separated by spaces)", token);
             free(copy);
             errorexit(message);
         }
@@ -90,12 +93,14 @@ static FILE *open_output_file(const char *outdir, const char *filename)
  * @param[in]   file_mass      Pointer to the file containing the masses
  * @param[in]   file_pos       Pointer to the file containing the particle positions
  * @param[in]   file_mom       Pointer to the file containing the particle momenta
+ * @param[in]   file_vel       Pointer to the file containing the particle velocities
+ * @param[in]   file_spin      Pointer to the file containing the particle spins
  * @param[in]   file_energy    Pointer to the file containing the particle energies
  * @param[in]   file_merger    Pointer to the file containing the merger information
  * @param[in]   ode_params     Parameter struct containing general information about the system
  */
-void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_spin,
-    FILE** file_energy, FILE** file_merger, struct ode_params* ode_params)
+void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_vel,
+    FILE** file_spin, FILE** file_energy, FILE** file_merger, struct ode_params* ode_params)
 {
     const unsigned int quantities = get_output_quantities();
     const char *outdir = get_parameter_string("outdir");
@@ -103,6 +108,7 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
     *file_mass = NULL;
     *file_pos = NULL;
     *file_mom = NULL;
+    *file_vel = NULL;
     *file_spin = NULL;
     *file_energy = NULL;
     *file_merger = NULL;
@@ -113,6 +119,8 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
         *file_pos = open_output_file(outdir, "output_pos.dat");
     if (quantities & OUTPUT_MOMENTUM)
         *file_mom = open_output_file(outdir, "output_mom.dat");
+    if (quantities & OUTPUT_VELOCITY)
+        *file_vel = open_output_file(outdir, "output_vel.dat");
     if (quantities & OUTPUT_SPIN)
         *file_spin = open_output_file(outdir, "output_spin.dat");
     if (quantities & OUTPUT_ENERGY)
@@ -141,6 +149,15 @@ void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file
         for (int i = 0; i < ode_params->num_bodies_initial; i++) {
             fprintf(*file_mom, "px%d\tpy%d\t", i, i);
             if (ode_params->num_dim == 3) fprintf(*file_mom, "pz%d\t", i);
+        }
+    }
+
+    // Write velocity column names into the corresponding file
+    if (*file_vel) {
+        fprintf(*file_vel, "t\t");
+        for (int i = 0; i < ode_params->num_bodies_initial; i++) {
+            fprintf(*file_vel, "vx%d\tvy%d\t", i, i);
+            if (ode_params->num_dim == 3) fprintf(*file_vel, "vz%d\t", i);
         }
     }
 
@@ -222,14 +239,15 @@ static int component_is_active(int idx, struct ode_params *ode_params)
  *
  * @param[in]   file_pos       Pointer to the file containing the particle positions
  * @param[in]   file_mom       Pointer to the file containing the particle momenta
+ * @param[in]   file_vel       Pointer to the file containing the particle velocities
  * @param[in]   file_spin      Pointer to the file containing the particle spins
  * @param[in]   file_energy    Pointer to the file containing the particle energies
  * @param[in]   ode_params     Parameter struct containing general information about the system
  * @param[in]   w              Current state of the full system, w = [positions, momenta]
  * @param[in]   t              Current time
  */
-void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE* file_energy,
-    struct ode_params* ode_params, double* w, double t)
+void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_vel, FILE* file_spin,
+    FILE* file_energy, struct ode_params* ode_params, double* w, double t)
 {
     int array_half = ode_params->num_dim * ode_params->num_bodies_initial;
     int spin_offset = 2 * array_half;
@@ -254,6 +272,20 @@ void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_spin, FILE
                 fprintf(file_mom, "%.20e\t", w[array_half + i]);
             else
                 fprintf(file_mom, "nan\t");
+        }
+    }
+
+    // Write coordinate velocities
+    if (file_vel) {
+        double velocities[array_half];
+        compute_coordinate_velocities(w, ode_params, velocities);
+
+        fprintf(file_vel, "\n%.20e\t", t);
+        for (int i = 0; i < array_half; i++) {
+            if (component_is_active(i, ode_params))
+                fprintf(file_vel, "%.20e\t", velocities[i]);
+            else
+                fprintf(file_vel, "nan\t");
         }
     }
 

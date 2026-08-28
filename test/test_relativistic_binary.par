@@ -50,4 +50,4 @@ spin2                = -0.1 0.1 0.7                    # Spin of body 2
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-output = position momentum energy merger
+output = position momentum velocity energy merger

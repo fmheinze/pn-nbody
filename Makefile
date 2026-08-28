@@ -15,6 +15,7 @@ SHELL := /bin/sh
 
 # Compiler
 CC ?= cc
+PYTHON ?= python3
 
 # Directories
 SRC_DIR   := src
@@ -23,9 +24,12 @@ EXE_DIR   := exe
 
 # Target
 TARGET := $(EXE_DIR)/pn-nbody
+EOM_CODEGEN := tools/codegen/generate_2pn_triple_momentum.py
+EOM_CODEGEN_VALIDATOR := tools/codegen/validate_2pn_triple_momentum.py
+EOM_GENERATED_SOURCE := $(SRC_DIR)/eom/eom_conservative.c
 
 # Sources / objects
-SRCS := $(wildcard $(SRC_DIR)/*.c)
+SRCS := $(wildcard $(SRC_DIR)/*.c $(SRC_DIR)/*/*.c)
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
 DEPS := $(OBJS:.o=.d)
 
@@ -38,6 +42,7 @@ CFLAGS   ?= -O3 -march=native -mtune=native -fno-math-errno -DNDEBUG
 LDFLAGS  ?=
 LDLIBS   ?=
 
+PROJECT_CPPFLAGS := -I$(SRC_DIR)
 PROJECT_CFLAGS := -Wall -Wextra -MMD -MP
 PROJECT_LDLIBS := -lm
 
@@ -127,7 +132,7 @@ endif
 endif
 
 # Effective flags
-ALL_CPPFLAGS := $(CPPFLAGS) $(OMP_CPPFLAGS)
+ALL_CPPFLAGS := $(CPPFLAGS) $(PROJECT_CPPFLAGS) $(OMP_CPPFLAGS)
 ALL_CFLAGS   := $(CFLAGS) $(PROJECT_CFLAGS) $(OMP_CFLAGS)
 ALL_LDFLAGS  := $(LDFLAGS) $(OMP_LDFLAGS)
 ALL_LDLIBS   := $(LDLIBS) $(PROJECT_LDLIBS) $(OMP_LDLIBS)
@@ -146,6 +151,7 @@ $(TARGET): $(OBJS) | $(EXE_DIR)
 
 # Compile
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
 	$(CC) $(ALL_CPPFLAGS) $(ALL_CFLAGS) -c $< -o $@
 
 # Directories
@@ -161,9 +167,19 @@ show-config:
 	@echo "LDFLAGS     = $(ALL_LDFLAGS)"
 	@echo "LDLIBS      = $(ALL_LDLIBS)"
 
+# Regenerate or verify the computer-algebra output embedded in the conservative EOM kernels.
+regenerate-eom:
+	$(PYTHON) -B $(EOM_CODEGEN) --write --output $(EOM_GENERATED_SOURCE)
+
+check-generated:
+	$(PYTHON) -B $(EOM_CODEGEN) --check --output $(EOM_GENERATED_SOURCE)
+
+validate-generated: check-generated
+	$(PYTHON) -B $(EOM_CODEGEN_VALIDATOR)
+
 clean:
 	rm -rf $(BUILD_DIR) $(EXE_DIR)
 
 -include $(DEPS)
 
-.PHONY: all clean show-config
+.PHONY: all clean show-config regenerate-eom check-generated validate-generated
