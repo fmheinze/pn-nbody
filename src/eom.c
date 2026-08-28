@@ -9,7 +9,12 @@
 #include "utils.h"
 #include "eom.h"
 #include "hamiltonian.h"
+#include <string.h>
 #include "cache.h"
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 
 #define UTT4_NUM_LOCAL_BODIES 4
 #define UTT4_NUM_LOCAL_PAIRS 6
@@ -553,6 +558,12 @@ static void add_eom_2pn_triple_factorizable_block_one(const PairCache *cache, co
     const double pc1 = pair_cache_p(cache, c, 1);
     const double pc2 = pair_cache_p(cache, c, 2);
 
+    const double inv_ma = cache->inv_m[a];
+    const double inv_mb = cache->inv_m[b];
+    const double inv_mc = cache->inv_m[c];
+    const double inv_r_ab = pair_cache_inv_r(cache, a, b);
+    const double inv_r_ac = pair_cache_inv_r(cache, a, c);
+
     const double t0 = xa0 - xb0;
     const double t1 = t0*t0;
     const double t2 = xa1 - xb1;
@@ -560,7 +571,7 @@ static void add_eom_2pn_triple_factorizable_block_one(const PairCache *cache, co
     const double t4 = xa2 - xb2;
     const double t5 = t4*t4;
     const double t6 = t1 + t3 + t5;
-    const double t7 = 1.0 / sqrt(t6) / t6;
+    const double t7 = inv_r_ab / t6;
     const double t8 = -t0*t7;
     const double t9 = xa0 - xc0;
     const double t10 = t9*t9;
@@ -569,19 +580,19 @@ static void add_eom_2pn_triple_factorizable_block_one(const PairCache *cache, co
     const double t13 = xa2 - xc2;
     const double t14 = t13*t13;
     const double t15 = t10 + t12 + t14;
-    const double t16 = 1 / sqrt(t15);
+    const double t16 = inv_r_ac;
     const double t17 = 1 / (ma*ma);
-    const double t18 = 1.0/mb;
-    const double t19 = 1.0/ma;
+    const double t18 = inv_mb;
+    const double t19 = inv_ma;
     const double t20 = t18*t19;
     const double t21 = 50*t20;
     const double t22 = 1 / (mb*mb);
     const double t23 = 17*pc0;
     const double t24 = 17*pc1;
     const double t25 = 17*pc2;
-    const double t26 = 1.0/mc;
+    const double t26 = inv_mc;
     const double t27 = t18*t26;
-    const double t28 = 1 / sqrt(t6);
+    const double t28 = inv_r_ab;
     const double t29 = pb0*t28;
     const double t30 = t0*t29;
     const double t31 = pb1*t28;
@@ -624,7 +635,7 @@ static void add_eom_2pn_triple_factorizable_block_one(const PairCache *cache, co
     const double t68 = t65*t67;
     const double t69 = t16*t68;
     const double t70 = -t9;
-    const double t71 = 1 / sqrt(t15) / t15;
+    const double t71 = inv_r_ac / t15;
     const double t72 = t28*t71;
     const double t73 = t68*t72;
     const double t74 = 2*xa0 - 2*xb0;
@@ -930,6 +941,16 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double pc1 = pair_cache_p(cache, c, 1);
     const double pc2 = pair_cache_p(cache, c, 2);
 
+    const double inv_ma = cache->inv_m[a];
+    const double inv_mb = cache->inv_m[b];
+    const double inv_mc = cache->inv_m[c];
+    const double r_ab = pair_cache_r(cache, a, b);
+    const double r_ac = pair_cache_r(cache, a, c);
+    const double r_bc = pair_cache_r(cache, b, c);
+    const double inv_r_ab = pair_cache_inv_r(cache, a, b);
+    const double inv_r_ac = pair_cache_inv_r(cache, a, c);
+    const double inv_r_bc = pair_cache_inv_r(cache, b, c);
+
     const double u0 = ma*ma;
     const double u1 = 3*xa0;
     const double u2 = 3*xb0;
@@ -941,8 +962,8 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double u8 = u7*u7;
     const double u9 = xa2 - xb2;
     const double u10 = u9*u9;
-    const double u11 = u10 + u6 + u8;
-    const double u12 = 1 / sqrt(u11) / (u11*u11);
+    const double u11 = u6 + u8 + u10;
+    const double u12 = inv_r_ab / (u11*u11);
     const double u13 = -xc0;
     const double u14 = u13 + xa0;
     const double u15 = u14*u14;
@@ -953,7 +974,7 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double u20 = u19 + xa2;
     const double u21 = u20*u20;
     const double u22 = u15 + u18 + u21;
-    const double u23 = 1 / sqrt(u22) / u22;
+    const double u23 = inv_r_ac / u22;
     const double u24 = u13 + xb0;
     const double u25 = -u24;
     const double u26 = u25*u25;
@@ -964,16 +985,16 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double u31 = -u30;
     const double u32 = u31*u31;
     const double u33 = u26 + u29 + u32;
-    const double u34 = sqrt(u33);
-    const double u35 = 1.0/u34;
-    const double u36 = sqrt(u11);
-    const double u37 = sqrt(u33) * u33;
+    const double u34 = r_bc;
+    const double u35 = inv_r_bc;
+    const double u36 = r_ab;
+    const double u37 = r_bc * u33;
     const double u38 = 72*u37;
-    const double u39 = sqrt(u11) * u11;
+    const double u39 = r_ab * u11;
     const double u40 = 56*u34;
     const double u41 = 18*u10 + 18*u6 + 18*u8;
     const double u42 = 60*u10 + 60*u6 + 60*u8;
-    const double u43 = sqrt(u22);
+    const double u43 = r_ac;
     const double u44 = 60*u36*u43;
     const double u45 = 24*u10 + 24*u6 + 24*u8;
     const double u46 = u34 + u36;
@@ -982,7 +1003,7 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double u49 = -3*xc0;
     const double u50 = u1 + u49;
     const double u51 = 1.0/u39;
-    const double u52 = 1 / sqrt(u22) / (u22*u22);
+    const double u52 = inv_r_ac / (u22*u22);
     const double u53 = 36*xa0 - 36*xb0;
     const double u54 = 4*xb0;
     const double u55 = -u54 + 4*xa0;
@@ -990,12 +1011,12 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double u57 = 120*xa0 - 120*xb0;
     const double u58 = -2*xc0;
     const double u59 = u58 + 2*xa0;
-    const double u60 = 1.0/u36;
+    const double u60 = inv_r_ab;
     const double u61 = u5*u60;
     const double u62 = u36*u40;
     const double u63 = 60*u33;
     const double u64 = u43*u63;
-    const double u65 = 1.0/u43;
+    const double u65 = inv_r_ac;
     const double u66 = u14*u65;
     const double u67 = u36*u63;
     const double u68 = 48*xa0 - 48*xb0;
@@ -1003,8 +1024,8 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double u70 = u45*u46;
     const double u71 = -u5;
     const double u72 = u51*u71;
-    const double u73 = 1.0/ma;
-    const double u74 = 1.0/mb;
+    const double u73 = inv_ma;
+    const double u74 = inv_mb;
     const double u75 = u73*u74;
     const double u76 = 3*u75;
     const double u77 = 1.0/u0;
@@ -1014,7 +1035,7 @@ static void add_eom_2pn_triple_genuine_triangle_one(const PairCache *cache, cons
     const double u81 = 1 / (mc*mc);
     const double u82 = pc0*u61 + pc1*u78 + pc2*u79;
     const double u83 = pb0*u61 + pb1*u78 + pb2*u79;
-    const double u84 = 1.0/mc;
+    const double u84 = inv_mc;
     const double u85 = 8*pc0;
     const double u86 = 8*pc1;
     const double u87 = 8*pc2;
@@ -1345,28 +1366,46 @@ static void add_eom_2pn_triple_analytic(const PairCache *cache, const double *w,
 
     add_eom_2pn_triple_reducible_pair_analytic(cache, w, dwdt);
 
-    for (int ia = 0; ia < active->num_active; ia++) {
+    const int na = active->num_active;
+    const int len = 2*cache->array_half;
+    double *const buf = cache->triple_accum;
+
+    memset(buf, 0, (size_t)na*(size_t)len*sizeof(*buf));
+
+#ifdef _OPENMP
+    const int threads = cache->triple_accum_threads;
+    const int run_parallel = (threads > 1) && !omp_in_parallel();
+
+    #pragma omp parallel for schedule(static) num_threads(threads) if (run_parallel)
+#endif
+    for (int ia = 0; ia < na; ia++) {
+        double *const row = buf + (size_t)ia*(size_t)len;
         const int a = active->ids[ia];
 
-        for (int ib = 0; ib < active->num_active; ib++) {
+        for (int ib = 0; ib < na; ib++) {
             const int b = active->ids[ib];
             if (b == a)
                 continue;
 
-            for (int ic = 0; ic < active->num_active; ic++) {
+            for (int ic = 0; ic < na; ic++) {
                 const int c = active->ids[ic];
                 if (c == a || c == b)
                     continue;
 
-                add_eom_2pn_triple_factorizable_block_one(cache, w, a, b, c, dwdt);
-                add_eom_2pn_triple_genuine_triangle_one(cache, w, a, b, c, dwdt);
+                add_eom_2pn_triple_factorizable_block_one(cache, w, a, b, c, row);
+                add_eom_2pn_triple_genuine_triangle_one(cache, w, a, b, c, row);
             }
         }
+    }
+
+    for (int ia = 0; ia < na; ia++) {
+        const double *const row = buf + (size_t)ia*(size_t)len;
+        for (int i = 0; i < len; ++i)
+            dwdt[i] += row[i];
     }
 }
 
 
-// Add the exact non-UTT4 four-body 2PN Hamiltonian contribution in factorized O(N^2) form.
 static void add_eom_2pn_fourbody_analytic(const PairCache *cache, double *dwdt)
 {
     const ActiveList *active = &cache->active;

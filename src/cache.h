@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include "active_list.h"
 
+#define PAIR_CACHE_TRIPLE_PARALLEL_MIN_BODIES 10
+
 
 // ------------------------------------------------------------------------------------------------
 // Pair and body geometry cache
@@ -55,6 +57,9 @@ typedef struct PairCache {
 
     double *n_dot_p_a;     // [N*N], n_ab . p_a
     double *n_dot_p_b;     // [N*N], n_ab . p_b
+
+    double *triple_accum;
+    int triple_accum_threads;
 } PairCache;
 
 

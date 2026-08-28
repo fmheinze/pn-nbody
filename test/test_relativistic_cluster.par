@@ -15,7 +15,7 @@ num_bodies                    = 16                                    # Number o
 # Time parameters
 # ---------------------------------------------------------------------------------------------------------------
 t_end                         = 2000.0                                # Final time
-dt                            = 0.01                                  # Timestep
+dt                            = 0.1                                  # Timestep
 dt_max                        = 1.0                                   # Maximum timestep
 
 

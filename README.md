@@ -9,7 +9,7 @@ Software for the direct integration of the Newtonian and post-Newtonian equation
 * Automatic merger handling with active-body bookkeeping, remnant-generation tracking, and merger-event output
 * NR-calibrated analytic prescriptions for the remnant mass, spin, and recoil kick, including Lousto–Zlochower and Barausse-based options
 * Optional impulse splitting to reduce the number of expensive $U_{\mathrm{TT}}^{(4)}$ evaluations
-* Parallel evaluation of the numerical $U_{\mathrm{TT}}^{(4)}$ contribution with OpenMP when available
+* Parallel evaluation with OpenMP when available: over four-body subsets for the numerical $U_{\mathrm{TT}}^{(4)}$ contribution, and over the $O(N^3)$ three-body 2PN terms, which dominate the equations of motion whenever $U_{\mathrm{TT}}^{(4)}$ is not in use. Both are arranged so that results do not depend on the number of threads
 * Python tools for static trajectory plots and two- or three-dimensional animations
 
 To our knowledge, `pn-nbody` is the first publicly available code to implement the complete general-$N$ dynamics through 2PN order, including the four-body $U_{\mathrm{TT}}^{(4)}$ contribution.

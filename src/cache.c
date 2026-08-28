@@ -22,6 +22,12 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "cache.h"
 #include "utils.h"
 
@@ -86,6 +92,18 @@ PairCache *pair_cache_create(const struct ode_params *ode_params)
     cache->n_dot_p_a = (double *)xcalloc(N2, sizeof(*cache->n_dot_p_a));
     cache->n_dot_p_b = (double *)xcalloc(N2, sizeof(*cache->n_dot_p_b));
 
+    // Scratch space for the 2PN triple loop: one accumulator row per outer body
+    cache->triple_accum = (double *)xcalloc(N*(size_t)cache->array_half*2,
+        sizeof(*cache->triple_accum));
+    cache->triple_accum_threads = 1;
+#ifdef _OPENMP
+    if (cache->num_bodies >= PAIR_CACHE_TRIPLE_PARALLEL_MIN_BODIES) {
+        const int threads = omp_get_max_threads();
+        if (threads > 1)
+            cache->triple_accum_threads = threads;
+    }
+#endif
+
     cache->m = ode_params->masses;
     return cache;
 }
@@ -106,6 +124,7 @@ void pair_cache_destroy(PairCache *cache)
     free(cache->n);
     free(cache->n_dot_p_a);
     free(cache->n_dot_p_b);
+    free(cache->triple_accum);
     free(cache);
 }
 
