@@ -48,4 +48,5 @@ b                    = 100.0                           # Scattering impact param
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-output = position momentum velocity energy merger
+output = position momentum velocity energy orbit_1_2
+orbit_1_2 = semimajor_axis_newtonian eccentricity_newtonian

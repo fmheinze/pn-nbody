@@ -12,6 +12,7 @@
 #include "initial_configurations.h"
 #include "utils.h"
 #include "eom.h"
+#include "pn_binary.h"
 
 
 // ------------------------------------------------------------------------------------------------
@@ -62,240 +63,6 @@ static int min_sep_ok(struct ode_params* params, double* x, double min_sep_facto
     }
 
     return 1;
-}
-
-
-// Evaluate the reduced relative Hamiltonian at the selected PN orders.
-static double pn_hhat_rel(double x, double pr_hat, double j, double nu, int use_1pn, int use_2pn)
-{
-    const double inv_x = 1.0 / x;
-    const double inv_x2 = inv_x * inv_x;
-    const double inv_x3 = inv_x2 * inv_x;
-
-    const double pr2 = pr_hat * pr_hat;
-    const double j2 = j * j;
-    const double p2 = pr2 + j2 * inv_x2;
-
-    const double p4 = p2 * p2;
-    const double p6 = p4 * p2;
-
-    double h = 0.5 * p2 - inv_x;
-
-    if (use_1pn) {
-        h += 0.125 * (3.0 * nu - 1.0) * p4
-           - 0.5 * inv_x * ((3.0 + nu) * p2 + nu * pr2)
-           + 0.5 * inv_x2;
-    }
-
-    if (use_2pn) {
-        h += (1.0 - 5.0 * nu + 5.0 * nu * nu) * p6 / 16.0
-
-           + inv_x / 8.0 *
-             ((5.0 - 20.0 * nu - 3.0 * nu * nu) * p4
-              - 2.0 * nu * nu * pr2 * p2
-              - 3.0 * nu * nu * pr2 * pr2)
-
-           + 0.5 * inv_x2 *
-             ((5.0 + 8.0 * nu) * p2 + 3.0 * nu * pr2)
-
-           - 0.25 * (1.0 + 3.0 * nu) * inv_x3;
-    }
-
-    return h;
-}
-
-
-// Evaluate the reduced relative Hamiltonian at a radial turning point, where pr_hat = 0.
-static double pn_hhat_turning_point(double x, double j, double nu, int use_1pn, int use_2pn)
-{
-    return pn_hhat_rel(x, 0.0, j, nu, use_1pn, use_2pn);
-}
-
-
-// Evaluate the radial derivative of the turning-point Hamiltonian at fixed angular momentum.
-static double pn_dh_dx_turning_numeric(double x, double j, double nu, int use_1pn, int use_2pn)
-{
-    double dx = 1e-6 * fabs(x);
-
-    if (dx < 1e-8) dx = 1e-8;
-    if (x - dx <= 0.0) dx = 0.5 * x;
-
-    const double hp = pn_hhat_turning_point(x + dx, j, nu, use_1pn, use_2pn);
-    const double hm = pn_hhat_turning_point(x - dx, j, nu, use_1pn, use_2pn);
-
-    return (hp - hm) / (2.0 * dx);
-}
-
-
-// Solve the circular-orbit condition dH/dx = 0 for the reduced angular momentum.
-static double pn_solve_circular_j(double x, double nu, int use_1pn, int use_2pn)
-{
-    double lo = 0.0;
-    double hi = sqrt(x) * 2.0 + 1.0;
-
-    double flo = pn_dh_dx_turning_numeric(x, lo, nu, use_1pn, use_2pn);
-    double fhi = pn_dh_dx_turning_numeric(x, hi, nu, use_1pn, use_2pn);
-
-    int expand_count = 0;
-    while (flo * fhi > 0.0 && expand_count < 80) {
-        hi *= 2.0;
-        fhi = pn_dh_dx_turning_numeric(x, hi, nu, use_1pn, use_2pn);
-        expand_count++;
-    }
-
-    if (flo * fhi > 0.0)
-        errorexit("could not bracket circular angular momentum");
-
-    for (int i = 0; i < 160; i++) {
-        const double mid = 0.5 * (lo + hi);
-        const double fmid = pn_dh_dx_turning_numeric(x, mid, nu, use_1pn, use_2pn);
-
-        if (flo * fmid <= 0.0) {
-            hi = mid;
-            fhi = fmid;
-        }
-        else {
-            lo = mid;
-            flo = fmid;
-        }
-    }
-
-    return 0.5 * (lo + hi);
-}
-
-
-// Solve for the reduced angular momentum giving equal energies at the pericenter and apocenter.
-static double pn_solve_eccentric_j(double xp, double xa, double nu, int use_1pn, int use_2pn)
-{
-    double lo = 0.0;
-    double hi = sqrt(0.5 * (xp + xa)) * 2.0 + 1.0;
-
-    double flo = pn_hhat_turning_point(xp, lo, nu, use_1pn, use_2pn)
-               - pn_hhat_turning_point(xa, lo, nu, use_1pn, use_2pn);
-
-    double fhi = pn_hhat_turning_point(xp, hi, nu, use_1pn, use_2pn)
-               - pn_hhat_turning_point(xa, hi, nu, use_1pn, use_2pn);
-
-    int expand_count = 0;
-    while (flo * fhi > 0.0 && expand_count < 80) {
-        hi *= 2.0;
-        fhi = pn_hhat_turning_point(xp, hi, nu, use_1pn, use_2pn)
-            - pn_hhat_turning_point(xa, hi, nu, use_1pn, use_2pn);
-        expand_count++;
-    }
-
-    if (flo * fhi > 0.0)
-        errorexit("could not bracket eccentric angular momentum");
-
-    for (int i = 0; i < 160; i++) {
-        const double mid = 0.5 * (lo + hi);
-        const double fmid = pn_hhat_turning_point(xp, mid, nu, use_1pn, use_2pn)
-                          - pn_hhat_turning_point(xa, mid, nu, use_1pn, use_2pn);
-
-        if (flo * fmid <= 0.0) {
-            hi = mid;
-            fhi = fmid;
-        }
-        else {
-            lo = mid;
-            flo = fmid;
-        }
-    }
-
-    return 0.5 * (lo + hi);
-}
-
-
-// Solve the fixed-energy Hamiltonian constraint for the absolute reduced radial momentum.
-static double pn_solve_pr_hat_abs(double x, double j, double energy, double nu,
-    int use_1pn, int use_2pn)
-{
-    double qlo = 0.0;
-    double flo = pn_hhat_rel(x, 0.0, j, nu, use_1pn, use_2pn) - energy;
-
-    if (fabs(flo) < 1e-13)
-        return 0.0;
-
-    if (flo > 0.0) {
-        if (flo < 1e-10)
-            return 0.0;
-        errorexit("requested phase gives no real radial momentum");
-    }
-
-    double qhi = 1e-12;
-    double fhi = pn_hhat_rel(x, sqrt(qhi), j, nu, use_1pn, use_2pn) - energy;
-
-    int expand_count = 0;
-    while (fhi <= 0.0 && expand_count < 120) {
-        qhi *= 2.0;
-        fhi = pn_hhat_rel(x, sqrt(qhi), j, nu, use_1pn, use_2pn) - energy;
-        expand_count++;
-    }
-
-    if (fhi <= 0.0)
-        errorexit("could not bracket radial momentum");
-
-    for (int i = 0; i < 160; i++) {
-        const double qmid = 0.5 * (qlo + qhi);
-        const double fmid = pn_hhat_rel(x, sqrt(qmid), j, nu, use_1pn, use_2pn) - energy;
-
-        if (fmid <= 0.0) {
-            qlo = qmid;
-            flo = fmid;
-        }
-        else {
-            qhi = qmid;
-            fhi = fmid;
-        }
-    }
-
-    return sqrt(0.5 * (qlo + qhi));
-}
-
-
-// Compute the coefficient A in dH/dpr_hat = A pr_hat + O(pr_hat^3) near zero radial momentum.
-static double pn_dh_dpr_coeff_at_zero(double x, double j, double nu, int use_1pn, int use_2pn)
-{
-    const double inv_x = 1.0 / x;
-    const double inv_x2 = inv_x * inv_x;
-
-    const double j2 = j * j;
-    const double u = j2 * inv_x2;
-
-    // Newtonian: A_N = 1
-    double A = 1.0;
-
-    if (use_1pn) {
-        /*
-         * 1PN contribution:
-         *
-         * H_1PN = 1/8 (3 nu - 1) p^4 - 1/2 /x [ (3 + nu) p^2 + nu pr^2 ] + 1/2 /x^2
-         *
-         * with p^2 = pr^2 + j^2/x^2.
-         */
-        A += 0.5 * (3.0 * nu - 1.0) * u - (3.0 + 2.0 * nu) * inv_x;
-    }
-
-    if (use_2pn) {
-        /*
-         * 2PN contribution to the linear-in-pr coefficient:
-         *
-         * H_2PN = c6 p^6
-         *    + 1/x/8 [ a p^4 - 2 nu^2 pr^2 p^2 - 3 nu^2 pr^4 ]
-         *    + 1/2/x^2 [ (5 + 8nu) p^2 + 3nu pr^2 ]
-         *    - 1/4(1+3nu)/x^3
-         *
-         * At pr = 0, only terms linear in pr in dH/dpr contribute.
-         */
-        const double c6 = (1.0 - 5.0 * nu + 5.0 * nu * nu) / 16.0;
-        const double a4 = 5.0 - 20.0 * nu - 3.0 * nu * nu;
-
-        A += 6.0 * c6 * u * u
-           + inv_x / 8.0 * (4.0 * a4 * u - 4.0 * nu * nu * u)
-           + inv_x2 * (5.0 + 11.0 * nu);
-    }
-
-    return A;
 }
 
 
@@ -465,25 +232,35 @@ void ic_binary(struct ode_params* ode_params, struct binary_params* binary_param
         errorexit("non-positive PN radius");
 
     double j;
-    if (e < 1e-12)
-        j = pn_solve_circular_j(a / M, nu, use_1pn, use_2pn);
-    else
-        j = pn_solve_eccentric_j(xp, xa, nu, use_1pn, use_2pn);
+    if (e < 1e-12) {
+        j = pn_binary_solve_circular_j(a / M, nu, use_1pn, use_2pn);
+        if (!isfinite(j))
+            errorexit("could not bracket circular angular momentum");
+    }
+    else {
+        j = pn_binary_solve_eccentric_j(xp, xa, nu, use_1pn, use_2pn);
+        if (!isfinite(j))
+            errorexit("could not bracket eccentric angular momentum");
+    }
 
     const double energy = (e < 1e-12)
-        ? pn_hhat_turning_point(a / M, j, nu, use_1pn, use_2pn)
-        : pn_hhat_turning_point(xp, j, nu, use_1pn, use_2pn);
+        ? pn_binary_turning_hamiltonian(a / M, j, nu, use_1pn, use_2pn)
+        : pn_binary_turning_hamiltonian(xp, j, nu, use_1pn, use_2pn);
 
-    double pr_hat_abs = pn_solve_pr_hat_abs(x0, j, energy, nu, use_1pn, use_2pn);
+    double pr_hat_abs = pn_binary_solve_pr_hat_abs(
+        x0, j, energy, nu, use_1pn, use_2pn);
+    if (!isfinite(pr_hat_abs))
+        errorexit("could not solve radial momentum");
     double pr_hat;
 
     if (e < 1e-12 && ode_params->pn_terms[3] == 1) {
         // Quasi-circular inspiral radial momentum
         const double xdot = -(64.0 / 5.0) * nu / pow(x0, 3);
 
-        const double A = pn_dh_dpr_coeff_at_zero(x0, j, nu, use_1pn, use_2pn);
+        const double A = pn_binary_dh_dpr_coeff_at_zero(
+            x0, j, nu, use_1pn, use_2pn);
 
-        if (fabs(A) < 1e-14)
+        if (!isfinite(A) || fabs(A) < 1e-14)
             errorexit("could not compute circular 2.5PN radial momentum");
 
         pr_hat = xdot / A;

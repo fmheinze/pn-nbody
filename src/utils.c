@@ -678,7 +678,8 @@ char* make_filepath(const char* outdir, const char* filename)
     char* filepath = malloc(len + extra_slash + strlen(filename) + 1);
     if (!filepath)
         errorexit("Filepath could not be allocated");
-    sprintf(filepath, "%s%s%s", outdir, (extra_slash ? "/" : ""), filename);
+    snprintf(filepath, len + extra_slash + strlen(filename) + 1, "%s%s%s", outdir,
+        (extra_slash ? "/" : ""), filename);
     return filepath;
 }
 

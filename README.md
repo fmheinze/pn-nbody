@@ -75,6 +75,54 @@ python3 ./viz/trajectory_anim.py ./output/test_figure_eight/output_pos.dat
 
 3. You can check out the other files in the `./test` directory to see more examples of what is possible.
 
+### Selecting output
+
+Use the `output` parameter to select which output files are created. Available quantities are
+`mass`, `position`, `momentum`, `velocity`, `spin`, `energy`, and `merger`; separate them with
+spaces:
+
+```text
+output = position velocity energy merger
+```
+
+This example creates only `output_pos.dat`, `output_vel.dat`, `output_energy.dat`, and
+`output_merger.dat`. If the parameter is omitted, its default selects every available quantity.
+
+To monitor a selected pair, add `orbit_X_Y` to `output`, where `X` and `Y` are distinct 1-based
+initial body numbers. A parameter with the same name selects the columns in that pair's file:
+
+```text
+output = position energy orbit_1_2 orbit_1_3
+orbit_1_2 = semimajor_axis_newtonian eccentricity_newtonian semimajor_axis_radial eccentricity_radial
+orbit_1_3 = eccentricity_newtonian
+```
+
+This creates `output_orbit_1_2.dat` and `output_orbit_1_3.dat`. The Newtonian quantities are
+instantaneous osculating elements computed from the relative position and the full coordinate
+velocity at all enabled PN orders. `semimajor_axis_newtonian` uses the pair's Newtonian specific
+orbital energy (and is negative for a hyperbolic orbit); `eccentricity_newtonian` is the magnitude
+of its Newtonian eccentricity vector.
+
+The relativistic radial quantities are `pericenter_radial`, `apocenter_radial`,
+`semimajor_axis_radial`, and `eccentricity_radial`. For each selected pair, the code removes its
+center-of-mass momentum with the canonical Jacobi decomposition and evaluates the isolated-pair
+ADM Hamiltonian using the enabled conservative 1PN and 2PN terms (on top of the Newtonian term).
+It then solves `H(r, p_r=0, J) = E` for the two turning points enclosing the current separation and
+defines
+
+```text
+semimajor_axis_radial = (pericenter_radial + apocenter_radial) / 2
+eccentricity_radial   = (apocenter_radial - pericenter_radial)
+                        / (apocenter_radial + pericenter_radial)
+```
+
+Other bodies and the dissipative 2.5PN term are excluded from this instantaneous, osculating
+definition. Unbound states and states for which two positive enclosing turning points cannot be
+found produce `nan` for all radial quantities. The four radial columns share a single root solve;
+requesting only radial quantities does not compute coordinate velocities.
+
+Each endpoint follows its merger lineage: if it merges with a third body, subsequent rows use the
+remnant. If the two monitored lineages merge with each other, subsequent orbital values are `nan`.
 
 ## License
 

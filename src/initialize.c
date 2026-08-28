@@ -21,6 +21,21 @@
 #define NUM_PN_TERMS 4
 
 
+// Register the per-pair quantity lists named by dynamic orbit_X_Y output tokens.
+static void initialize_orbit_output_parameters(void)
+{
+    char *copy = strdup(get_parameter_string("output"));
+    if (copy == NULL)
+        errorexit("Could not allocate output parameter list");
+
+    for (char *token = strtok(copy, " \t"); token != NULL; token = strtok(NULL, " \t")) {
+        if (strncmp(token, "orbit_", strlen("orbit_")) == 0)
+            add_parameter(token, "", "orbital quantities to output for this selected pair");
+    }
+    free(copy);
+}
+
+
 /**
  * @brief Initializes needed parameters in the parameter database.
  *
@@ -101,6 +116,7 @@ void initialize_parameters(void)
     add_parameter("dt_save", "-1", "times at which quantities are written to a file [>= 0]");
     add_parameter("output", "mass position momentum velocity spin energy merger",
         "quantities to output");
+    initialize_orbit_output_parameters();
 
     // --------------------------------------------------------------------------------------------
     // Initial configuration presets

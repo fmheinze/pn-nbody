@@ -1,15 +1,33 @@
 #ifndef OUTPUT_H
 #define OUTPUT_H
 
+#include <stddef.h>
 #include <stdio.h>
 
 struct ode_params;
+struct OrbitOutput;
 
-void output_init(FILE** file_mass, FILE** file_pos, FILE** file_mom, FILE** file_vel,
-    FILE** file_spin, FILE** file_energy, FILE** file_merger, struct ode_params* ode_params);
+typedef struct OutputContext {
+    FILE *file_mass;
+    FILE *file_pos;
+    FILE *file_mom;
+    FILE *file_vel;
+    FILE *file_spin;
+    FILE *file_energy;
+    FILE *file_merger;
 
-void output_write_timestep(FILE* file_pos, FILE* file_mom, FILE* file_vel, FILE* file_spin,
-    FILE* file_energy, struct ode_params* ode_params, double* w, double t);
+    struct OrbitOutput *orbits;
+    size_t num_orbits;
+} OutputContext;
+
+void output_init(OutputContext *output, struct ode_params *ode_params);
+
+void output_write_timestep(OutputContext *output, struct ode_params *ode_params, double *w,
+    double t);
+
+void output_follow_merger(OutputContext *output, int parent_a, int parent_b, int remnant);
+
+void output_close(OutputContext *output);
 
 void output_write_merger_event(
     FILE *file_merger,

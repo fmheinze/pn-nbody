@@ -464,11 +464,9 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_vel, *file_spin, *file_energy, *file_merger;
-    output_init(&file_mass, &file_pos, &file_mom, &file_vel, &file_spin, &file_energy,
-        &file_merger, ode_params);
-    output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
-        ode_params, w, t_current);
+    OutputContext output;
+    output_init(&output, ode_params);
+    output_write_timestep(&output, ode_params, w, t_current);
 
     // Iterate until the final time
     while (!time_reached(t_current, t_end, direction)) {
@@ -526,7 +524,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 
         // Test for merger and merge bodies
         if (ode_params->merge_activate)
-            test_and_merge_bodies(ode_params, w, t_current, file_merger);
+            test_and_merge_bodies(ode_params, w, t_current, &output);
 
         // Write output if the current time is an output time
         if (direction > 0.0)
@@ -535,8 +533,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
             should_save = (t_current - eps_time <= next_save);
 
         if (should_save) {
-            output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
-                ode_params, w, t_current);
+            output_write_timestep(&output, ode_params, w, t_current);
 
             print_progress_bar((int)(100.0 * fabs(t_current) / fabs(t_end)));
 
@@ -550,13 +547,7 @@ void ode_integrator(double* w, ode_rhs rhs, struct ode_params* ode_params)
 
     // Cleanup
     ode_ws_free(&ws);
-    if (file_mass) fclose(file_mass);
-    if (file_pos) fclose(file_pos);
-    if (file_mom) fclose(file_mom);
-    if (file_vel) fclose(file_vel);
-    if (file_energy) fclose(file_energy);
-    if (file_merger) fclose(file_merger);
-    if (file_spin) fclose(file_spin);
+    output_close(&output);
 }
 
 
@@ -737,11 +728,9 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     ode_ws_init(&ws, w_size);
 
     // Initialize output files
-    FILE *file_mass, *file_pos, *file_mom, *file_vel, *file_spin, *file_energy, *file_merger;
-    output_init(&file_mass, &file_pos, &file_mom, &file_vel, &file_spin, &file_energy,
-        &file_merger, ode_params);
-    output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
-        ode_params, w, t_current);
+    OutputContext output;
+    output_init(&output, ode_params);
+    output_write_timestep(&output, ode_params, w, t_current);
 
     // Cache gradient to reuse between steps:
     // After finishing a step, positions do not change before the next step's first half-kick,
@@ -775,13 +764,12 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
 
         // Test for merger and merge bodies
         if (ode_params->merge_activate)
-            if (test_and_merge_bodies(ode_params, w, t_current, file_merger))
+            if (test_and_merge_bodies(ode_params, w, t_current, &output))
                 grad_valid = 0;
 
         // Write output if the current time is an output time
         if (t_current + eps_time >= next_save) {
-            output_write_timestep(file_pos, file_mom, file_vel, file_spin, file_energy,
-                ode_params, w, t_current);
+            output_write_timestep(&output, ode_params, w, t_current);
             print_progress_bar((int)(100.0 * t_current / t_end));
 
             // Advance output schedule robustly
@@ -793,13 +781,7 @@ void ode_integrator_impulse(double* w, ode_rhs rhs_mid, utt4_grad_func grad_utt4
     }
 
     // Cleanup
-    if (file_mass) fclose(file_mass);
-    if (file_pos) fclose(file_pos);
-    if (file_mom) fclose(file_mom);
-    if (file_vel) fclose(file_vel);
-    if (file_energy) fclose(file_energy);
-    if (file_merger) fclose(file_merger);
-    if (file_spin) fclose(file_spin);
+    output_close(&output);
     free_vector(dUdx);
     ode_ws_free(&ws);
 }

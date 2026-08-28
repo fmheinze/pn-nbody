@@ -213,7 +213,7 @@ void add_parameter(const char* name, const char* value, const char* description)
 
 void add_parameter_i(const char* name, const int i, const char* value, const char* description) {
     char new[100];
-    sprintf(new, "%s%d", name, i);
+    snprintf(new, sizeof(new), "%s%d", name, i);
     make_parameter(new, value, description);
     printf("%-30s  =  %s\n", new, get_parameter_string(new));
 }
@@ -228,14 +228,14 @@ void set_parameter_string(const char* name, const char *value) {
 
 void set_parameter_int(const char* name, const int i) {
     char value[100];
-    sprintf(value, "%d", i);
+    snprintf(value, sizeof(value), "%d", i);
     set_parameter(name, value);
 }
 
 
 void set_parameter_double(const char* name, const double d) {
     char value[100];
-    sprintf(value, "%.20e", d);
+    snprintf(value, sizeof(value), "%.20e", d);
     set_parameter(name, value);
 }
 
@@ -306,7 +306,7 @@ double get_parameter_double(const char* name) {
 
 double get_parameter_double_i(const char* name, int i) {
     char new[100];
-    sprintf(new, "%s%d", name, i);
+    snprintf(new, sizeof(new), "%s%d", name, i);
     return get_parameter_double(new);
 }
 
@@ -366,7 +366,7 @@ double* get_parameter_double_array(const char* name) {
 
 double* get_parameter_double_array_i(const char* name, const int i) {
     char new[100];
-    sprintf(new, "%s%d", name, i);
+    snprintf(new, sizeof(new), "%s%d", name, i);
     return get_parameter_double_array(new);
 }
 

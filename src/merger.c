@@ -9,7 +9,7 @@
 
 #include "eom.h"
 #include "output.h"
-#include "stdio.h"
+#include <stdio.h>
 #include "utils.h"
 #include <math.h>
 #include <float.h>
@@ -784,9 +784,10 @@ int find_merger_pair(struct ode_params *params, double *w, int *i_merge, int *j_
  * @param   i             Index of the first merger object
  * @param   j             Index of the second merger object
  * @param   t             Current time
- * @param   file_merger   Pointer to the merger output file
+ * @param   output        Output context whose orbit lineages and merger file are updated
  */
-void merge_pair(struct ode_params *params, double *w, int i, int j, double t, FILE *file_merger)
+static void merge_pair(struct ode_params *params, double *w, int i, int j, double t,
+    OutputContext *output)
 {
     const int num_dim = params->num_dim;
     const int array_half = num_dim * params->num_bodies_initial;
@@ -885,9 +886,9 @@ void merge_pair(struct ode_params *params, double *w, int i, int j, double t, FI
     const double r_ij = sqrt(r2);
 
     // Write merger event before overwriting bookkeeping
-    if (file_merger != NULL) {
+    if (output != NULL && output->file_merger != NULL) {
         output_write_merger_event(
-            file_merger,
+            output->file_merger,
             t,
             params,
             i,
@@ -951,6 +952,8 @@ void merge_pair(struct ode_params *params, double *w, int i, int j, double t, FI
 
     params->generation[i] = gen_remnant;
     params->generation[j] = -1;
+
+    output_follow_merger(output, i, j, i);
 }
 
 
@@ -963,10 +966,10 @@ void merge_pair(struct ode_params *params, double *w, int i, int j, double t, FI
  * @param   params       Parameter struct containing general information about the system
  * @param   w            State vector w = [positions, momenta, spins]
  * @param   t            Current time
- * @param   file_merger  Pointer to the merger output file
+ * @param   output       Output context whose orbit lineages and merger file are updated
  * @return 1 if at least one merger happened, 0 otherwise.
  */
-int test_and_merge_bodies(struct ode_params *params, double *w, double t, FILE *file_merger)
+int test_and_merge_bodies(struct ode_params *params, double *w, double t, OutputContext *output)
 {
     int merged_any = 0;
 
@@ -979,7 +982,7 @@ int test_and_merge_bodies(struct ode_params *params, double *w, double t, FILE *
         if (!found)
             break;
 
-        merge_pair(params, w, i_merge, j_merge, t, file_merger);
+        merge_pair(params, w, i_merge, j_merge, t, output);
         merged_any = 1;
     }
 
