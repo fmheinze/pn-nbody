@@ -111,7 +111,22 @@ static void gauss_legendre_rule_free(GaussLegendreRule *rule)
 // UTT4 logarithmic integral
 // ------------------------------------------------------------------------------------------------
 
+// Deepest geometric bisection toward an endpoint; 2^-24 covers any physical ratio.
+#define UTT4_LN_MAX_GRADING_LEVELS 24
+
+// Separation ratio at which grading starts to pay.
+#define UTT4_LN_GRADING_MIN_RATIO 16.0
+
+//Gauss-Legendre points per graded panel, as a fraction of the smooth-axis order.
+#define UTT4_LN_PANEL_ORDER_DIVISOR 4
+#define UTT4_LN_PANEL_ORDER_MIN 8
+
+// Order past which the evaluator stops raising the degree and switches to graded panels.
+#define UTT4_LN_PLAIN_SWITCH_ORDER 48
+
+// Number of pair representatives
 #define UTT4_LN_NPAIR 6
+
 
 // Six representatives for the 24 ordered permutations.
 static const int utt4_ln_sum_representatives[6][4] =
@@ -119,44 +134,104 @@ static const int utt4_ln_sum_representatives[6][4] =
     {0,1,2,3}, {0,1,3,2}, {0,2,1,3}, {0,2,3,1}, {0,3,1,2}, {0,3,2,1}
 };
 
-// UTT4-specific precomputed transforms of a generic [0, pi] Gauss-Legendre rule.
+
+// One axis of the (theta, phi) square as a composite Gauss-Legendre rule on [0, pi].
 typedef struct {
-    GaussLegendreRule base;
+    int n;
+    int base_order;
+    int levels;
     utt4_real *half_sin_theta;
     utt4_real *mix;
+    utt4_real *weight;
 } UTT4LnQuadratureRule;
 
 
-static int utt4_ln_quadrature_rule_init(int n, UTT4LnQuadratureRule *rule)
+// Panel breakpoints on [0, pi]: pi/2 halved `levels` times toward 0, then mirrored about pi/2.
+static int utt4_ln_axis_panels(int levels, utt4_real *bounds)
+{
+    bounds[0] = 0.0;
+
+    // No layer to resolve: one panel spanning the whole range, identical to a plain rule.
+    if (levels <= 0) {
+        bounds[1] = UTT4_PI;
+        return 1;
+    }
+
+    utt4_real edge = 0.5*UTT4_PI;
+    for (int k = 0; k < levels; ++k)
+        edge *= 0.5;
+
+    for (int k = 0; k <= levels; ++k) {
+        bounds[k + 1] = edge;
+        edge *= 2.0;
+    }
+
+    const int half = levels + 1;
+    for (int k = 1; k <= half; ++k)
+        bounds[half + k] = UTT4_PI - bounds[half - k];
+
+    return 2*half;
+}
+
+
+static int utt4_ln_quadrature_rule_init(int base_order, int levels, UTT4LnQuadratureRule *rule)
 {
     memset(rule, 0, sizeof(*rule));
-    if (gauss_legendre_rule_init(n, 0.0, UTT4_PI, &rule->base) != 0)
+    if (base_order < 1 || levels < 0)
         return -1;
+
+    const int panels = (levels > 0) ? 2*(levels + 1) : 1;
+    const int n = panels*base_order;
 
     rule->half_sin_theta = calloc((size_t)n, sizeof(utt4_real));
     rule->mix = calloc((size_t)n, sizeof(utt4_real));
-    if (!rule->half_sin_theta || !rule->mix) {
-        gauss_legendre_rule_free(&rule->base);
+    rule->weight = calloc((size_t)n, sizeof(utt4_real));
+    utt4_real *bounds = calloc((size_t)panels + 1, sizeof(utt4_real));
+    if (!rule->half_sin_theta || !rule->mix || !rule->weight || !bounds) {
         free(rule->half_sin_theta);
         free(rule->mix);
+        free(rule->weight);
+        free(bounds);
         memset(rule, 0, sizeof(*rule));
         return -1;
     }
 
-    for (int i = 0; i < n; ++i) {
-        rule->half_sin_theta[i] = 0.5*UTT4_SIN(rule->base.x[i]);
-        rule->mix[i] = 0.5*(1.0 + UTT4_COS(rule->base.x[i]));
+    utt4_ln_axis_panels(levels, bounds);
+
+    int at = 0;
+    for (int panel = 0; panel < panels; ++panel) {
+        GaussLegendreRule gl;
+        if (gauss_legendre_rule_init(base_order, bounds[panel], bounds[panel + 1], &gl) != 0) {
+            free(rule->half_sin_theta);
+            free(rule->mix);
+            free(rule->weight);
+            free(bounds);
+            memset(rule, 0, sizeof(*rule));
+            return -1;
+        }
+
+        for (int i = 0; i < base_order; ++i, ++at) {
+            rule->half_sin_theta[at] = 0.5*UTT4_SIN(gl.x[i]);
+            rule->mix[at] = 0.5*(1.0 + UTT4_COS(gl.x[i]));
+            rule->weight[at] = gl.weight[i];
+        }
+        gauss_legendre_rule_free(&gl);
     }
+
+    free(bounds);
+    rule->n = n;
+    rule->base_order = base_order;
+    rule->levels = levels;
     return 0;
 }
 
 
 /**
- * @brief Process-lifetime cache of immutable Gauss-Legendre rules.
+ * @brief Process-lifetime cache of immutable axis rules, keyed on (base_order, levels).
  *
- * The same few quadrature orders are reused at virtually every UTT4 evaluation. Keeping them
- * avoids repeated root finding, trigonometric transforms, and heap allocation. Entries are never
- * modified after construction and intentionally live until process exit.
+ * The same few rules are reused at virtually every UTT4 evaluation. Keeping them avoids repeated
+ * root finding, trigonometric transforms, and heap allocation. Entries are never modified after
+ * construction and intentionally live until process exit.
  */
 typedef struct UTT4LnRuleCacheEntry {
     UTT4LnQuadratureRule rule;
@@ -169,9 +244,9 @@ static int utt4_ln_rule_cache_cleanup_registered = 0;
 
 static void utt4_ln_quadrature_rule_destroy(UTT4LnQuadratureRule *rule)
 {
-    gauss_legendre_rule_free(&rule->base);
     free(rule->half_sin_theta);
     free(rule->mix);
+    free(rule->weight);
     memset(rule, 0, sizeof(*rule));
 }
 
@@ -189,7 +264,7 @@ static void utt4_ln_rule_cache_free(void)
 }
 
 
-static const UTT4LnQuadratureRule *utt4_ln_quadrature_rule_get(int n)
+static const UTT4LnQuadratureRule *utt4_ln_quadrature_rule_get(int base_order, int levels)
 {
     const UTT4LnQuadratureRule *result = NULL;
 
@@ -198,14 +273,15 @@ static const UTT4LnQuadratureRule *utt4_ln_quadrature_rule_get(int n)
 #endif
     {
         UTT4LnRuleCacheEntry *entry = utt4_ln_rule_cache;
-        while (entry != NULL && entry->rule.base.n != n)
+        while (entry != NULL &&
+               (entry->rule.base_order != base_order || entry->rule.levels != levels))
             entry = entry->next;
 
         if (entry == NULL) {
             entry = malloc(sizeof(*entry));
             if (entry != NULL) {
                 memset(entry, 0, sizeof(*entry));
-                if (utt4_ln_quadrature_rule_init(n, &entry->rule) != 0) {
+                if (utt4_ln_quadrature_rule_init(base_order, levels, &entry->rule) != 0) {
                     free(entry);
                     entry = NULL;
                 } else {
@@ -918,27 +994,163 @@ typedef struct {
 } UTT4LnWorkResult;
 
 
+/**
+ * @brief Grading levels for one representative. 
+ * 
+ * Each level halves the panel nearest the endpoint, so `levels` bisections reach a width of about 
+ * 2^-levels; enough to resolve a layer of width eps needs levels ~ log2(1/eps), plus one for 
+ * margin. Balanced representatives get 0 and fall back to the plain single-panel rule.
+ */
+static int utt4_ln_grading_levels_from_geometry(const UTT4LnPairGeometry *geo,
+    utt4_real *gmin, utt4_real *gmax)
+{
+    utt4_real big = 0.0, small = 0.0;
+    for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
+        const utt4_real d = geo->distance[p].v;
+        if (p == 0 || d > big) big = d;
+        if (p == 0 || d < small) small = d;
+    }
+    if (gmin) *gmin = small;
+    if (gmax) *gmax = big;
+
+    if (!(big > 0.0) || !(small > 0.0) || !(big > small))
+        return 0;
+
+    const utt4_real ratio = big/small;
+    if (ratio < UTT4_LN_GRADING_MIN_RATIO)
+        return 0;
+
+    int levels = 1;
+    utt4_real reach = 2.0;
+    while (reach < ratio && levels < UTT4_LN_MAX_GRADING_LEVELS) {
+        reach *= 2.0;
+        ++levels;
+    }
+
+    return levels;
+}
+
+
+/**
+ * @brief Fixed-order quadrature of all six ordered representatives.
+ *
+ * Each representative is integrated on its own grid rather than on one grid shared by all six.
+ * A representative whose two pair separations are comparable gets a plain base_order rule on both
+ * axes; one carrying a large separation ratio gets graded panels on both. Grading only the axis
+ * conjugate to the larger separation is enough for a distant fourth body, but not for a tight
+ * pair inside a wide system, where the small separation also sharpens the other axis through the
+ * 1/r factors, so both are graded whenever grading applies at all.
+ *
+ * Sharing one grid across the six would force every representative onto the worst one's
+ * resolution. For a hardening binary that is one pair split out of three, and the other two need
+ * nothing beyond the plain rule.
+ */
 static UTT4LnWorkResult utt4_ln_fixed_quadrature(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
-    const UTT4LnQuadratureRule *q, int use_openmp)
+    int base_order, int use_grading, int use_openmp)
 {
 #ifndef _OPENMP
     (void)use_openmp;
 #endif
     UTT4LnPairGeometry geo;
     utt4_ln_build_pair_geometry(pos, &geo);
+
+    UTT4LnWorkResult out;
+    memset(&out, 0, sizeof(out));
+
     Dual6 total = d6_zero();
+    long long node_evals = 0;
+
+    const UTT4LnQuadratureRule *smooth = utt4_ln_quadrature_rule_get(base_order, 0);
+    if (smooth == NULL) {
+        out.value = NAN;
+        return out;
+    }
+
+    utt4_real gmin = 0.0, gmax = 0.0;
+    const int levels = use_grading
+        ? utt4_ln_grading_levels_from_geometry(&geo, &gmin, &gmax) : 0;
+
+    int panel_order = base_order/UTT4_LN_PANEL_ORDER_DIVISOR;
+    if (panel_order < UTT4_LN_PANEL_ORDER_MIN)
+        panel_order = UTT4_LN_PANEL_ORDER_MIN;
+    if (panel_order > base_order)
+        panel_order = base_order;
+
+    const UTT4LnQuadratureRule *graded =
+        (levels > 0) ? utt4_ln_quadrature_rule_get(panel_order, levels) : smooth;
+    if (graded == NULL) {
+        out.value = NAN;
+        return out;
+    }
+
+    /*
+     * Resolve each representative's two axis rules, then group the representatives that share a
+     * rule pair. The node parameters depend only on the node, not on the representative, so a
+     * group evaluates them once per node and reuses them across its members; without the grouping
+     * a plain evaluation would rebuild them six times per node instead of once.
+     */
+    const UTT4LnQuadratureRule *group_theta[6];
+    const UTT4LnQuadratureRule *group_phi[6];
+    int group_member[6][6];
+    int group_size[6];
+    int num_groups = 0;
+
+    for (int p = 0; p < 6; ++p) {
+        const UTT4LnRepresentativeGeometry *rep = &geo.representative[p];
+
+        /*
+         * A representative whose own two separations already span the quadruple's full scale
+         * range carries the disparity entirely in s = A r + B rho, so grading the axis conjugate
+         * to the larger separation resolves it. When the extreme separations instead sit among
+         * the representative's cross distances, they reach the integrand through q and sharpen
+         * both axes, and grading only one leaves the refinement loop climbing.
+         */
+        const utt4_real rmin = (rep->r.v < rep->rho.v) ? rep->r.v : rep->rho.v;
+        const utt4_real rmax = (rep->r.v < rep->rho.v) ? rep->rho.v : rep->r.v;
+        const int spans_range = (levels > 0) && (rmin <= 2.0*gmin) && (2.0*rmax >= gmax);
+        const int layer_in_theta = (rep->r.v >= rep->rho.v);
+
+        const UTT4LnQuadratureRule *qt = (!spans_range || layer_in_theta) ? graded : smooth;
+        const UTT4LnQuadratureRule *qp = (!spans_range || !layer_in_theta) ? graded : smooth;
+        node_evals += (long long)qt->n*(long long)qp->n;
+
+        int g = 0;
+        while (g < num_groups && (group_theta[g] != qt || group_phi[g] != qp))
+            ++g;
+        if (g == num_groups) {
+            group_theta[g] = qt;
+            group_phi[g] = qp;
+            group_size[g] = 0;
+            ++num_groups;
+        }
+        group_member[g][group_size[g]++] = p;
+    }
+
 #ifdef _OPENMP
     if (use_openmp && omp_get_max_threads() > 1 && !omp_in_parallel()) {
         #pragma omp parallel
         {
             Dual6 local = d6_zero();
-            #pragma omp for collapse(2) schedule(static)
-            for (int i = 0; i < q->base.n; ++i) {
-                for (int j = 0; j < q->base.n; ++j) {
-                    Dual6 f = utt4_ln_sum_node(&geo,
-                                q->mix[i], q->half_sin_theta[i],
-                                q->mix[j], q->half_sin_theta[j]);
-                    local = d6_add(local, d6_scale(f, q->base.weight[i]*q->base.weight[j]));
+            for (int g = 0; g < num_groups; ++g) {
+                const UTT4LnQuadratureRule *qt = group_theta[g];
+                const UTT4LnQuadratureRule *qp = group_phi[g];
+
+                #pragma omp for collapse(2) schedule(static)
+                for (int i = 0; i < qt->n; ++i) {
+                    for (int j = 0; j < qp->n; ++j) {
+                        const UTT4LnNodeParameters node = utt4_ln_node_parameters(
+                            qt->mix[i], qt->half_sin_theta[i],
+                            qp->mix[j], qp->half_sin_theta[j]);
+                        const utt4_real w = qt->weight[i]*qp->weight[j];
+
+                        // Sum the group's representatives before weighting: one scaling per
+                        // node instead of one per representative.
+                        Dual6 node_sum = d6_zero();
+                        for (int m = 0; m < group_size[g]; ++m)
+                            node_sum = d6_add(node_sum, utt4_ln_ordered_node(&geo,
+                                &geo.representative[group_member[g][m]], &node));
+                        local = d6_add(local, d6_scale(node_sum, w));
+                    }
                 }
             }
             #pragma omp critical(prod_force_sum)
@@ -947,21 +1159,35 @@ static UTT4LnWorkResult utt4_ln_fixed_quadrature(const double pos[UTT4_LN_INTEGR
     } else
 #endif
     {
-        for (int i = 0; i < q->base.n; ++i)
-            for (int j = 0; j < q->base.n; ++j) {
-                Dual6 f = utt4_ln_sum_node(&geo,
-                            q->mix[i], q->half_sin_theta[i],
-                            q->mix[j], q->half_sin_theta[j]);
-                total = d6_add(total, d6_scale(f, q->base.weight[i]*q->base.weight[j]));
-            }
+        for (int g = 0; g < num_groups; ++g) {
+            const UTT4LnQuadratureRule *qt = group_theta[g];
+            const UTT4LnQuadratureRule *qp = group_phi[g];
+
+            for (int i = 0; i < qt->n; ++i)
+                for (int j = 0; j < qp->n; ++j) {
+                    const UTT4LnNodeParameters node = utt4_ln_node_parameters(
+                        qt->mix[i], qt->half_sin_theta[i],
+                        qp->mix[j], qp->half_sin_theta[j]);
+                    const utt4_real w = qt->weight[i]*qp->weight[j];
+
+                    Dual6 node_sum = d6_zero();
+                    for (int m = 0; m < group_size[g]; ++m)
+                        node_sum = d6_add(node_sum, utt4_ln_ordered_node(&geo,
+                            &geo.representative[group_member[g][m]], &node));
+                    total = d6_add(total, d6_scale(node_sum, w));
+                }
+        }
     }
 
-    UTT4LnWorkResult out;
-    memset(&out, 0, sizeof(out));
+    // The factor four reconstructs the full ordered sum from the six inequivalent
+    // representatives, using I_ab;cd = I_ba;dc = I_cd;ab = I_dc;ba. The 1/pi is the
+    // normalization of the logarithmic integral.
+    total = d6_scale(total, -4.0/UTT4_PI);
+
     out.value = total.v;
     for (int p = 0; p < UTT4_LN_NPAIR; ++p)
         out.d_d2[p] = total.g[p];
-    out.node_evals = (long long)q->base.n*(long long)q->base.n;
+    out.node_evals = node_evals;
 
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const int a = utt4_ln_pair_body_i[p], b = utt4_ln_pair_body_j[p];
@@ -1213,6 +1439,28 @@ static UTT4LnWorkResult utt4_ln_adaptive_quadrature(
 // ------------------------------------------------------------------------------------------------
 
 /**
+ * @brief Largest squared pair separation of a quadruple. 
+ * 
+ * Both tolerance checks below need it to turn an absolute tolerance on the value into one on the
+ * squared-distance derivatives.
+ */
+static utt4_real utt4_ln_max_pair_d2(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3])
+{
+    utt4_real maxd2 = 0.0;
+    for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
+        const int i = utt4_ln_pair_body_i[p], j = utt4_ln_pair_body_j[p];
+        utt4_real d2 = 0.0;
+        for (int k = 0; k < 3; ++k) {
+            const utt4_real dx = (utt4_real)pos[i][k] - (utt4_real)pos[j][k];
+            d2 += dx*dx;
+        }
+        if (d2 > maxd2) maxd2 = d2;
+    }
+    return maxd2;
+}
+
+
+/**
  * @brief Compare two fixed-order results using the value and all six squared-distance derivatives.
  *
  * A refinement is requested when any component exceeds its absolute-plus-relative tolerance.
@@ -1229,14 +1477,7 @@ static int utt4_ln_needs_refinement(const UTT4LnWorkResult *low, const UTT4LnWor
     utt4_real worst = (value_allowed > 0.0) ? ev/value_allowed : (ev == 0.0 ? 0.0 : UTT4_HUGE);
     utt4_real maxe = ev, maxrel = vr;
     int refine = worst > 1.0;
-    utt4_real maxd2 = 0.0;
-    for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
-        const int i = utt4_ln_pair_body_i[p], j = utt4_ln_pair_body_j[p];
-        utt4_real d2 = 0.0;
-        for (int k = 0; k < 3; ++k) {const utt4_real x = (utt4_real)pos[i][k] - pos[j][k]; d2 += x*x; }
-        if (d2 > maxd2)maxd2 = d2;
-    }
-    const utt4_real datol = atol/UTT4_FMAX(maxd2, 1e-30);
+    const utt4_real datol = atol/UTT4_FMAX(utt4_ln_max_pair_d2(pos), 1e-30);
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const utt4_real e = UTT4_FABS(high->d_d2[p] - low->d_d2[p]);
         const utt4_real scale = UTT4_FMAX(UTT4_FABS(high->d_d2[p]), 1e-300);
@@ -1257,11 +1498,7 @@ static int utt4_ln_needs_refinement(const UTT4LnWorkResult *low, const UTT4LnWor
 }
 
 
-/*
- * How far inside tolerance the lower comparison rule must land before its order is suggested for
- * the next evaluation. A twentyfold margin means the descent only happens on clear evidence and
- * leaves room for the geometry to drift between verifications.
- */
+// Thresholde for the lower comparison rule before its order is suggested for the next evaluation.
 #define UTT4_LN_ORDER_DESCEND_MARGIN ((utt4_real)0.05)
 
 
@@ -1273,6 +1510,7 @@ static int integral_round_up_even_order(utt4_real x)
     return n;
 }
 
+
 static int integral_initial_high_order(utt4_real rtol, int min_order, int max_order)
 {
     utt4_real digits = -UTT4_LOG10(rtol);
@@ -1283,6 +1521,7 @@ static int integral_initial_high_order(utt4_real rtol, int min_order, int max_or
     return high;
 }
 
+
 static int integral_previous_order(int high, int min_order)
 {
     int low = integral_round_up_even_order(0.88*(utt4_real)high);
@@ -1291,6 +1530,7 @@ static int integral_previous_order(int high, int min_order)
     if (low >= high)low = high - 2;
     return low;
 }
+
 
 static int integral_next_order(int high, int max_order)
 {
@@ -1307,17 +1547,7 @@ static int utt4_ln_adaptive_meets_target(const UTT4LnWorkResult *r,
 {
     const utt4_real value_allowed = atol + rtol*UTT4_FABS(r->value);
     utt4_real worst = (value_allowed > 0.0) ? r->error_estimate/value_allowed : 0.0;
-    utt4_real maxd2 = 0.0;
-    for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
-        const int i = utt4_ln_pair_body_i[p], j = utt4_ln_pair_body_j[p];
-        utt4_real d2 = 0.0;
-        for (int k = 0; k < 3; ++k) {
-            const utt4_real dx = (utt4_real)pos[i][k] - (utt4_real)pos[j][k];
-            d2 += dx*dx;
-        }
-        if (d2 > maxd2)maxd2 = d2;
-    }
-    const utt4_real datol = atol/UTT4_FMAX(maxd2, 1e-30);
+    const utt4_real datol = atol/UTT4_FMAX(utt4_ln_max_pair_d2(pos), 1e-30);
     for (int p = 0; p < UTT4_LN_NPAIR; ++p) {
         const utt4_real allowed = datol + rtol*UTT4_FABS(r->d_d2[p]);
         const utt4_real ratio = (allowed > 0.0) ? r->max_component_error/allowed : 0.0;
@@ -1333,16 +1563,78 @@ static int utt4_ln_adaptive_meets_target(const UTT4LnWorkResult *r,
 // ------------------------------------------------------------------------------------------------
 
 /**
+ * @brief One fixed-order ladder in a single quadrature mode. 
+ * 
+ * Starts from *high_order, compares against the next rule down, and climbs until the pair agrees
+ * or max_order is reached. Returns the converged result and reports through *refined whether the
+ * tolerance was actually met.
+ */
+static int utt4_ln_run_ladder(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
+    const NumericalIntegralSettings *settings, int use_grading, int max_order,
+    int *high_order, int *low_order,
+    UTT4LnWorkResult *result, long long *node_evals, utt4_real *value_error,
+    utt4_real *max_component_error, utt4_real *value_rel, utt4_real *max_component_rel,
+    utt4_real *worst, int *refine)
+{
+    if (*high_order > max_order)
+        *high_order = max_order;
+
+    *low_order = integral_previous_order(*high_order, settings->min_order);
+    if (*low_order < 4 || *high_order <= *low_order) {
+        *low_order = settings->min_order;
+        *high_order = *low_order + 2;
+        if (*high_order > max_order)
+            *high_order = max_order;
+    }
+    if (*high_order <= *low_order)
+        return -1;
+
+    UTT4LnWorkResult low = utt4_ln_fixed_quadrature(pos, *low_order, use_grading,
+        settings->use_openmp);
+    UTT4LnWorkResult high = utt4_ln_fixed_quadrature(pos, *high_order, use_grading,
+        settings->use_openmp);
+    if (isnan((double)low.value) || isnan((double)high.value))
+        return -1;
+    *node_evals += low.node_evals + high.node_evals;
+
+    *refine = utt4_ln_needs_refinement(&low, &high, pos, settings->rel_tol, settings->abs_tol,
+        value_error, max_component_error, value_rel, max_component_rel, worst);
+
+    while (*refine && *high_order < max_order) {
+        *low_order = *high_order;
+        low = high;
+        *high_order = integral_next_order(*high_order, max_order);
+        if (*high_order <= *low_order)
+            break;
+        high = utt4_ln_fixed_quadrature(pos, *high_order, use_grading, settings->use_openmp);
+        if (isnan((double)high.value))
+            return -1;
+        *node_evals += high.node_evals;
+        *refine = utt4_ln_needs_refinement(&low, &high, pos, settings->rel_tol, settings->abs_tol,
+            value_error, max_component_error, value_rel, max_component_rel, worst);
+    }
+
+    *result = high;
+    return 0;
+}
+
+
+/**
  * @brief Evaluate the logarithmic four-body integral entering UTT4 and all position derivatives.
  *
- * The routine first uses automatically selected fixed Gauss-Legendre rules and compares two
- * successive orders for both the integral value and the six squared-distance derivatives. If
- * the requested tolerance is still not reached at max_order and adaptive evaluation is enabled,
- * an adaptive Gauss-Kronrod fallback is used.
+ * A plain tensor-product rule is tried first, since it is the cheapest thing that works for the
+ * great majority of quadruples. If its ladder runs past UTT4_LN_PLAIN_SWITCH_ORDER without
+ * meeting the tolerance, the geometry has a scale disparity a global polynomial cannot resolve,
+ * and the evaluation restarts on graded panels. Choosing between the two by trying rather than by
+ * predicting matters: the geometric indicators that separate a hardening binary from a
+ * binary-binary encounter disagree with each other, and guessing wrong costs more than probing.
+ *
+ * The mode is reported back through suggested_order as a sign, so a caller with order memory pays
+ * the probe once per quadruple rather than on every evaluation.
  *
  * @param[in]  pos       Four local particle positions in three dimensions.
  * @param[in]  settings  Accuracy, order-refinement, adaptive, and OpenMP settings.
- * @param[out] result    Integral value, Cartesian derivatives, and quadrature diagnostics.
+ * @param[out] out       Integral value, Cartesian derivatives, and quadrature diagnostics.
  * @return 0 on success, nonzero on invalid input or quadrature setup failure.
  */
 int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
@@ -1354,9 +1646,14 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
        settings->min_order < 4 || settings->max_order < settings->min_order ||
        settings->max_depth < 0) return -1;
 
+    // A negative remembered order means that quadruple already needed graded panels
+    int use_grading = (settings->start_order < 0);
+    const int remembered = (settings->start_order < 0)
+        ? -settings->start_order : settings->start_order;
+
     int high_order;
-    if (settings->start_order > 0) {
-        high_order = integral_round_up_even_order(settings->start_order);
+    if (remembered > 0) {
+        high_order = integral_round_up_even_order(remembered);
         if (high_order < settings->min_order) high_order = settings->min_order;
         if (high_order > settings->max_order) high_order = settings->max_order;
     } else {
@@ -1364,19 +1661,12 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
             settings->max_order);
     }
 
-    /*
-     * Unverified fast path: run the remembered order alone and skip the comparison sweep, which
-     * is otherwise close to half the cost of an evaluation. No error estimate is produced here,
-     * so target_met is inherited from the caller's last verified evaluation rather than
-     * established; the caller is responsible for verifying often enough that the order stays
-     * valid as the geometry drifts.
-     */
-    if (settings->start_order > 0 && !settings->verify) {
-        const UTT4LnQuadratureRule *qfast = utt4_ln_quadrature_rule_get(high_order);
-        if (qfast == NULL)
+    if (remembered > 0 && !settings->verify) {
+        const UTT4LnWorkResult fast = utt4_ln_fixed_quadrature(pos, high_order, use_grading,
+            settings->use_openmp);
+        if (isnan((double)fast.value))
             return -1;
 
-        const UTT4LnWorkResult fast = utt4_ln_fixed_quadrature(pos, qfast, settings->use_openmp);
         out->value = fast.value;
         for (int b = 0; b < UTT4_LN_INTEGRAL_NUM_BODIES; ++b)
             for (int k = 0; k < 3; ++k)
@@ -1385,50 +1675,38 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
         out->diagnostics.node_evals = fast.node_evals;
         out->diagnostics.low_order = high_order;
         out->diagnostics.high_order = high_order;
-        out->diagnostics.suggested_order = high_order;
+        out->diagnostics.suggested_order = use_grading ? -high_order : high_order;
         out->diagnostics.target_met = 1;
         return 0;
     }
 
-    int low_order = integral_previous_order(high_order, settings->min_order);
-    if (low_order < 4 || high_order <= low_order) {
-        low_order = settings->min_order;
-        high_order = low_order + 2;
-        if (high_order > settings->max_order)
-            high_order = settings->max_order;
-    }
-    if (high_order <= low_order)
-        return -1;
-
-    const UTT4LnQuadratureRule *qlow = utt4_ln_quadrature_rule_get(low_order);
-    const UTT4LnQuadratureRule *qhigh = utt4_ln_quadrature_rule_get(high_order);
-    if (qlow == NULL || qhigh == NULL)
-        return -1;
-
-    UTT4LnWorkResult low = utt4_ln_fixed_quadrature(pos, qlow, settings->use_openmp);
-    UTT4LnWorkResult high = utt4_ln_fixed_quadrature(pos, qhigh, settings->use_openmp);
-    out->diagnostics.node_evals = low.node_evals + high.node_evals;
-
     utt4_real value_error = 0.0, max_component_error = 0.0;
     utt4_real value_rel = 0.0, max_component_rel = 0.0, worst = 0.0;
-    int refine = utt4_ln_needs_refinement(&low, &high, pos, settings->rel_tol, settings->abs_tol,
-        &value_error, &max_component_error, &value_rel, &max_component_rel, &worst);
-    while (refine && high_order < settings->max_order) {
-        low_order = high_order;
-        low = high;
-        high_order = integral_next_order(high_order, settings->max_order);
-        if (high_order <= low_order)
-            break;
-        const UTT4LnQuadratureRule *qnext = utt4_ln_quadrature_rule_get(high_order);
-        if (qnext == NULL)
+    int low_order = 0, refine = 1;
+    long long node_evals = 0;
+    UTT4LnWorkResult final;
+
+    //The plain ladder is capped rather than run to max_order
+    int plain_cap = settings->max_order;
+    if (!use_grading && plain_cap > UTT4_LN_PLAIN_SWITCH_ORDER)
+        plain_cap = UTT4_LN_PLAIN_SWITCH_ORDER;
+
+    if (utt4_ln_run_ladder(pos, settings, use_grading, plain_cap, &high_order, &low_order, &final,
+            &node_evals, &value_error, &max_component_error, &value_rel, &max_component_rel,
+            &worst, &refine) != 0)
+        return -1;
+
+    if (refine && !use_grading) {
+        use_grading = 1;
+        high_order = integral_initial_high_order(settings->rel_tol, settings->min_order,
+            settings->max_order);
+        if (utt4_ln_run_ladder(pos, settings, use_grading, settings->max_order, &high_order,
+                &low_order, &final, &node_evals, &value_error, &max_component_error, &value_rel,
+                &max_component_rel, &worst, &refine) != 0)
             return -1;
-        high = utt4_ln_fixed_quadrature(pos, qnext, settings->use_openmp);
-        out->diagnostics.node_evals += high.node_evals;
-        refine = utt4_ln_needs_refinement(&low, &high, pos, settings->rel_tol, settings->abs_tol,
-            &value_error, &max_component_error, &value_rel, &max_component_rel, &worst);
     }
 
-    UTT4LnWorkResult final = high;
+    out->diagnostics.node_evals = node_evals;
     out->diagnostics.low_order = low_order;
     out->diagnostics.high_order = high_order;
     out->diagnostics.target_met = !refine;
@@ -1439,16 +1717,17 @@ int utt4_ln_integral_evaluate(const double pos[UTT4_LN_INTEGRAL_NUM_BODIES][3],
     out->diagnostics.worst_tolerance_ratio = worst;
 
     /*
-     * Order to start from next time this quadruple is evaluated. When the comparison sweep showed
-     * the lower rule was already well inside tolerance, suggest that lower order: the comparison
-     * is direct evidence that low_order sufficed, so a caller feeding this back walks down to the
-     * cheapest adequate rule instead of paying the conservative initial guess forever. The margin
-     * leaves headroom for the geometry drifting between verifications. Nothing is suggested below
-     * the current order while a refinement is still outstanding.
+     * Order to start from next time this quadruple is evaluated, carrying the mode in its sign.
+     * When the comparison sweep showed the lower rule was already well inside tolerance, suggest
+     * that lower order: the comparison is direct evidence it sufficed, so a caller feeding this
+     * back walks down to the cheapest adequate rule instead of paying the conservative initial
+     * guess forever. Nothing is suggested below the current order while a refinement is still
+     * outstanding.
      */
-    out->diagnostics.suggested_order = high_order;
+    int suggested = high_order;
     if (!refine && low_order >= settings->min_order && worst <= UTT4_LN_ORDER_DESCEND_MARGIN)
-        out->diagnostics.suggested_order = low_order;
+        suggested = low_order;
+    out->diagnostics.suggested_order = use_grading ? -suggested : suggested;
 
     if (refine && settings->adaptive) {
         final = utt4_ln_adaptive_quadrature(pos, settings->rel_tol, settings->abs_tol,

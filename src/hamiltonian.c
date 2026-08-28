@@ -110,7 +110,8 @@ static size_t utt4_order_memory_apply(const UTT4Cache *cache, const struct ode_p
     if (slot >= mem->count)
         return UTT4_ORDER_SLOT_NONE;
 
-    if (mem->order[slot] > 0) {
+    // Nonzero means "evaluated before"; the sign carries the quadrature mode.
+    if (mem->order[slot] != 0) {
         settings->start_order = mem->order[slot];
         settings->verify = (mem->age[slot] >= ode_params->utt4_verify_interval);
     }
@@ -135,12 +136,13 @@ static void utt4_order_memory_update(UTT4Cache *cache, size_t slot, int verified
         return;
 
     if (verified) {
-        const int suggested = (result->diagnostics.suggested_order > 0)
+        const int suggested = (result->diagnostics.suggested_order != 0)
             ? result->diagnostics.suggested_order : result->diagnostics.high_order;
+        const int magnitude = (suggested < 0) ? -suggested : suggested;
 
         // An order too large for the slot is simply not remembered, so such a quadruple keeps
         // taking the fully verified path rather than being restarted from a truncated order.
-        mem->order[slot] = (suggested > 0 && suggested <= 32767) ? (short)suggested : 0;
+        mem->order[slot] = (magnitude > 0 && magnitude <= 32767) ? (short)suggested : 0;
         mem->age[slot] = 0;
     } else if (mem->age[slot] < 32000) {
         mem->age[slot]++;

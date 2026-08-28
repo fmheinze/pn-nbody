@@ -187,7 +187,7 @@ typedef struct {
 typedef struct {
     int enabled;
     size_t count;          // C(num_bodies, 4), or 0 when the memory is disabled
-    short *order;          // last order known to meet tolerance, 0 = never evaluated
+    short *order;          // last order known to meet tolerance, 0 = never evaluated;
     short *age;            // evaluations since the last verified check
     int *active;           // [N], active set this memory was built for
 } UTT4OrderMemory;
