@@ -39,4 +39,4 @@ figure_eight_width   = 150.0                           # Figure-eight width
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-output = position momentum velocity energy merger spin
+output = position momentum velocity energy angular_momentum

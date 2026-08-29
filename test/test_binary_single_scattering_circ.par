@@ -48,7 +48,7 @@ orientation          = -0.2 -0.5 1.0                   # Orientation of binary
 
 binary_r0            = 5.5                             # Initial radius of the binary
 binary_pt0           = 0.087364                        # Initial tangential momentum of the binary
-binary_pr0           = 0.00060110	               # Initial radial momentum of the binary
+binary_pr0           = 0.00060110	                   # Initial radial momentum of the binary
 binary_phi0          = 0.4                             # Initial phase of binary
 
 
@@ -56,4 +56,4 @@ binary_phi0          = 0.4                             # Initial phase of binary
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-output = position momentum velocity energy merger
+output = position momentum velocity energy angular_momentum merger

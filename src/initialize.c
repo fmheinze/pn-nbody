@@ -114,7 +114,7 @@ void initialize_parameters(void)
     // Output parameters
     // --------------------------------------------------------------------------------------------
     add_parameter("dt_save", "-1", "times at which quantities are written to a file [>= 0]");
-    add_parameter("output", "mass position momentum velocity spin energy merger",
+    add_parameter("output", "mass position momentum velocity spin energy angular_momentum",
         "quantities to output");
     initialize_orbit_output_parameters();
 

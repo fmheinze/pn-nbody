@@ -56,6 +56,109 @@ double pn_binary_reduced_hamiltonian(double x, double pr_hat, double j, double n
 }
 
 
+/** @brief Analytic derivative of the reduced Hamiltonian with respect to x = r/M. */
+double pn_binary_reduced_hamiltonian_dx(double x, double pr_hat, double j, double nu,
+    int use_1pn, int use_2pn)
+{
+    const double inv_x = 1.0 / x;
+    const double inv_x2 = inv_x * inv_x;
+    const double inv_x3 = inv_x2 * inv_x;
+    const double pr2 = pr_hat * pr_hat;
+    const double j2 = j * j;
+    const double p2 = pr2 + j2 * inv_x2;
+
+    /* Differentiate with respect to u = 1/x first, then use du/dx = -u^2. */
+    double dh_du = j2 * inv_x - 1.0;
+
+    if (use_1pn) {
+        dh_du += 0.5 * (3.0 * nu - 1.0) * j2 * inv_x * p2
+               - 0.5 * ((3.0 + nu) * p2 + nu * pr2)
+               - (3.0 + nu) * j2 * inv_x2
+               + inv_x;
+    }
+
+    if (use_2pn) {
+        const double nu2 = nu * nu;
+        const double p4 = p2 * p2;
+        const double p4_coefficient = 5.0 - 20.0 * nu - 3.0 * nu2;
+        const double radial_polynomial =
+            p4_coefficient * p4 - 2.0 * nu2 * pr2 * p2 - 3.0 * nu2 * pr2 * pr2;
+        const double potential_polynomial = (5.0 + 8.0 * nu) * p2 + 3.0 * nu * pr2;
+
+        dh_du += 3.0 * (1.0 - 5.0 * nu + 5.0 * nu2)
+                     * j2 * inv_x * p4 / 8.0
+               + radial_polynomial / 8.0
+               + 0.5 * j2 * inv_x2 * (p4_coefficient * p2 - nu2 * pr2)
+               + inv_x * potential_polynomial
+               + (5.0 + 8.0 * nu) * j2 * inv_x3
+               - 0.75 * (1.0 + 3.0 * nu) * inv_x2;
+    }
+
+    return -inv_x2 * dh_du;
+}
+
+
+/** @brief Analytic derivative of the reduced Hamiltonian with respect to p_r/mu. */
+double pn_binary_reduced_hamiltonian_dpr(double x, double pr_hat, double j, double nu,
+    int use_1pn, int use_2pn)
+{
+    const double inv_x = 1.0 / x;
+    const double inv_x2 = inv_x * inv_x;
+    const double pr2 = pr_hat * pr_hat;
+    const double p2 = pr2 + j * j * inv_x2;
+    double coefficient = 1.0;
+
+    if (use_1pn)
+        coefficient += 0.5 * (3.0 * nu - 1.0) * p2
+                     - (3.0 + 2.0 * nu) * inv_x;
+
+    if (use_2pn) {
+        const double nu2 = nu * nu;
+        const double p4_coefficient = 5.0 - 20.0 * nu - 3.0 * nu2;
+        coefficient += 3.0 * (1.0 - 5.0 * nu + 5.0 * nu2) * p2 * p2 / 8.0
+                     + 0.5 * inv_x
+                         * ((p4_coefficient - nu2) * p2 - 4.0 * nu2 * pr2)
+                     + (5.0 + 11.0 * nu) * inv_x2;
+    }
+
+    return pr_hat * coefficient;
+}
+
+
+/**
+ * @brief Analytic derivative of the reduced Hamiltonian with respect to reduced angular momentum.
+ *
+ * For H = mu*h(x, pr_hat, j), Hamilton's equation gives the physical azimuthal frequency
+ * Omega = dH/dJ = (1/M)*dh/dj. Returning dh/dj keeps this helper in the dimensionless conventions
+ * used throughout this file.
+ */
+double pn_binary_reduced_hamiltonian_dj(double x, double pr_hat, double j, double nu,
+    int use_1pn, int use_2pn)
+{
+    const double inv_x = 1.0 / x;
+    const double inv_x2 = inv_x * inv_x;
+    const double pr2 = pr_hat * pr_hat;
+    const double p2 = pr2 + j*j*inv_x2;
+
+    double dh_dp2 = 0.5;
+
+    if (use_1pn) {
+        dh_dp2 += 0.25*(3.0*nu - 1.0)*p2
+                  - 0.5*inv_x*(3.0 + nu);
+    }
+
+    if (use_2pn) {
+        const double nu2 = nu*nu;
+        dh_dp2 += 3.0*(1.0 - 5.0*nu + 5.0*nu2)*p2*p2/16.0
+                  + inv_x/8.0
+                    *(2.0*(5.0 - 20.0*nu - 3.0*nu2)*p2 - 2.0*nu2*pr2)
+                  + 0.5*inv_x2*(5.0 + 8.0*nu);
+    }
+
+    return 2.0*j*inv_x2*dh_dp2;
+}
+
+
 // Evaluate the reduced Hamiltonian at a radial turning point (pr_hat = 0).
 double pn_binary_turning_hamiltonian(double x, double j, double nu,
     int use_1pn, int use_2pn)

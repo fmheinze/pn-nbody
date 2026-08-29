@@ -5,6 +5,15 @@
 double pn_binary_reduced_hamiltonian(double x, double pr_hat, double j, double nu,
     int use_1pn, int use_2pn);
 
+double pn_binary_reduced_hamiltonian_dx(double x, double pr_hat, double j, double nu,
+    int use_1pn, int use_2pn);
+
+double pn_binary_reduced_hamiltonian_dpr(double x, double pr_hat, double j, double nu,
+    int use_1pn, int use_2pn);
+
+double pn_binary_reduced_hamiltonian_dj(double x, double pr_hat, double j, double nu,
+    int use_1pn, int use_2pn);
+
 double pn_binary_turning_hamiltonian(double x, double j, double nu,
     int use_1pn, int use_2pn);
 

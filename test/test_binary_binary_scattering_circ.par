@@ -53,12 +53,12 @@ b                    = 34.0                            # Scattering impact param
 
 binary1_r0           = 5.5                             # Initial radius of the binary 1
 binary1_pt0          = 0.087364                        # Initial tangential momentum of binary 1
-binary1_pr0          = 0.00060110	               # Initial radial momentum of the binary 1
+binary1_pr0          = 0.00060110	                   # Initial radial momentum of the binary 1
 binary1_phi0         = 0.4                             # Initial phase of binary 1
 
 binary2_r0           = 5.5                             # Initial radius of the binary 2
 binary2_pt0          = 0.087364                        # Initial tangential momentum of binary 2
-binary2_pr0          = 0.00060110	               # Initial radial momentum of the binary 2
+binary2_pr0          = 0.00060110	                   # Initial radial momentum of the binary 2
 binary2_phi0         = 1.8                             # Initial phase of binary 2
 
 
@@ -67,4 +67,4 @@ binary2_phi0         = 1.8                             # Initial phase of binary
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-output = position momentum velocity energy merger
+output = position momentum velocity energy angular_momentum merger

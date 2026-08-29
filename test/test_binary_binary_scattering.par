@@ -45,10 +45,10 @@ mass4                = 2.0                             # Mass of body 4
 binary1_a            = 50.0                            # Semi-major axis of binary 1
 binary1_b            = 45.0                            # Semi-minor axis of binary 1
 binary1_f0           = 0.4                             # Initial phase of binary 1
-binary1_h_hat        = 0.9 0.2 0.3		       # Orientation of binary 1
+binary1_h_hat        = 0.9 0.2 0.3		               # Orientation of binary 1
 
 binary2_e            = 0.3                             # Eccentricity of binary 2
-binary2_a            = 60.0	                       # Semi-major axis of binary 2
+binary2_a            = 60.0	                           # Semi-major axis of binary 2
 binary2_f0           = 0.9                             # Initial phase of binary 2
 binary2_h_hat        = -0.9 -0.1 0.2                   # Orientation of binary 2
 
@@ -61,4 +61,4 @@ b                    = 350.0                           # Scattering impact param
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-output = position momentum velocity energy merger
+output = position momentum velocity energy angular_momentum merger

@@ -39,8 +39,8 @@ remnant_prescription = lz                              # Analytic remnant proper
 ic_preset            = binary                          # Initial condition preset
 mass1                = 0.9                             # Mass of body 1
 mass2                = 0.1                             # Mass of body 2
-binary_a             = 80.0                            # Semi-major axis of binary
-binary_b             = 80.0                            # Semi-minor axis of binary
+binary_a             = 15.0                            # Semi-major axis of binary
+binary_e             = 0.6                             # Eccentricity of binary
 binary_phi0          = 0.4                             # Initial phase of binary
 
 spin1                = 0.3 0.6 0.0                     # Spin of body 1
@@ -50,5 +50,5 @@ spin2                = -0.1 0.1 0.7                    # Spin of body 2
 # Output parameters
 # -------------------------------------------------------------------------------------------------
 dt_save              = 1.0                             # Output times
-output = position momentum velocity energy merger orbit_1_2
-orbit_1_2 = semimajor_axis_radial eccentricity_radial
+output = position momentum velocity merger orbit_1_2
+orbit_1_2 = separation radial_velocity a_r e_r energy
